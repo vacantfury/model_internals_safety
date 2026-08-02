@@ -39,7 +39,17 @@ Not every rung supports the same measurement quality:
 - **Exactly invertible** — Base64, Caesar/ROT13, keyed substitution, homoglyph. A unique plaintext exists; decode-and-restate is scored by string match; the in-situ content probe has a clean target. The four-regime claims are crisp here.
 - **Semantically invertible** — paraphrase, low-resource languages, formal logic, set theory. There is no unique inverse. "Did the model decode it?" has to be scored by an LLM judge or embedding similarity, which puts judge noise directly inside the deployment measurement — the newest and most contestable claim in the paper.
 
-**Recommendation on record:** make the primary (C)/(D)/(B) claims on the exactly-invertible band and carry the semantic band as an extended-ladder generalization check, labelled as such. Reason: the (D) regime is the paper's novel object and it should be established where the measurement is unimpeachable. The semantic band still earns its place — it is what connects the result to Aziz et al.'s language axis and gives RQ2 its full curve — but a reviewer attacking "you can't tell 'didn't decode' from 'decoded loosely'" must be met with the deterministic band, not a judge score. **Pending owner decision (§7).**
+**SETTLED (owner, 2026-08-02):** the primary (C)/(D)/(B) claims are made on the **exactly-invertible band**; the semantic band is carried as an extended-ladder generalization check, labelled as such. Reason: the (D) regime is the paper's novel object and must be established where the measurement is unimpeachable. The semantic band still earns its place — it connects the result to Aziz et al.'s language axis and gives RQ2 its full curve — but a reviewer attacking "you can't tell *didn't decode* from *decoded loosely*" is met with string-match evidence, not a judge score.
+
+**Consequence — the deterministic band must be widened, and that is now the encoder priority** (owner note 2026-08-02: many more encoding attacks exist than the sibling implemented). With the headline claims resting on exactly-invertible encodings, every additional deterministic rung is worth more than any semantic one, and they are individually cheap. Candidates, all exactly invertible:
+
+- **Deliberately unported by the sibling, from CipherChat** (Yuan et al., ICLR 2024): Morse, ASCII-decimal, Atbash (its published implementation has an uppercase-reflection bug — port with the fix and say so), Unicode/UTF escapes, GBK.
+- **Standard encodings not yet anywhere in the family:** hex, binary, Base32, ROT-*n* for *n* ≠ 13, keyed Vigenère, Unicode tag-block smuggling, zero-width-character insertion.
+- **Orthographic transforms:** reversed text, word-order reversal, character interleaving/spacing, leetspeak, Pig Latin, NATO-alphabet spelling.
+
+Two payoffs beyond coverage. First, resolution: RQ2's graded curve currently has ~4 deterministic points and would have 15+. Second, and better — **with a wide deterministic band the ladder can be ordered by a measured quantity rather than by intuition.** Decode-and-restate accuracy (measurement #1) *is* a difficulty scale, so "obfuscation depth" stops being a hand-ordered list and becomes an empirical axis. That materially strengthens RQ2: the claim becomes "behavior fails at a measured decode-difficulty threshold," not "we sorted these by how hard they look."
+
+The S2 encoder inventory (TODO item 1b) therefore includes a literature sweep for encoding families used in published attacks, filtered by one test: **exactly invertible → primary-band candidate.**
 
 Consequence for the copy manifest: the sibling's `llm_classical_language_encoder` covers Classical Chinese, Latin, Sanskrit, Old English — *classical*, not the modern low-resource languages (Swahili, Zulu, …) that Aziz et al. and PolyRefuse use. The machinery ports; the language list does not. The language rung takes PolyRefuse's set for comparability, and the classical languages become an optional bonus rung (they are genuinely low-resource in the training-data sense).
 
@@ -130,5 +140,6 @@ Steps 1–4 are the phase-0 pilot's full dependency set. Step 5 is gated on its 
 
 ## 7. Open decisions
 
-1. **Primary claim band** (§3) — exactly-invertible rungs only, or the full ladder treated equally? Recommendation on record: exactly-invertible for the primary (C)/(D)/(B) claims, semantic band as an extended generalization check. **Owner's call — it changes what the paper claims, not just how the code is arranged.**
-2. Deferred until the pilot reveals actual run shapes: whether any experiment-orchestration layer is needed at all, and whether runs get tracked (MLflow or otherwise). Not decided now, deliberately.
+1. ~~Primary claim band~~ — **settled 2026-08-02 (owner): exactly-invertible band carries the primary claims; semantic band is the labelled extended check.** See §3, including the consequent priority on widening the deterministic band.
+2. **Codename** for this paper. The letter is **E** (owner ruling 2026-08-02, reassigned from the retired "Smuggled Actions"; registry of record = science `portfolio.md`). No codename settled yet — optional, and cheap to defer to S2.
+3. Deferred until the pilot reveals actual run shapes: whether any experiment-orchestration layer is needed at all, and whether runs get tracked (MLflow or otherwise). Not decided now, deliberately.
