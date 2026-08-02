@@ -141,13 +141,15 @@ H2 and H5 are what no prior paper attempts, and what make the result a mechanism
 
 **Phase 3 — the crossed intervention experiment.** Two interventions, three regimes, six predictions (§3, Move C):
 - *Intervention 1 — cross-encoding safety fine-tuning.* Lightweight fine-tuning on a *subset* of families (encoded-harmful → refusal; encoded-benign → normal compliance, so over-refusal is controlled by construction), with **held-out-family generalization as the headline measurement**.
-- *Intervention 2 — decode-elicitation.* The cheap form first (an explicit decode-then-answer instruction), then, if the effect is real, a light training version. Predicted to move (D) and nothing else.
+- *Intervention 2 — decode-elicitation.* The cheap form first (an explicit decode-then-answer instruction), then, if the effect is real, a light training version. Predicted to move (D) and nothing else. **Two controls are mandatory here**, both forced by DRO (Zheng et al., ICML 2024, arXiv 2401.18018), which showed that prepending a safety prompt moves queries along a *higher-refusal* direction largely irrespective of their actual harmfulness — i.e. instructions raise refusal propensity as a side effect of being instructions:
+  - *(i) A matched placebo instruction.* Same length and imperative form, requesting a different pre-answer step ("first restate the question, then answer", "first count the characters, then answer"). Without it, any refusal increase is attributable to the prompt being longer and more directive rather than to decoding having occurred.
+  - *(ii) The deployment measurement must move.* The in-situ content probe has to go from absent to present under the elicitation prompt. Behavior improving while the content probe stays flat is not a decoding effect — it would refute the (D) reading of that cell no matter how good the ASR number looks. This is the difference between reporting a prompting trick and reporting a mechanism.
 
 Baselines, deliberately trimmed to keep this one paper (§10):
 - **must-run:** plain safety-data mixing (Qi et al. 2023's standard mitigation — is cross-encoding structure doing anything beyond "more safety data"?); Circuit Breakers representation-rerouting (the strongest "why not just use RR?" objection, and never tested on encodings); WildGuard / Llama Guard 3 on *identical* payloads (the external-guard-gap table that motivates the internals framing, which no prior paper runs on a shared payload set).
 - **if budget permits, else discussion only:** ACTOR (Dabas et al., ICML 2025, arXiv 2507.04250) — single-layer activation-shift repair of the *opposite* miscalibration, the cheapest test of H6's re-binding claim; DeRTa-style late-refusal training (Yuan et al., ACL 2025) as a component of Intervention 2.
 
-**The benign-encoded condition is a headline result, not a control.** The most likely degenerate outcome of any encoding-side safety fine-tune is that the model learns "refuse anything that looks encoded" — which would score well on every harmful benchmark and be worthless in deployment. So over-refusal on benign content pushed through the *identical* encoding pipeline is promoted out of the control section into the main results, alongside utility (a capability/MMLU slice), XSTest, and **EVOREFUSE-TEST** (arXiv 2505.23473) as the harder over-refusal probe (~85% higher refusal-trigger rate than the next-best benchmark).
+**The benign-encoded condition is a headline result, not a control.** The most likely degenerate outcome of any encoding-side safety fine-tune is that the model learns "refuse anything that looks encoded" — which would score well on every harmful benchmark and be worthless in deployment. So over-refusal on benign content pushed through the *identical* encoding pipeline is promoted out of the control section into the main results, alongside utility (a capability/MMLU slice) and a three-part over-refusal battery: XSTest, **EVOREFUSE-TEST** (arXiv 2505.23473) as the harder English probe (~85% higher refusal-trigger rate than the next-best benchmark), and **MORBench** (Pan et al., EMNLP 2025, arXiv 2505.18325) for the multilingual band. The third is not redundant: XSTest and EVOREFUSE are English-only while our ladder deliberately includes low-resource languages, so without a multilingual over-refusal set the fix could wreck helpfulness in exactly the conditions the paper claims to repair and the measurement would never see it. RASS's framing is also conceptually adjacent — it locates over-refusal at a misaligned *safety decision boundary*, which is the same object H4's projection-score overlap metric measures distance to.
 
 ---
 
@@ -172,7 +174,7 @@ Two further caveats we state rather than defend against: probe directions are **
 - *"Isn't this CIFR?"* — no. CIFR detects malicious fine-tuning *datasets* with an external monitor on a fine-tuning API. We repair the model's *own* inference-time refusal behavior. Same held-out-family benchmark idea; entirely different object and threat model.
 - *"Your probe reads surface features, not harmfulness."* — the five controls in §8, the coherence constraint in §7 (which makes this failure mode *detectable* rather than arguable), and the Phase-2 causal validation.
 - *"Incremental over Aziz et al. 2026."* — new axis (structural encodings, not natural language); two new phenomenon cells with no language analogue (capability and deployment failures); a new fix class (training-side repair vs few-shot gating); a crossed two-intervention design with four predicted nulls that they structurally cannot run; and the guard-comparison table. Framed honestly: *their* diagnostic vocabulary, *our* axis, taxonomy, and causal design.
-- *"Decode-elicitation is just prompting."* — yes, and that is the point: it is a cheap manipulation with a sharp regime-specific prediction. Its scientific value is the null cells, not the effect size.
+- *"Decode-elicitation is just prompting."* — yes, and that is the point: it is a cheap manipulation with a sharp regime-specific prediction. Its scientific value is the null cells, not the effect size. The version of this objection that actually bites is DRO's (Zheng et al., ICML 2024): prompts shift representations toward refusal *as prompts*, so any prepended instruction can raise refusal without touching the mechanism. That is why the elicitation arm ships with a matched placebo instruction and requires the in-situ content probe to move before any (D)-repair claim is made (§7).
 
 ---
 
@@ -199,26 +201,43 @@ The through-line: every major risk converts into a finding rather than a dead en
 
 ---
 
-## 12. External idea check — v1 (cspaper.org, 2026-08-02) and what it changed
+## 12. External idea checks (cspaper.org) — results, and what the instrument is worth
 
-Submitted as *"Diagnosing Recognition and Action Failures in Encoded Safety Attacks"* (job 6cc84b34-4b5a-483a-b12a-99a26acb3df3, completed 2026-08-02 10:52) against the v1 two-regime frame. The service returns a placement summary plus 10 retrieved related papers with per-paper relevance judgments.
+Two submissions, both 2026-08-02: one against the v1 two-regime frame, one against the v2 four-regime frame. The service returns a placement summary plus 10 retrieved related papers with per-paper relevance judgments.
 
-**Verdict: pass, but weak evidence.** Its summary placed the idea "into the core cluster of mechanistic safety research, extending the established separation of harmfulness and refusal vectors to the novel domain of structural encodings," and named the "decode-and-comply" vulnerability as the thing prior work observed in multilingual/CoT contexts but left unresolved for text encodings — an independent restatement of §3's claim. No retrieved paper conflicts with the direction.
+### 12.1 Check #1 — v1 frame (job 6cc84b34-4b5a-483a-b12a-99a26acb3df3, 10:52)
 
-**Calibration — why this is confirmation, not coverage.** The retrieval missed every one of the four nearest works our own pass identified (Aziz et al. 2026, TrajGuard, SALO, CIFR), and 3 of its 10 results were topically unrelated (non-stationary RL entropy scheduling, maximal-lotteries evaluation, KL distillation for math) — an artifact of embedding-cluster co-retrieval padding to a fixed 10. Its value was the opposite of a scoop check: it swept the *established top-venue* cluster (NeurIPS ×4, ICML ×4, ACL ×1, ICLR ×1) that a recency-weighted manual pass under-covers. Read as a scoop check it is near-uninformative; read as a related-work sweep of settled literature it earned its keep.
+Submitted as *"Diagnosing Recognition and Action Failures in Encoded Safety Attacks."* **Result: pass.** It placed the idea "into the core cluster of mechanistic safety research, extending the established separation of harmfulness and refusal vectors to the novel domain of structural encodings," and named the "decode-and-comply" vulnerability as the thing prior work observed in multilingual/CoT contexts but left unresolved for text encodings — an independent restatement of §3's claim. No retrieved paper conflicted with the direction.
 
-**Already covered** by the S1 corpus: Zhao et al. 2025 (`zhao2025llmsencode`, its top hit at 82%) and Arditi et al. 2024 (`arditi2024refusal`) — both already load-bearing in §7.
-
-**Five papers newly actioned** (arXiv IDs verified against the primary source, not the tool's text):
+Already covered by the S1 corpus: Zhao et al. 2025 (`zhao2025llmsencode`, its top hit) and Arditi et al. 2024 (`arditi2024refusal`). **Five papers newly actioned** (arXiv IDs verified against the primary source, not the tool's text):
 
 | Paper | ID / venue | Disposition |
 |---|---|---|
-| Wang et al., *Refusal Direction is Universal Across Safety-Aligned Languages* | 2505.17306, NeurIPS 2025 | **Changed a hypothesis.** Refusal directions near-parallel across languages. H4 now pre-registers projection-score distribution overlap over direction cosine (§6), with the degeneracy risk in §10. |
-| Yong & Bach, *Self-Jailbreaking* | 2510.20956, ICLR 2026 | **Must-distinguish + converging evidence** (§5). |
-| Yuan et al., *DeRTa* | 2407.09121, ACL 2025 | **Mechanism + optional baseline** (§5, §7); relevant to the (D) regime and to Intervention 2. |
-| Dabas et al., *Just Enough Shifts* (ACTOR) | 2507.04250, ICML 2025 | **Optional Phase-3 baseline** (§7): cheapest test of H6's re-binding claim. |
-| Wu et al., *EVOREFUSE* | 2505.23473, NeurIPS 2025 | **Promoted to a headline over-refusal measurement** (§7). |
+| Wang et al., *Refusal Direction is Universal Across Safety-Aligned Languages* | 2505.17306, NeurIPS 2025 | **Changed a hypothesis.** Refusal directions near-parallel across languages ⇒ H4 pre-registers projection-score distribution overlap over direction cosine (§6); degeneracy risk in §10. |
+| Yong & Bach, *Self-Jailbreaking* | 2510.20956, ICLR 2026 | Must-distinguish + converging evidence (§5). |
+| Yuan et al., *DeRTa* | 2407.09121, ACL 2025 | Mechanism + optional baseline (§5, §7); relevant to (D) and to Intervention 2. |
+| Dabas et al., *Just Enough Shifts* (ACTOR) | 2507.04250, ICML 2025 | Optional Phase-3 baseline (§7). |
+| Wu et al., *EVOREFUSE* | 2505.23473, NeurIPS 2025 | Promoted to a headline over-refusal measurement (§7). |
 
-**Two "gaps" it named, both deliberately out of scope.** (a) *Multimodal encodings* (visual steganography, audio perturbations) — owned by the sibling repo `llm_guardrail_security` per the CLAUDE.md scope boundary; a future-work line. (b) *Formal tamper-resistance guarantees* — no mechanistic paper offers them and this one will not either; a limitations line.
+### 12.2 Check #2 — v2 frame (job 0a4553bb-36e5-42ab-b7c5-dccbfd31c62f, 11:22)
 
-**v2 resubmission (pending).** The v1 submission described the two-regime frame, so its retrieval was anchored on harmfulness/refusal-direction work. The v2 idea text leads with the ability/deployment separation and the crossed intervention design, which should pull a different neighborhood — CoT-safety, decoding-time behavior, and elicitation work — and is the part of the claim most in need of an independent scoop check. Result and any consequent changes get appended here.
+Submitted as *"Diagnosing Safety Failures in Encoded Inputs by Decoding, Recognition, and Refusal."* **Result: pass, with a sharper placement than #1.** Its summary: the retrieved papers "mostly treat refusal failure as a monolithic geometry problem (e.g., poor clustering or a single suppressed direction)," while this idea "decomposes it into a three-stage causal pipeline (decoding, recognition, binding) to map specific failures to distinct interventions." That is the v2 contribution stated back to us by a system that had only the abstract — the decomposition reads as the delta, which is what the rewrite was for.
+
+Two further signals in our favour, both weak individually: its "opportunities and gaps" section reports that **no retrieved paper investigates inference-time compute — test-time search or multi-step reasoning — as a mechanism for bypassing or enforcing safety boundaries**, which is the (D) regime's immediate neighbourhood; and no retrieved paper contests the ability/deployment separation.
+
+**Two papers newly actioned** (IDs verified):
+
+| Paper | ID / venue | Disposition |
+|---|---|---|
+| Zheng et al., *On Prompt-Driven Safeguarding for LLMs* (DRO) | 2401.18018, ICML 2024 | **Changed the design.** Safety prompts move queries along a higher-refusal direction largely irrespective of harmfulness — so a decode-elicitation prompt could raise refusal *as a prompt*, not by causing decoding. Intervention 2 now ships with a matched placebo instruction and a hard requirement that the in-situ content probe move before any (D)-repair claim (§7, §9). This is the most valuable thing either check produced: it closes a confound that would have made the elicitation arm unpublishable as a mechanism result. |
+| Pan et al., *Understanding and Mitigating Overrefusal…* (RASS / MORBench) | 2505.18325, EMNLP 2025 | **Filled a measurement gap.** XSTest and EVOREFUSE are English-only while the ladder includes low-resource languages; MORBench covers the multilingual band (§7). RASS's "safety decision boundary" framing is also the object H4's overlap metric measures distance to. |
+
+### 12.3 What two runs establish about the instrument
+
+**The cspaper idea check is a settled-top-venue related-work sweep, not a scoop check.** Recorded here because it decides how much weight the "pass" verdicts carry:
+
+- **It never retrieved the four nearest works — in either run.** Aziz et al. 2026 (2606.01196), TrajGuard (2604.07727), SALO (2605.02958), and CIFR (2508.17158) are absent from both result sets, across two submissions with substantially different abstracts. These are precisely the papers a scoop check exists to find. The pattern is consistent with an index that under-covers recent arXiv-only work.
+- **The same three unrelated papers appeared in both runs, at the top.** Maximal-lotteries evaluation, KL distillation for math, and non-stationary RL entropy scheduling scored 83%/83%/80% in run 2 — *above* every genuinely relevant safety paper in the same list. The percentage is not a relevance measure, and the 10-result set is padded to a fixed size from a small candidate pool.
+- **What it is good for, demonstrated in both runs:** surfacing established, well-cited venue papers adjacent to the framing — DRO (2024), Arditi (2024), Zhao (2025), Wang (2025), DeRTa, ACTOR, RASS. A recency-weighted manual pass under-covers exactly this band, and two of the seven changed the design.
+
+**Consequence for this document:** §5's scoop verdict rests entirely on the manual 4-bucket full-text pass, not on these checks. The checks contribute related work and, twice now, one design-changing citation apiece — which is worth the ten minutes, but is not evidence that the claim is unclaimed. The general form of this judgment is recorded in the science organ's `knowledge/cspaper_idea_check.md` for reuse across research repos.
