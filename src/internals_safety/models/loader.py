@@ -263,7 +263,9 @@ def prepare_prompts(
     return prepared
 
 
-def tokenize_batch(loaded: LoadedModel, prompts: Sequence[PreparedPrompt]):
+def tokenize_batch(
+    loaded: LoadedModel, prompts: Sequence[PreparedPrompt], with_position_ids: bool = True
+):
     """Left-pad a batch of rendered prompts onto the model's device.
 
     `add_special_tokens=False` throughout: the chat template already emits BOS
@@ -276,6 +278,10 @@ def tokenize_batch(loaded: LoadedModel, prompts: Sequence[PreparedPrompt]):
     depend on which batch a prompt happened to land in. RoPE's relative
     geometry hides most of that, but nothing guarantees it in general — and a
     measurement that changes with batch composition is not a measurement.
+
+    `with_position_ids=False` for generation: `generate()` maintains its own
+    mask-aware position bookkeeping across decoding steps, and handing it a
+    prefilled `position_ids` fights that rather than helping it.
     """
     encoded = loaded.tokenizer(
         [prompt.text for prompt in prompts],
@@ -284,6 +290,7 @@ def tokenize_batch(loaded: LoadedModel, prompts: Sequence[PreparedPrompt]):
         return_tensors="pt",
     )
     inputs = {key: value.to(loaded.device) for key, value in encoded.items()}
-    mask = inputs["attention_mask"]
-    inputs["position_ids"] = (mask.cumsum(dim=-1) - 1).clamp(min=0)
+    if with_position_ids:
+        mask = inputs["attention_mask"]
+        inputs["position_ids"] = (mask.cumsum(dim=-1) - 1).clamp(min=0)
     return inputs

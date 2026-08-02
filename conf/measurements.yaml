@@ -1,0 +1,10 @@
+# Knobs for the four measurements of s1_idea_check.md §7.
+# Only #1 (ability) exists so far — #2/#3/#4 land at build steps 3 and 4.
+
+ability:
+  # Tuning path (global law: no heuristic number without one): the phase-0
+  # pilot logs the response-length distribution per rung; this is set from its
+  # upper tail, not from taste. Too small silently scores a truncated correct
+  # decode as a decode failure, which would contaminate the (C)/(D) split.
+  max_new_tokens: 256
+  batch_size: 8

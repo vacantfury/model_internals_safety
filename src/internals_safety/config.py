@@ -61,6 +61,22 @@ class ModelConfig(StrictModel):
     capture: CaptureConfig = CaptureConfig()
 
 
+class AbilityConfig(StrictModel):
+    """Measurement #1 — decode-and-restate."""
+
+    # Long enough for the plaintext plus the "the decoded text is:" preamble
+    # models tend to add. Too short would score a truncated correct answer as a
+    # decode failure, which is exactly the confusion the (C)/(D) split exists to
+    # avoid — so this is a knob, and its tuning path is the phase-0 pilot's
+    # response-length distribution.
+    max_new_tokens: int = 256
+    batch_size: int = 8
+
+
+class MeasurementsConfig(StrictModel):
+    ability: AbilityConfig = AbilityConfig()
+
+
 def load_yaml(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle)
@@ -83,3 +99,7 @@ def load_model_config(name: str, conf_dir: Path = CONF_DIR) -> ModelConfig:
     if config.name != name:
         raise ValueError(f"{path}: name field is {config.name!r} but filename says {name!r}")
     return config
+
+
+def load_measurements_config(conf_dir: Path = CONF_DIR) -> MeasurementsConfig:
+    return MeasurementsConfig(**load_yaml(conf_dir / "measurements.yaml"))

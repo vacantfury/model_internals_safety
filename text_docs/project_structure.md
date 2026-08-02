@@ -130,8 +130,8 @@ Copying is per the CLAUDE.md scope rule — **copied, never imported**; the oiko
 
 ## 6. Build order
 
-1. `models/loader.py` + `models/capture.py` + a smoke test that captures activations from one model on one prompt. Nothing else can be validated until this works.
-2. `encodings/` (copy + re-authored base) + `measurements/ability.py` — the cheapest real measurement.
+1. ~~`models/loader.py` + `models/capture.py` + a smoke test~~ — **DONE 2026-08-02** (commit `96de5a2`).
+2. ~~`encodings/` (copy + re-authored base) + `measurements/ability.py`~~ — **DONE 2026-08-02.** 15 exactly-invertible rungs (up from the sibling's ~4), each round-trip-verified; `models/generate.py` landed here too, since ability needs it.
 3. `measurements/behavior.py` + `judges/` (copied) — gives ASR, which makes the pilot runnable.
 4. `probes/` + `measurements/{deployment,recognition}.py` + `regimes.py` — completes the phase-0 pilot.
 5. Everything in `interventions/` and `training/` — only after the pilot returns a populated (B) cell.
@@ -143,3 +143,20 @@ Steps 1–4 are the phase-0 pilot's full dependency set. Step 5 is gated on its 
 1. ~~Primary claim band~~ — **settled 2026-08-02 (owner): exactly-invertible band carries the primary claims; semantic band is the labelled extended check.** See §3, including the consequent priority on widening the deterministic band.
 2. **Codename** for this paper. The letter is **E** (owner ruling 2026-08-02, reassigned from the retired "Smuggled Actions"; registry of record = science `portfolio.md`). No codename settled yet — optional, and cheap to defer to S2.
 3. Deferred until the pilot reveals actual run shapes: whether any experiment-orchestration layer is needed at all, and whether runs get tracked (MLflow or otherwise). Not decided now, deliberately.
+4. **NEW (opened at build step 2): does the ladder share one canonical corpus?** Some rungs are exactly invertible only over a restricted alphabet — Morse carries no case, so its reference is the uppercased, table-filtered prompt. Composing every rung's projection would impose that on all fifteen rungs to satisfy one, and case is exactly what the cipher rungs act on; so projections are currently **per rung**, and each cell is scored against its own reference. That is sound per cell but means rungs no longer see byte-identical prompts. `registry.canonicalization_report` quantifies the drift per rung. The alternative — restrict the shared corpus up front — is a *corpus* decision and belongs in S3, not in the encoder layer.
+
+## 8. Build-step-2 record (2026-08-02)
+
+What landed, and the decisions inside it that are not obvious from the layout.
+
+**Two prompt forms per rung, not one.** `EncodedPrompt` renders both an `attack_prompt` (the encoded request as an attacker sends it — names the encoding, matching CipherChat's threat model, but *never* asks the model to decode) and a `restate_prompt` (measurement #1: "write out the decoded text"). This is the interface consequence of the v2 reframe: the attack condition must not request decoding, or the measurement asks the very question it is testing. A test asserts the word "decode" appears in one and not the other, because a single careless template edit would silently destroy the (D) regime.
+
+**Invertibility is verified, not declared.** `Invertibility.EXACT` is the promise the paper makes to a reviewer who challenges "you cannot distinguish *didn't decode* from *decoded loosely*". A class an author merely asserts would put that promise on the honour system, so `tests/test_encodings.py` round-trips every EXACT rung over an awkward corpus (mixed case, punctuation, digits, repeated spaces, non-ASCII) and fails if the inverse is not exact. An encoder that cannot pass is SEMANTIC by definition.
+
+**The deterministic band went from ~4 rungs to 15.** base64, base32, hex, binary, ascii-decimal, unicode-escape, ROT13, Caesar-3, Caesar-7, Atbash, Vigenère, Morse, character-reversal, word-reversal, zero-width insertion. Three notes. Atbash is ported **with CipherChat's uppercase-reflection bug fixed** (its `N - ord(s)` constant only reflects lowercase; uppercase lands in the control range — a faithful port would corrupt every capitalized prompt), and the divergence is pinned by a test. The three Caesar shifts are deliberate: same mechanism, different familiarity (ROT13 is memorised, shift 7 is not), which lets RQ2 separate *decode difficulty* from *mechanism*. GBK was dropped — it is a CJK byte encoding that degenerates to ASCII passthrough on English prompts, i.e. a rung that does nothing.
+
+**Three named candidates did not make the band, with reasons.** *Leetspeak*: the digit substitutions (a→4, e→3, o→0…) are not injective on any plaintext containing those digits, so the inverse is exact only over a digit-free corpus — a corpus restriction, not an encoder property, so it waits on open decision 4. *NATO spelling*: works, but needs the same uppercase-and-filter projection as Morse for strictly less novelty; low priority. *Homoglyph*: the sibling's rung depends on the `homoglyphs` package, and adding a dependency for an optional rung was not worth it at step 2.
+
+**Config shape deviates from §4:** one `conf/encodings.yaml` keyed by family rather than `conf/encodings/*.yaml`. With 15 rungs the per-family files would be four lines each, and the attack/restate templates only make sense read side by side.
+
+**Harness check (2026-08-02, CPU, $0):** the full ladder × 2 prompts on Qwen2.5-0.5B-Instruct. Recovery is 0.00 on all 15 rungs, which is the expected result at that scale and is itself a useful pilot input — measurement #1 is degenerate below the 7B class, so the difficulty axis only exists at the pilot slate's size. The graded `similarity` signal is *not* degenerate even at 0.5B (zero-width 0.64 → base64 0.00), which is why the scorer reports it separately from the binary.
