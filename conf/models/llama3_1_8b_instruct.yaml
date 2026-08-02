@@ -1,0 +1,17 @@
+# Phase-0 pilot candidate (gated HF repo — needs an accepted licence on the
+# account running it). Second family alongside Qwen so a regime result is not a
+# single tokenizer's artifact. Slate settled at S2.
+name: llama3_1_8b_instruct
+hf_id: meta-llama/Llama-3.1-8B-Instruct
+dtype: auto
+device: auto
+trust_remote_code: false
+system_prompt: null
+capture_batch_size: 8
+
+capture:
+  site: resid_pre
+  layers: all
+  positions:
+    - instruction_final
+    - last

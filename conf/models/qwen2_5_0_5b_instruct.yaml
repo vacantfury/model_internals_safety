@@ -1,0 +1,17 @@
+# Small instruct model — used for pipeline smoke runs on a laptop, not for
+# results. Kept in-family with the 7B so a smoke run exercises the same chat
+# template and layer layout as the pilot model.
+name: qwen2_5_0_5b_instruct
+hf_id: Qwen/Qwen2.5-0.5B-Instruct
+dtype: auto
+device: auto
+trust_remote_code: false
+system_prompt: null
+capture_batch_size: 8
+
+capture:
+  site: resid_pre
+  layers: all
+  positions:
+    - instruction_final
+    - last

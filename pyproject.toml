@@ -1,0 +1,43 @@
+[project]
+name = "model-internals-safety"
+version = "0.1.0"
+description = "Diagnosing and repairing safety failures under encoded inputs (model-internals safety line, first paper)"
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+
+# Deps are added per build-order step (text_docs/project_structure.md §6), not
+# all up front. This is step 1: the forward-pass instrumentation spine.
+# Step 3 adds the judge layer (llm_utils + provider SDKs); step 5 adds peft.
+dependencies = [
+    "torch>=2.6,<3",
+    "transformers>=4.51,<6",
+    "accelerate>=1.0,<2",
+    "numpy>=2.0,<3",
+    "pandas>=2.2,<3",
+    "pyyaml>=6.0,<7",
+    "pydantic>=2.10,<3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0,<10",
+]
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/internals_safety"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    # Default test suite is hermetic: no network, no secrets, no model download.
+    # Anything that pulls real weights is marked `slow` and deselected by default.
+    "slow: needs network and/or real model weights",
+]
+addopts = "-m 'not slow'"
