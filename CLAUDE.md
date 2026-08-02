@@ -26,6 +26,7 @@ Pre-code: the first paper is at **S0 (ideation)** — see `text_docs/proposal.md
 - **Package manager will be `uv`** (global law). No application frameworks, CLI structure, or trackers assumed before discussion.
 - **LLM provider layer, when needed:** the `llm_utils` base package as a pinned git dep by tag (family convention; never vendor a copy).
 - **Experiment-run approval gate (family rule, owner 2026-07-22):** training and intervention runs are heavy — BEFORE launching ANY run, report an explicit estimate of (1) GPU count + type, (2) money ($), and (3) wall-clock time, and get the owner's explicit go.
+- **Cluster sync (family standard, settled 2026-08-02):** git clone/pull for committed code + rsync/scp for the gitignored ops layer (`*.sbatch`, cluster configs) + rsync-down for results — canonical: science organ `knowledge/cluster_sync_convention.md`. This repo is public, so the code path is plain `git clone` (no auth); wire the down-sync sites + ops-file rsync at S2 when code lands. Never fork a per-repo cluster-sync scheme.
 - **Conference deadlines:** the canonical timeline lives in `llm_guardrail_security/text_docs/shared/conference_timeline.md` — consult and update THERE, never fork a per-repo deadline list.
 - **Public-grade discipline (mandatory):** no secrets / PII / 1Password refs in any committed file; `TODO.md`, `NOW.md`, `knowledge/`, `outputs/`, `data/`, `text_docs/reviews/` are gitignored.
 - **English only** in task files (human names may stay as-is).
