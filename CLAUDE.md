@@ -19,17 +19,26 @@ Research home for the **model-internals safety** line: safety research that oper
 
 ## Status
 
-Pre-code: the first paper is at **S1 complete — direction committed, next S2 (feasibility)** — see `text_docs/proposal.md` (its `Workflow stage:` line is the state of record) and `text_docs/s1_idea_check.md`. No Python scaffold yet; scaffold `uv` + `tests/` + pytest smoke test when the first code lands (global testing law).
+The first paper (Paper E, "Can't, didn't, or wouldn't?") is at **S1 complete — direction committed, S2 feasibility open** — see `text_docs/proposal.md` (its `Workflow stage:` line is the state of record) and `text_docs/s1_idea_check.md`.
+
+Code has started, ahead of S2, because the phase-0 pilot is itself the S2 gate. **Build step 1 of `text_docs/project_structure.md` §6 is done** (2026-08-02): `uv` scaffold, `conf/`, `src/internals_safety/{config,paths,models}`, and the test suite. Next is step 2 (encoders + decode-and-restate). Run tests with `uv run pytest`; `uv run pytest -m slow` adds the real-weights smoke test.
 
 ## Conventions
 
-- **Package manager will be `uv`** (global law). No application frameworks, CLI structure, or trackers assumed before discussion.
+- **Package manager is `uv`** (global law); `uv.lock` is committed. No application frameworks, CLI structure, or trackers assumed before discussion — whether this project ever needs one is deferred until the phase-0 pilot shows the real run shapes (`text_docs/project_structure.md` §7.3).
+- **Artifact layout:** `outputs/activations/` is a capture cache reusable across analyses; `outputs/runs/<phase>/<model>/<run_name>/` holds one dir per run with its `results.json` provenance record. Both gitignored; both defined in `src/internals_safety/paths.py`.
 - **LLM provider layer, when needed:** the `llm_utils` base package as a pinned git dep by tag (family convention; never vendor a copy).
 - **Experiment-run approval gate (family rule, owner 2026-07-22):** training and intervention runs are heavy — BEFORE launching ANY run, report an explicit estimate of (1) GPU count + type, (2) money ($), and (3) wall-clock time, and get the owner's explicit go.
 - **Cluster sync (family standard, settled 2026-08-02):** git clone/pull for committed code + rsync/scp for the gitignored ops layer (`*.sbatch`, cluster configs) + rsync-down for results — canonical: science organ `knowledge/cluster_sync_convention.md`. This repo is public, so the code path is plain `git clone` (no auth); wire the down-sync sites + ops-file rsync at S2 when code lands. Never fork a per-repo cluster-sync scheme.
 - **Conference deadlines:** the canonical timeline lives in `llm_guardrail_security/text_docs/shared/conference_timeline.md` — consult and update THERE, never fork a per-repo deadline list.
 - **Public-grade discipline (mandatory):** no secrets / PII / 1Password refs in any committed file; `TODO.md`, `NOW.md`, `knowledge/`, `outputs/`, `data/`, `text_docs/reviews/` are gitignored.
 - **English only** in task files (human names may stay as-is).
+
+## Skills installed
+
+- `reproducible-run-logging` — the write side of reproducibility: the canonical `results.json` run-record schema and the dirty-tree guard. Installed 2026-08-02, deliberately *before* the first entrypoint exists, so `scripts/phase0_regime_map.py` is born emitting it.
+
+Not installed yet, with its trigger named: `check-experiment-results` (the read/triage side) — it needs a job runner, per-run output dirs, and a results doc to triage, none of which exist before the first cluster runs. Install it in the same sitting as the first phase-0 job.
 
 ## Task system
 
