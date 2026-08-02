@@ -21,6 +21,12 @@ __pycache__/
 # macOS
 .DS_Store
 
+# Secret-injection bootstrap — never committed in a public repo (global law):
+# the launcher and its pointer map name the vault layout, which is private even
+# though neither file holds a secret value.
+/run
+scripts/op_refs
+
 # Secrets (defense-in-depth)
 .env
 .env.*

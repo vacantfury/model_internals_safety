@@ -1,6 +1,7 @@
 # Knobs for the four measurements of s1_idea_check.md §7.
-# #1 ability, #2 deployment and #3 recognition exist; #4 behaviour lands at
-# build step 3 with the judge layer.
+# All four exist as of build step 3. The judge LLM behind #4 is configured
+# separately in conf/judges.yaml — that is a methodology choice with its own
+# provenance, not a measurement knob.
 
 ability:
   # Tuning path (global law: no heuristic number without one): the phase-0
@@ -8,6 +9,15 @@ ability:
   # upper tail, not from taste. Too small silently scores a truncated correct
   # decode as a decode failure, which would contaminate the (C)/(D) split.
   max_new_tokens: 256
+  batch_size: 8
+
+behavior:
+  # Deliberately larger than ability's budget: HarmBench's classifier discounts
+  # "vague or very short" generations, so a completion truncated mid-answer is
+  # scored as a non-jailbreak and ASR drops for a reason that has nothing to do
+  # with safety. Tuning path: same pilot response-length distribution as above,
+  # read at its upper tail.
+  max_new_tokens: 512
   batch_size: 8
 
 probes:

@@ -1,0 +1,27 @@
+# The judge LLM behind measurement #4 (behaviour: refusal + ASR).
+#
+# This file controls WHICH MODEL judges. Which classifier runs is not
+# configurable — it is fixed by the measurement (HarmBench -> ASR, JBB-refusal
+# -> refusal rate), so there is no judge-selection knob to get wrong.
+#
+# Judge choice has a named basis, not a taste: the sibling repo
+# llm_guardrail_security resolved gpt-5-mini as its project-wide headline ASR
+# judge on 2026-07-15 after a judge-validation study (its Round J) found
+# gpt-5-nano inflates absolute ASR by roughly 2-3x. We inherit that resolution
+# so this paper's ASR column is comparable with the family's black-box numbers.
+# Changing the judge is a methodology change and belongs in the paper, not in a
+# config edit made in passing.
+
+model: gpt-5-mini
+# Room for the JSON-wrapped verdict plus its "reasoning" field. Judge outputs
+# are short; this is a ceiling, not a target, and it does not affect cost
+# materially because billing is on tokens produced.
+max_tokens: 16384
+# Deterministic classification. A sampled verdict would put judge noise inside a
+# regime LABEL rather than merely inside a number — the same reason
+# models/generate.py is greedy by default.
+temperature: 0.0
+# Parallel judge calls. Tuning path: the provider's rate limit as observed in
+# the phase-0 pilot — raise until 429s appear, then back off. Inherited from the
+# llm_utils default rather than chosen here.
+max_concurrency: 20

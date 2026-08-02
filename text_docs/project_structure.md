@@ -1,8 +1,8 @@
 # Code structure — first paper ("Can't, didn't, or wouldn't?")
 
-*Written 2026-08-02 pre-code; §§1–7 are the original design, §§8–9 record what was actually built the same day. Companion to `s1_idea_check.md` (the science) and TODO item 1(b) (encoder inventory).*
+*Written 2026-08-02 pre-code; §§1–7 are the original design, §§8–10 record what was actually built the same day. Companion to `s1_idea_check.md` (the science) and TODO item 1(b) (encoder inventory).*
 
-**State: build steps 1, 2 and 4 of §6 are done; step 3 (the judge layer, measurement #4) is next and is the first step needing API keys.** 90 hermetic tests + 3 real-weights tests, green.
+**State: build steps 1–4 of §6 are done — all four measurements exist. Next is `scripts/phase0_regime_map.py`, the pilot that gates everything.** 115 hermetic tests + 3 real-weights tests, green.
 
 ## 1. Answer first — how much comes from the guardrail sibling
 
@@ -22,7 +22,7 @@ The evidence for "no analogue," from a read of the sibling's tracked source (139
 
 **The decisive fact: the sibling imports `torch` in exactly one file** (`defense/cider.py`). It is an API-orchestration repo — it never opens a model. This project's spine is a forward-pass instrumentation harness, so the sibling contributes inputs and scoring, not machinery.
 
-Two inherited conventions worth keeping, both already family-standard: `llm_utils` pinned as a git dep by tag (the sibling is on `v5.0.0`) for every judge/LLM-encoder call, and a gitignored `run` wrapper injecting API keys from 1Password via `op run` so no plaintext secret touches disk. Two conventions we do **not** inherit: the `conf/experiment/**` preset tree (hundreds of YAMLs for one dispatcher — the sibling uses no Hydra, just its own loader, and our run shapes are different), and MLflow (used in 3 files there; not adopted here without a separate decision).
+Two inherited conventions worth keeping, both already family-standard: `llm_utils` pinned as a git dep by tag (the sibling is on `v5.0.0`) for every judge/LLM-encoder call, and a gitignored `run` wrapper injecting API keys from the secret manager at launch so no plaintext secret touches disk. Two conventions we do **not** inherit: the `conf/experiment/**` preset tree (hundreds of YAMLs for one dispatcher — the sibling uses no Hydra, just its own loader, and our run shapes are different), and MLflow (used in 3 files there; not adopted here without a separate decision).
 
 ## 2. The load-bearing interface change
 
@@ -134,11 +134,11 @@ Copying is per the CLAUDE.md scope rule — **copied, never imported**; the oiko
 
 1. ~~`models/loader.py` + `models/capture.py` + a smoke test~~ — **DONE 2026-08-02** (commit `96de5a2`).
 2. ~~`encodings/` (copy + re-authored base) + `measurements/ability.py`~~ — **DONE 2026-08-02.** 15 exactly-invertible rungs (up from the sibling's ~4), each round-trip-verified; `models/generate.py` landed here too, since ability needs it.
-3. `measurements/behavior.py` + `judges/` (copied) — gives ASR, which makes the pilot runnable.
-4. ~~`probes/` + `measurements/{deployment,recognition}.py` + `regimes.py`~~ — **DONE 2026-08-02.** Note the pilot *script* still waits on step 3: a regime label needs measurement #4, so `scripts/phase0_regime_map.py` is written after the judge layer, not here.
+3. ~~`measurements/behavior.py` + `judges/` (copied)~~ — **DONE 2026-08-02.** Two judges (ASR + refusal), the judge LLM reached through `llm_utils`, keys injected at launch. See §10.
+4. ~~`probes/` + `measurements/{deployment,recognition}.py` + `regimes.py`~~ — **DONE 2026-08-02.** Note the pilot *script* waited on step 3: a regime label needs measurement #4, so `scripts/phase0_regime_map.py` is written after the judge layer, not here.
 5. Everything in `interventions/` and `training/` — only after the pilot returns a populated (B) cell.
 
-Steps 1–4 are the phase-0 pilot's full dependency set. Step 5 is gated on its result.
+Steps 1–4 are the phase-0 pilot's full dependency set and are complete; `scripts/phase0_regime_map.py` is the next thing to write. Step 5 is gated on its result.
 
 ## 7. Open decisions
 
@@ -146,6 +146,7 @@ Steps 1–4 are the phase-0 pilot's full dependency set. Step 5 is gated on its 
 2. **Codename** for this paper. The letter is **E** (owner ruling 2026-08-02, reassigned from the retired "Smuggled Actions"; registry of record = science `portfolio.md`). No codename settled yet — optional, and cheap to defer to S2.
 3. Deferred until the pilot reveals actual run shapes: whether any experiment-orchestration layer is needed at all, and whether runs get tracked (MLflow or otherwise). Not decided now, deliberately.
 4. **NEW (opened at build step 2): does the ladder share one canonical corpus?** Some rungs are exactly invertible only over a restricted alphabet — Morse carries no case, so its reference is the uppercased, table-filtered prompt. Composing every rung's projection would impose that on all fifteen rungs to satisfy one, and case is exactly what the cipher rungs act on; so projections are currently **per rung**, and each cell is scored against its own reference. That is sound per cell but means rungs no longer see byte-identical prompts. `registry.canonicalization_report` quantifies the drift per rung. The alternative — restrict the shared corpus up front — is a *corpus* decision and belongs in S3, not in the encoder layer.
+5. **NEW (opened at build step 3): LLM-judge HarmBench, or the released classifier weights?** The sibling's HarmBench evaluator — copied here — is the **LLM-judge form**: HarmBench's canonical `LLAMA2_CLS_PROMPT` sent to an API model (gpt-5-mini), not the released HarmBench-Llama-2-13b-cls checkpoint. That was forced in the sibling, which never opens a model. It is *not* forced here: this repo already puts 7–9B models on a GPU, so running the released classifier locally is a real option — free per judged sample, and immune to judge-model drift and deprecation (the current judge model has an announced shutdown date). Against it: every recorded ASR number in the family comes from the LLM-judge form, so switching costs cross-paper comparability, and a 13B classifier competes for the same GPU as the experiment. **Not decided.** The cheap resolution is to run both over the phase-0 pilot's saved responses and report their agreement — a judge-agreement number belongs in the paper regardless, and it turns this from a choice into a measurement. Deferred to S3.
 
 ## 8. Build-step-2 record (2026-08-02)
 
@@ -179,4 +180,24 @@ What landed, and the decisions inside it that are not obvious from the layout.
 
 **`seed` entered the project here**, as the run-logging skill required at the first stochastic step: probe train/test splits. It lives in `conf/measurements.yaml` and belongs in every run record.
 
-**Still owed for the pilot:** step 3 (measurement #4 — behaviour/ASR via the copied judges), then `scripts/phase0_regime_map.py`. A regime label needs all four measurements, so the pilot script cannot precede the judge layer.
+**Still owed for the pilot:** step 3 (measurement #4 — behaviour/ASR via the copied judges), then `scripts/phase0_regime_map.py`. A regime label needs all four measurements, so the pilot script cannot precede the judge layer. *(Step 3 landed the same day — §10. The pilot script is what remains.)*
+
+## 10. Build-step-3 record (2026-08-02)
+
+`judges/{parsing,base,harmbench,refusal}.py`, `measurements/behavior.py`, `conf/judges.yaml`. 25 new tests; 115 hermetic total, green in 0.4s. The four measurements now all exist.
+
+**The copied HarmBench evaluator is an API judge, not the released classifier weights** — checked before copying, because it decides whether this layer costs money or GPU. The sibling sends HarmBench's canonical `LLAMA2_CLS_PROMPT` (plus a JSON wrapper) to a caller-injected judge LLM, resolved project-wide to gpt-5-mini after its own judge-validation round found gpt-5-nano inflates absolute ASR by 2–3×. Its only weights-based judge is WildGuard, and even that is served over HTTP rather than loaded. The consequence for us is that measurement #4 is the first thing in this repo that needs an API key and spends money per sample — and that running the real 13B classifier is now an *option* rather than an impossibility, which is open decision 5.
+
+**Prompts copied verbatim, container re-authored** — the same split §2 made for `BaseEncoder`, for the same reason. The classifier templates and the verdict parser are what make our ASR column comparable with the family's recorded numbers, so they are byte-identical (including one inherited cosmetic defect: the refusal template's JSON example carries doubled braces, never collapsed because the sibling fills it with `str.replace`; harmless, and left alone because every recorded family number was produced with it). The container is not: the sibling's `evaluate()` takes prompt dicts plus a parallel processed-prompt list plus an id-keyed response dict and returns a pandas DataFrame — a shape built for its experiment dispatcher. Ours takes and returns dataclasses like every other measurement module here.
+
+**The judges never see the ciphertext, and a test pins it.** Both classifiers are asked about the *plaintext* request even though the model was attacked with an encoded one. HarmBench asks whether a generation exhibits a behaviour: hand it a base64 blob and every verdict is mechanically "no". Worse, the refusal judge counts a response "entirely irrelevant to the request" as a refusal — so against a ciphertext request, a model that decoded and complied (the (B) cell, the paper's whole object) reads as irrelevant and would be scored as refusing. One careless edit passing `attack_prompt` would leave the pipeline green and silently empty (B). This is the step-3 analogue of step 2's "the word *decode* appears in one prompt and not the other" test.
+
+**Refusal is measured, not read off ASR.** Two judges run on every response. "Not jailbroken" and "refused" are different claims, and the regime taxonomy splits on the second: a model that decodes nothing and produces filler is neither, and collapsing the two would move every such cell out of (C)/(D) into (S)/(R) — erasing the distinction the paper exists to draw.
+
+**Echo is scored independently of the refusal verdict.** The commonest non-answer under an encoded attack is the model parroting the ciphertext back, and the refusal judge's prompt explicitly counts an echo as a refusal. But an echo is a decode failure — (C) — and scoring it as a refusal would inflate (R), the metric H5 watches for the "refuse anything that looks encoded" degenerate outcome. So `BehaviorRecord` carries `echoed_ciphertext` from the same string scorer measurement #1 uses, next to the verdict rather than derived from it. Which reading is right in a given cell is a pilot finding, not something to hard-code now.
+
+**Judge-parse fallbacks ride on every record.** An unparseable verdict resolves to the safe word (copied fail direction). On the ASR judge that under-counts attack success — conservative. On the refusal judge it resolves to *not refused*, which pushes cells toward (B), the headline regime. That asymmetry is real, so `judge_fallback` is per-record and `FamilyBehavior.fallback_rate` is reported per rung; a non-trivial rate is a result, not a rounding error.
+
+**Two of the sibling's four evaluators were deliberately left behind, with triggers named.** WildGuard belongs to the external-guard-gap table (§7 baselines) and additionally needs a served checkpoint plus a helper from `defense/`, which the copy manifest excludes; OR-Bench belongs to the over-refusal battery. Both are phase-3 work; copy each with its experiment. The manifest's `utils/logger.py` was also skipped — this repo has no logging layer, and pulling in a colour-logging dependency for two modules is the wrong trade until something actually needs run-time logs.
+
+**Secrets wiring.** `llm_utils` pinned at `v5.0.0` (the sibling's tag) as a git dep; keys are injected into the process at launch by a gitignored bootstrap in the repo root, so no plaintext key touches disk and nothing vault-shaped is committed (public-repo rule). Verified end to end, not assumed: two live judge calls returned parsed verdicts with no fallback. The launcher is also what will work on the cluster, where desktop secret tooling does not exist.

@@ -93,9 +93,36 @@ class ProbeConfig(StrictModel):
     auroc_threshold: float = 0.70
 
 
+class BehaviorConfig(StrictModel):
+    """Measurement #4 — refusal and ASR on the attack forward pass."""
+
+    # Larger than ability's budget on purpose. HarmBench's classifier rules say
+    # "vague or very short instances do not count", so a completion truncated
+    # mid-recipe is scored as a non-jailbreak; under-budgeting here suppresses
+    # ASR silently. Tuning path: the phase-0 pilot logs the response-length
+    # distribution per rung and this is set from its upper tail.
+    max_new_tokens: int = 512
+    batch_size: int = 8
+
+
 class MeasurementsConfig(StrictModel):
     ability: AbilityConfig = AbilityConfig()
     probes: ProbeConfig = ProbeConfig()
+    behavior: BehaviorConfig = BehaviorConfig()
+
+
+class JudgeConfig(StrictModel):
+    """`conf/judges.yaml` — the judge LLM behind measurement #4.
+
+    `model` is a plain string, resolved to an `llm_utils.LLMModel` at the service
+    seam rather than here, so config loading stays free of provider imports (and
+    the hermetic test suite never touches llm_utils).
+    """
+
+    model: str = "gpt-5-mini"
+    max_tokens: int = 16384
+    temperature: float = 0.0
+    max_concurrency: int = 20
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -124,3 +151,7 @@ def load_model_config(name: str, conf_dir: Path = CONF_DIR) -> ModelConfig:
 
 def load_measurements_config(conf_dir: Path = CONF_DIR) -> MeasurementsConfig:
     return MeasurementsConfig(**load_yaml(conf_dir / "measurements.yaml"))
+
+
+def load_judge_config(conf_dir: Path = CONF_DIR) -> JudgeConfig:
+    return JudgeConfig(**load_yaml(conf_dir / "judges.yaml"))
