@@ -1,0 +1,42 @@
+# Task/state files (personal — never committed)
+TODO.md
+NOW.md
+
+# Internal research notes (not part of the public artifact)
+knowledge/
+
+# Reviewer/ARR text — never committed (owner policy)
+text_docs/reviews/
+
+# Experiment artifacts
+outputs/
+data/
+logs/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# macOS
+.DS_Store
+
+# Secrets (defense-in-depth)
+.env
+.env.*
+*.env
+keys/
+secrets/
+*.key
+*.pem
+*credentials*
+*.secret
+
+# LaTeX aux junk (keep deliverable PDFs)
+*.aux
+*.bbl
+*.blg
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+*.toc
