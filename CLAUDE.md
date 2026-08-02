@@ -19,7 +19,7 @@ Research home for the **model-internals safety** line: safety research that oper
 
 ## Status
 
-Pre-code: the first paper is at **S0 (ideation)** — see `text_docs/proposal.md` (its `Workflow stage:` line is the state of record). No Python scaffold yet; scaffold `uv` + `tests/` + pytest smoke test when the first code lands (global testing law).
+Pre-code: the first paper is at **S1 complete — direction committed, next S2 (feasibility)** — see `text_docs/proposal.md` (its `Workflow stage:` line is the state of record) and `text_docs/s1_idea_check.md`. No Python scaffold yet; scaffold `uv` + `tests/` + pytest smoke test when the first code lands (global testing law).
 
 ## Conventions
 
