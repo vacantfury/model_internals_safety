@@ -1,6 +1,8 @@
 # Code structure — first paper ("Can't, didn't, or wouldn't?")
 
-*Written 2026-08-02, pre-code. Companion to `s1_idea_check.md` (the science) and TODO item 1(b) (encoder inventory). Design only — no code exists yet.*
+*Written 2026-08-02 pre-code; §§1–7 are the original design, §§8–9 record what was actually built the same day. Companion to `s1_idea_check.md` (the science) and TODO item 1(b) (encoder inventory).*
+
+**State: build steps 1, 2 and 4 of §6 are done; step 3 (the judge layer, measurement #4) is next and is the first step needing API keys.** 90 hermetic tests + 3 real-weights tests, green.
 
 ## 1. Answer first — how much comes from the guardrail sibling
 
