@@ -1,6 +1,8 @@
 # model_internals_safety — proposal (stub)
 
-Workflow stage: S0 Topic sourcing (as of 2026-08-02)
+Workflow stage: S1 idea check COMPLETE — direction committed (as of 2026-08-02); next: S2 feasibility
+
+**Committed first-paper direction (owner-confirmed 2026-08-02): the merge of candidates 1 + 4** — "Recognition or action? Diagnosing and repairing safety failures under encoded inputs": internals diagnostic (recognition vs action/calibration failure per encoding family) + causal validation + cross-encoding safety fine-tuning as the causal test and fix. Full delta statement, design skeleton, predictions, and controls: `text_docs/s1_idea_check.md`. Candidates below kept as the S0 record; unmerged remainders (2, 3) stay future-work seeds.
 
 ## Line scope
 
