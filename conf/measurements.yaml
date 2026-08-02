@@ -1,5 +1,6 @@
 # Knobs for the four measurements of s1_idea_check.md §7.
-# Only #1 (ability) exists so far — #2/#3/#4 land at build steps 3 and 4.
+# #1 ability, #2 deployment and #3 recognition exist; #4 behaviour lands at
+# build step 3 with the judge layer.
 
 ability:
   # Tuning path (global law: no heuristic number without one): the phase-0
@@ -8,3 +9,19 @@ ability:
   # decode as a decode failure, which would contaminate the (C)/(D) split.
   max_new_tokens: 256
   batch_size: 8
+
+probes:
+  # The project's first RNG. Every run record must carry it (see
+  # .claude/skills/reproducible-run-logging) — a regime label built on an
+  # unrecorded split is not reproducible.
+  seed: 0
+  test_fraction: 0.3
+  # Tuning path: swept in the phase-0 pilot against held-out AUROC on the
+  # plain-text condition, where the answer is known to be near-ceiling.
+  regularization_c: 1.0
+  max_iter: 2000
+  # Above this AUROC a probe counts as reading a signal. Tuning path: set from
+  # the control-task AUROC distribution measured in the pilot — the point is the
+  # gap between the real task and a shuffled-label control, not the raw number.
+  auroc_threshold: 0.70
+

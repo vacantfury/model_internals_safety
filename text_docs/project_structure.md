@@ -133,7 +133,7 @@ Copying is per the CLAUDE.md scope rule — **copied, never imported**; the oiko
 1. ~~`models/loader.py` + `models/capture.py` + a smoke test~~ — **DONE 2026-08-02** (commit `96de5a2`).
 2. ~~`encodings/` (copy + re-authored base) + `measurements/ability.py`~~ — **DONE 2026-08-02.** 15 exactly-invertible rungs (up from the sibling's ~4), each round-trip-verified; `models/generate.py` landed here too, since ability needs it.
 3. `measurements/behavior.py` + `judges/` (copied) — gives ASR, which makes the pilot runnable.
-4. `probes/` + `measurements/{deployment,recognition}.py` + `regimes.py` — completes the phase-0 pilot.
+4. ~~`probes/` + `measurements/{deployment,recognition}.py` + `regimes.py`~~ — **DONE 2026-08-02.** Note the pilot *script* still waits on step 3: a regime label needs measurement #4, so `scripts/phase0_regime_map.py` is written after the judge layer, not here.
 5. Everything in `interventions/` and `training/` — only after the pilot returns a populated (B) cell.
 
 Steps 1–4 are the phase-0 pilot's full dependency set. Step 5 is gated on its result.
@@ -160,3 +160,21 @@ What landed, and the decisions inside it that are not obvious from the layout.
 **Config shape deviates from §4:** one `conf/encodings.yaml` keyed by family rather than `conf/encodings/*.yaml`. With 15 rungs the per-family files would be four lines each, and the attack/restate templates only make sense read side by side.
 
 **Harness check (2026-08-02, CPU, $0):** the full ladder × 2 prompts on Qwen2.5-0.5B-Instruct. Recovery is 0.00 on all 15 rungs, which is the expected result at that scale and is itself a useful pilot input — measurement #1 is degenerate below the 7B class, so the difficulty axis only exists at the pilot slate's size. The graded `similarity` signal is *not* degenerate even at 0.5B (zero-width 0.64 → base64 0.00), which is why the scorer reports it separately from the binary.
+
+## 9. Build-step-4 record (2026-08-02)
+
+`probes/{directions,linear,overlap}.py`, `measurements/{recognition,deployment,regimes}.py`. 40 new tests; 90 hermetic total, green in 3s.
+
+**The probe layer reports selectivity, never a bare AUROC.** A linear classifier on a few hundred high-dimensional examples can fit a great deal, so every probe is refit on shuffled labels using the *same* split and the gap is what gets reported. 0.95 with a 0.90 control is memorisation; 0.95 with a 0.52 control is signal. The threshold above which a probe "reads signal" is in `conf/measurements.yaml` with its tuning path named — it is set from the pilot's control-task distribution, not from taste.
+
+**Measurement #2 is fit-here-evaluate-there, and never refits.** The content probe is trained on the plain-text condition, where content is present by construction, and evaluated on the attack condition without refitting. Refitting on the encoded condition would ask whether encoded activations are separable *at all* — which they may well be on surface form alone — and that is a different question. Two tests pin the instrument: it must find planted content, and it must return chance on structureless activations. Without the second, every (D) cell in the paper would still report a number.
+
+**Recognition reads at `instruction_final`, with `last` as the contrast.** Zhao et al. (NeurIPS 2025) put harmfulness at the instruction-final token and refusal at the post-instruction/template token; our two captured positions map onto exactly that pair. A probe placed at the later position measures "will it refuse", which would beg the question (B) is defined by — harm represented *while* the model complies. Both curves are carried; only the first bears the regime.
+
+**Everything is a per-layer × per-position curve, and `recognized`/`deployed` are any-cell predicates.** §7(b): under encodings the harmful gist may only become legible partway through the internal decode, so a fixed readout layer would systematically under-detect in exactly the deep-obfuscation rungs the paper cares most about. The layer at which a signal appears is a finding, not a constant.
+
+**Two amendments to §7's prose, made in `regimes.py` and back-propagated to `s1_idea_check.md` §7.** (a) The "four of eight coherent combinations" count needs a second constraint (`deployment → recognition`) which only holds on a harmful corpus, so it is implemented as a soft, harmful-scoped flag that does not void the cell's label — otherwise every benign control cell would be recorded as an instrument failure. (b) A fifth cell exists — **(R) surface refusal**, refusal without deployment — which matches no row of the Move-B table, is not incoherent, and is exactly the degenerate outcome H5 warns about. It gets counted rather than absorbed.
+
+**`seed` entered the project here**, as the run-logging skill required at the first stochastic step: probe train/test splits. It lives in `conf/measurements.yaml` and belongs in every run record.
+
+**Still owed for the pilot:** step 3 (measurement #4 — behaviour/ASR via the copied judges), then `scripts/phase0_regime_map.py`. A regime label needs all four measurements, so the pilot script cannot precede the judge layer.

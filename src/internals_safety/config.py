@@ -73,8 +73,29 @@ class AbilityConfig(StrictModel):
     batch_size: int = 8
 
 
+class ProbeConfig(StrictModel):
+    """Measurements #2 and #3 — the linear-probe layer."""
+
+    # The first stochastic knob in the project (train/test splits). The
+    # run-record schema requires it to be recorded per run — see
+    # `.claude/skills/reproducible-run-logging`.
+    seed: int = 0
+    test_fraction: float = 0.3
+    # Inverse L2 regularisation for the logistic probe. Tuning path: the phase-0
+    # pilot sweeps it against held-out AUROC on the plain-text condition, where
+    # the answer is known to be near-ceiling — a value that cannot separate
+    # plain harmful from plain harmless is misconfigured, not informative.
+    regularization_c: float = 1.0
+    max_iter: int = 2000
+    # A probe is only counted as reading a signal above this AUROC. 0.5 is
+    # chance; the margin is set from the control-task distribution measured in
+    # the pilot, not chosen by taste.
+    auroc_threshold: float = 0.70
+
+
 class MeasurementsConfig(StrictModel):
     ability: AbilityConfig = AbilityConfig()
+    probes: ProbeConfig = ProbeConfig()
 
 
 def load_yaml(path: Path) -> dict[str, Any]:

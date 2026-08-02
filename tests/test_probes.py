@@ -1,0 +1,243 @@
+"""Probe-layer tests on synthetic activations.
+
+Synthetic on purpose: these assert that the *instruments* behave as claimed —
+a separable signal is found, an absent one is not, and a shuffled-label control
+sits at chance. Whether a real model separates harmful from harmless is an
+empirical question for the pilot, not something a test can or should pin.
+
+The two that matter most are `test_probe_transfer_*`: measurement #2 is entirely
+built on fit-here-evaluate-there, and if transfer reported signal on structureless
+activations, every (D) cell in the paper would be wrong.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+import torch
+
+from internals_safety.config import ProbeConfig
+from internals_safety.measurements.deployment import measure_deployment
+from internals_safety.measurements.recognition import (
+    HARMFULNESS_POSITION,
+    REFUSAL_POSITION,
+    measure_recognition,
+)
+from internals_safety.models.capture import ActivationBatch
+from internals_safety.probes.directions import (
+    cosine_similarity,
+    difference_in_means,
+    projection_scores,
+    sweep_directions,
+)
+from internals_safety.probes.linear import probe_sweep, probe_transfer
+from internals_safety.probes.overlap import (
+    decision_threshold,
+    overlap_coefficient,
+    pairwise_overlap,
+    summarize_projections,
+)
+
+LAYERS = [0, 1]
+POSITIONS = [HARMFULNESS_POSITION, REFUSAL_POSITION]
+D_MODEL = 16
+N = 60
+CONFIG = ProbeConfig(seed=0, test_fraction=0.3, auroc_threshold=0.70)
+
+
+def make_batch(tensor: torch.Tensor) -> ActivationBatch:
+    return ActivationBatch(
+        tensor=tensor,
+        layers=list(LAYERS),
+        positions=list(POSITIONS),
+        site="resid_pre",
+        model_name="synthetic",
+        user_messages=[f"prompt {index}" for index in range(tensor.shape[0])],
+    )
+
+
+def cluster(offset: float, generator: torch.Generator) -> ActivationBatch:
+    """A batch whose first feature is shifted by `offset` at every cell."""
+    tensor = torch.randn(N, len(LAYERS), len(POSITIONS), D_MODEL, generator=generator)
+    tensor[..., 0] += offset
+    return make_batch(tensor)
+
+
+@pytest.fixture
+def generator():
+    return torch.Generator().manual_seed(0)
+
+
+class TestDirections:
+    def test_direction_points_from_negative_to_positive(self, generator):
+        positive = cluster(4.0, generator)
+        negative = cluster(-4.0, generator)
+        direction = difference_in_means(positive, negative, layer=0, position=POSITIONS[0])
+
+        assert direction.vector.shape == (D_MODEL,)
+        assert pytest.approx(1.0, abs=1e-5) == float(direction.vector.norm())
+        # The planted signal lives in feature 0 and nowhere else.
+        assert direction.vector[0] > 0.9
+        assert direction.raw_norm > 1.0
+        assert direction.n_positive == N and direction.n_negative == N
+
+    def test_projections_separate_the_classes(self, generator):
+        positive = cluster(4.0, generator)
+        negative = cluster(-4.0, generator)
+        direction = difference_in_means(positive, negative, layer=0, position=POSITIONS[0])
+
+        assert projection_scores(positive, direction).mean() > projection_scores(
+            negative, direction
+        ).mean()
+
+    def test_identical_classes_give_a_near_zero_raw_norm(self, generator):
+        """A direction with no separation behind it is numerical noise pointing
+        somewhere arbitrary; raw_norm is how a caller detects that."""
+        shared = cluster(0.0, generator)
+        direction = difference_in_means(shared, shared, layer=0, position=POSITIONS[0])
+        assert direction.raw_norm == pytest.approx(0.0, abs=1e-5)
+        assert torch.allclose(direction.vector, torch.zeros(D_MODEL))
+
+    def test_sweep_covers_every_cell(self, generator):
+        positive, negative = cluster(3.0, generator), cluster(-3.0, generator)
+        directions = sweep_directions(positive, negative)
+        assert len(directions) == len(LAYERS) * len(POSITIONS)
+        assert {(d.layer, d.position) for d in directions} == {
+            (layer, position) for layer in LAYERS for position in POSITIONS
+        }
+
+    def test_cosine_of_a_direction_with_itself_is_one(self, generator):
+        positive, negative = cluster(3.0, generator), cluster(-3.0, generator)
+        direction = difference_in_means(positive, negative, layer=0, position=POSITIONS[0])
+        assert cosine_similarity(direction, direction) == pytest.approx(1.0, abs=1e-5)
+
+    def test_mismatched_capture_grids_are_rejected(self, generator):
+        positive = cluster(1.0, generator)
+        odd = make_batch(torch.randn(N, len(LAYERS), len(POSITIONS), D_MODEL))
+        odd.layers = [5, 6]
+        with pytest.raises(ValueError, match="same layers"):
+            sweep_directions(positive, odd)
+
+
+class TestLinearProbes:
+    def test_separable_data_reads_signal_and_the_control_does_not(self, generator):
+        results = probe_sweep(cluster(4.0, generator), cluster(-4.0, generator), CONFIG)
+        assert len(results) == len(LAYERS) * len(POSITIONS)
+        for result in results:
+            assert result.auroc > 0.95
+            assert result.control_auroc < 0.8
+            assert result.selectivity > 0.15
+            assert result.reads_signal(CONFIG.auroc_threshold)
+
+    def test_structureless_data_reads_no_signal(self, generator):
+        """The load-bearing negative: without this, every absent measurement in
+        the paper would still report a number."""
+        results = probe_sweep(cluster(0.0, generator), cluster(0.0, generator), CONFIG)
+        for result in results:
+            assert not result.reads_signal(CONFIG.auroc_threshold)
+
+    def test_probe_transfer_finds_content_that_is_present(self, generator):
+        plain_positive, plain_negative = cluster(4.0, generator), cluster(-4.0, generator)
+        encoded_positive, encoded_negative = cluster(3.0, generator), cluster(-3.0, generator)
+
+        transfer, control = probe_transfer(
+            plain_positive,
+            plain_negative,
+            encoded_positive,
+            encoded_negative,
+            layer=0,
+            position=POSITIONS[0],
+            config=CONFIG,
+        )
+        assert transfer > 0.95
+        assert transfer - control > 0.15
+
+    def test_probe_transfer_reports_chance_when_content_is_absent(self, generator):
+        """Regime (D) is exactly this reading: ability present, content absent
+        from the attack forward pass."""
+        plain_positive, plain_negative = cluster(4.0, generator), cluster(-4.0, generator)
+        encoded_positive, encoded_negative = cluster(0.0, generator), cluster(0.0, generator)
+
+        transfer, _ = probe_transfer(
+            plain_positive,
+            plain_negative,
+            encoded_positive,
+            encoded_negative,
+            layer=0,
+            position=POSITIONS[0],
+            config=CONFIG,
+        )
+        assert 0.35 < transfer < 0.65
+
+
+class TestOverlapMetric:
+    def test_identical_distributions_fully_overlap(self):
+        scores = np.random.default_rng(0).normal(size=500)
+        assert overlap_coefficient(scores, scores) == pytest.approx(1.0, abs=1e-9)
+
+    def test_disjoint_distributions_do_not_overlap(self):
+        rng = np.random.default_rng(0)
+        assert overlap_coefficient(rng.normal(-50, 0.1, 500), rng.normal(50, 0.1, 500)) < 0.01
+
+    def test_partial_overlap_lands_between(self):
+        rng = np.random.default_rng(0)
+        value = overlap_coefficient(rng.normal(0, 1, 2000), rng.normal(1, 1, 2000))
+        assert 0.3 < value < 0.9
+
+    def test_threshold_separates_the_two_classes(self):
+        rng = np.random.default_rng(0)
+        harmful = rng.normal(3, 0.5, 500)
+        harmless = rng.normal(-3, 0.5, 500)
+        threshold = decision_threshold(harmful, harmless)
+        assert -3 < threshold < 3
+
+    def test_summary_signs_distance_by_side_of_the_boundary(self):
+        above = summarize_projections("base64", np.full(10, 2.0), threshold=0.0)
+        below = summarize_projections("morse", np.full(10, -2.0), threshold=0.0)
+        assert above.mean_distance_to_threshold > 0 and above.fraction_above_threshold == 1.0
+        assert below.mean_distance_to_threshold < 0 and below.fraction_above_threshold == 0.0
+
+    def test_pairwise_overlap_covers_each_unordered_pair(self):
+        rng = np.random.default_rng(0)
+        scores = {name: rng.normal(size=200) for name in ("base64", "rot13", "morse")}
+        pairs = pairwise_overlap(scores)
+        assert len(pairs) == 3
+        assert ("base64", "rot13") in pairs
+
+
+class TestRecognitionAndDeployment:
+    def test_recognition_detects_represented_harm(self, generator):
+        result = measure_recognition(cluster(4.0, generator), cluster(-4.0, generator), CONFIG)
+        assert result.recognized
+        assert result.best_at(HARMFULNESS_POSITION).auroc > 0.95
+        # The refusal position is carried as a contrast, not as the readout.
+        assert result.at_position(REFUSAL_POSITION)
+        assert result.direction_at(0, HARMFULNESS_POSITION).layer == 0
+
+    def test_recognition_is_absent_when_nothing_separates(self, generator):
+        result = measure_recognition(cluster(0.0, generator), cluster(0.0, generator), CONFIG)
+        assert not result.recognized
+
+    def test_deployment_detects_decoded_content(self, generator):
+        curve = measure_deployment(
+            "base64",
+            cluster(4.0, generator),
+            cluster(-4.0, generator),
+            cluster(3.0, generator),
+            cluster(-3.0, generator),
+            CONFIG,
+        )
+        assert curve.deployed
+        assert curve.best().transfer_auroc > 0.95
+        assert len(curve.results) == len(LAYERS) * len(POSITIONS)
+
+    def test_deployment_absent_is_the_didnt_decode_reading(self, generator):
+        curve = measure_deployment(
+            "base64",
+            cluster(4.0, generator),
+            cluster(-4.0, generator),
+            cluster(0.0, generator),
+            cluster(0.0, generator),
+            CONFIG,
+        )
+        assert not curve.deployed
