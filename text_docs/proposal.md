@@ -1,8 +1,8 @@
 # model_internals_safety — proposal (stub)
 
-Workflow stage: S1 idea check COMPLETE — direction committed (as of 2026-08-02); next: S2 feasibility
+Workflow stage: S1 idea check COMPLETE — direction committed (as of 2026-08-02), frame revised to v2 same day; next: S2 feasibility, gated on the Phase-0 regime-map pilot
 
-**Committed first-paper direction (owner-confirmed 2026-08-02): the merge of candidates 1 + 4** — "Recognition or action? Diagnosing and repairing safety failures under encoded inputs": internals diagnostic (recognition vs action/calibration failure per encoding family) + causal validation + cross-encoding safety fine-tuning as the causal test and fix. Full delta statement, design skeleton, predictions, and controls: `text_docs/s1_idea_check.md`. Candidates below kept as the S0 record; unmerged remainders (2, 3) stay future-work seeds.
+**Committed first-paper direction (owner-confirmed 2026-08-02; v2 frame 2026-08-02): the merge of candidates 1 + 4** — "Can't, didn't, or wouldn't? Diagnosing and repairing safety failures under encoded inputs": a four-regime internals diagnostic (capability / deployment / binding failure per encoding family) + causal validation + a crossed two-intervention test (cross-encoding safety fine-tuning × decode-elicitation) whose four predicted null cells are the causal evidence. *(v1 was the two-regime "Recognition or action?" framing; v2 separates decoding ability from decoding deployment — see `s1_idea_check.md` §12.)* Full delta statement, design skeleton, predictions, and controls: `text_docs/s1_idea_check.md`. Candidates below kept as the S0 record; unmerged remainders (2, 3) stay future-work seeds.
 
 ## Line scope
 
