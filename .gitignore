@@ -12,6 +12,10 @@ text_docs/reviews/
 outputs/
 data/
 logs/
+# Cluster ops layer (family standard: committed code travels by git, the ops
+# layer by rsync). Gitignored because it encodes one site's paths and account
+# layout, which is not public-repo content.
+ops/
 
 # Python
 __pycache__/
