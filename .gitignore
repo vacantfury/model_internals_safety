@@ -31,6 +31,9 @@ scripts/op_refs
 .env
 .env.*
 *.env
+# ...except the placeholder contract, which is the point of a public repo:
+# it names the variables to set and holds no values.
+!.env.example
 keys/
 secrets/
 *.key
