@@ -28,7 +28,13 @@ from dataclasses import dataclass
 from internals_safety.config import ProbeConfig
 from internals_safety.models.capture import ActivationBatch
 from internals_safety.probes.directions import Direction, sweep_directions
-from internals_safety.probes.linear import ProbeResult, best_by_auroc, probe_sweep
+from internals_safety.probes.linear import (
+    ProbeResult,
+    best_by_auroc,
+    crossval_scores,
+    probe_sweep,
+    reading_threshold,
+)
 
 HARMFULNESS_POSITION = "instruction_final"
 REFUSAL_POSITION = "last"
@@ -83,4 +89,68 @@ def measure_recognition(
         curves=probe_sweep(harmful, harmless, config),
         directions=sweep_directions(harmful, harmless),
         threshold=config.auroc_threshold,
+    )
+
+
+@dataclass(frozen=True)
+class RecognitionReading:
+    """The harmfulness curve turned into one boolean per prompt.
+
+    Same two-step shape as `DeploymentReading` — population licensing, then a
+    per-example reading at the licensed cell against the same-condition negative
+    class — with one extra requirement. This probe is fit *inside* the condition
+    it reads, so unlike the transfer probe it has no free held-out set; the
+    per-example scores are therefore cross-validated, and an example is always
+    scored by a fold that never saw it.
+    """
+
+    licensed: bool
+    layer: int
+    position: str
+    auroc: float
+    threshold_score: float
+    harmful: list[bool]
+    harmless: list[bool]
+
+    @property
+    def harmful_rate(self) -> float:
+        return sum(self.harmful) / len(self.harmful) if self.harmful else 0.0
+
+
+def read_recognition_per_prompt(
+    result: RecognitionResult,
+    harmful: ActivationBatch,
+    harmless: ActivationBatch,
+    config: ProbeConfig,
+) -> RecognitionReading:
+    """Read the licensed harmfulness cell once per prompt.
+
+    The cell is chosen from the HARMFULNESS_POSITION curve only. Reading harm at
+    the post-template position would measure refusal propensity instead — the
+    Zhao et al. distinction in the module docstring — and (B) is defined as harm
+    being represented *while* the model complies, so that substitution would beg
+    the paper's question rather than answer it.
+    """
+    at_position = result.at_position(HARMFULNESS_POSITION)
+    if not at_position:
+        raise ValueError(
+            f"no probe cells at {HARMFULNESS_POSITION!r}; recognition needs that position "
+            "captured (see conf/models/*.yaml capture.positions)"
+        )
+    signalling = [cell for cell in at_position if cell.reads_signal(result.threshold)]
+    best = best_by_auroc(signalling or at_position)
+
+    positive_scores, negative_scores = crossval_scores(
+        harmful, harmless, layer=best.layer, position=best.position, config=config
+    )
+    threshold = reading_threshold(negative_scores, config)
+    licensed = result.recognized
+    return RecognitionReading(
+        licensed=licensed,
+        layer=best.layer,
+        position=best.position,
+        auroc=best.auroc,
+        threshold_score=threshold,
+        harmful=[licensed and bool(score > threshold) for score in positive_scores],
+        harmless=[licensed and bool(score > threshold) for score in negative_scores],
     )

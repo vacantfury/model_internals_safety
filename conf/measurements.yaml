@@ -34,4 +34,17 @@ probes:
   # the control-task AUROC distribution measured in the pilot — the point is the
   # gap between the real task and a shuffled-label control, not the raw number.
   auroc_threshold: 0.70
+  # Folds for out-of-sample per-example scoring (measurement #3 fits inside the
+  # condition it reads, so it has no free held-out set). Tuning path: raise only
+  # if pilot fold-to-fold variance dominates the harmful-vs-benign reading gap.
+  cv_folds: 5
+  # A regime label is per (model, family, prompt) but an AUROC is a population
+  # quantity; this is the operating point that turns the licensed probe into a
+  # per-prompt reading. A positive example reads positive when it beats this
+  # percentile of the *same-condition* negative scores — same condition, so the
+  # encoding and its template wrapper are common-mode and cannot decide the
+  # label. Tuning path: at 50 the benign control's own positive rate is 50% by
+  # construction; the pilot reports both rates per rung and this is set from the
+  # benign false-positive rate the paper is willing to carry.
+  reading_percentile: 50.0
 

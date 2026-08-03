@@ -1,0 +1,29 @@
+# Phase-0 regime-map pilot — the corpus and scope of `scripts/phase0_regime_map.py`.
+# Instrument knobs live in measurements.yaml; the judge LLM lives in judges.yaml.
+# These are corpus/scope choices for one experiment, so they get their own file.
+
+# The contrast pair. JailbreakBench ships its benign set as a *theme-matched*
+# counterpart to its harmful set (jbb_defamation <-> benign_defamation, and so
+# on down all 100), which is why it is the negative class here rather than the
+# larger OR-Bench set: an unmatched negative class would let the content probe
+# separate on topic or provenance instead of on harmfulness, and measurement #2
+# would report that separation as "the content is present".
+harmful_set: jbb_prompts.jsonl
+harmless_set: jbb_benign_prompts.jsonl
+
+# Both files hold exactly 100, so this is the full matched set. The binding
+# constraint is the probe's test-set size, not GPU time: at 100+100 the transfer
+# probe is evaluated on 200 held-out examples, where an AUROC standard error is
+# ~0.04 — small enough for the 0.70 licensing threshold in measurements.yaml to
+# mean something. Tuning path: the pilot reports per-cell AUROC spread, and if
+# it exceeds that error the corpus grows (HarmBench's 240 are already on disk).
+n_prompts: 100
+
+# The full ladder — the sweep IS the independent variable.
+families: all
+
+# The two models s1_idea_check.md §7 names for phase 0, at the 7-9B scale the
+# whole gating question is about. Loaded one per invocation, not both at once.
+models:
+  - qwen2_5_7b_instruct
+  - llama3_1_8b_instruct

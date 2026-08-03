@@ -11,6 +11,29 @@ is to run the *identical* probe against shuffled labels and report the gap. A
 `probe_transfer` is the instrument measurement #2 is built on: fit on one
 condition, evaluate on another, never refit. That is what "is plaintext content
 readable in the attack forward pass" reduces to operationally.
+
+## Population AUROC licenses the instrument; per-example scores read a cell
+
+A regime label is defined per (model, family, **prompt**) — `s1_idea_check.md`
+§7 — but an AUROC is a property of a population, so it cannot label one prompt.
+The two-step reading below is what closes that gap, and both halves are needed:
+
+1. **Licensing (population).** Unless the (layer, position) cell reads a signal
+   above its shuffled-label control, no per-example reading from it means
+   anything, and every prompt reads negative. This is what keeps a noisy probe
+   from distributing cells across regimes at chance.
+2. **Reading (per example).** At the licensed cell, an example's decision value
+   is compared against the **negative class in the same condition**
+   (`reading_threshold`), not against the boundary at zero. Encoding a prompt
+   and wrapping it in an attack template shifts *both* classes together, and a
+   common shift moves every raw decision value while leaving the ranking — and
+   therefore the AUROC that licensed the cell — untouched. Thresholding at zero
+   would let that shift decide the label; thresholding against the concurrent
+   negatives cannot, because the confound is common-mode.
+
+The percentile is an operating point, not an estimate: at the 50th, the benign
+control's own positive rate is 50% by construction. What carries information is
+the *gap* between the harmful and benign rates, which the pilot reports.
 """
 
 from __future__ import annotations
@@ -21,7 +44,7 @@ import numpy as np
 import torch
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold, cross_val_predict, train_test_split
 
 from internals_safety.config import ProbeConfig
 from internals_safety.models.capture import ActivationBatch
@@ -123,6 +146,66 @@ def probe_sweep(
     return results
 
 
+@dataclass(frozen=True)
+class TransferScores:
+    """A transfer probe's population metrics *and* its per-example decision values.
+
+    The scores are out-of-sample by construction: the probe never sees the test
+    condition, so every encoded example is held out without needing a split.
+    """
+
+    transfer_auroc: float
+    control_auroc: float
+    positive_scores: np.ndarray
+    negative_scores: np.ndarray
+
+
+def probe_transfer_detail(
+    train_positive: ActivationBatch,
+    train_negative: ActivationBatch,
+    test_positive: ActivationBatch,
+    test_negative: ActivationBatch,
+    layer: int,
+    position: str,
+    config: ProbeConfig,
+) -> TransferScores:
+    """Fit on one condition, evaluate on another; keep the per-example scores.
+
+    Never refits on the test condition — the question is whether a decision
+    boundary learned where the content is *plainly* present still separates the
+    condition where it would have to have been decoded.
+    """
+    train_features = _to_numpy(
+        torch.cat([train_positive.select(layer, position), train_negative.select(layer, position)])
+    )
+    train_labels = np.concatenate(
+        [
+            np.ones(train_positive.tensor.shape[0], dtype=int),
+            np.zeros(train_negative.tensor.shape[0], dtype=int),
+        ]
+    )
+    positive_features = _to_numpy(test_positive.select(layer, position))
+    negative_features = _to_numpy(test_negative.select(layer, position))
+    test_features = np.concatenate([positive_features, negative_features])
+    test_labels = np.concatenate(
+        [
+            np.ones(len(positive_features), dtype=int),
+            np.zeros(len(negative_features), dtype=int),
+        ]
+    )
+
+    model = _fit(train_features, train_labels, config)
+    rng = np.random.default_rng(config.seed)
+    control_model = _fit(train_features, rng.permutation(train_labels), config)
+
+    return TransferScores(
+        transfer_auroc=_auroc(model, test_features, test_labels),
+        control_auroc=_auroc(control_model, test_features, test_labels),
+        positive_scores=model.decision_function(positive_features),
+        negative_scores=model.decision_function(negative_features),
+    )
+
+
 def probe_transfer(
     train_positive: ActivationBatch,
     train_negative: ActivationBatch,
@@ -132,39 +215,67 @@ def probe_transfer(
     position: str,
     config: ProbeConfig,
 ) -> tuple[float, float]:
-    """Fit on one condition, evaluate on another. Returns (transfer, control).
+    """`probe_transfer_detail`'s two population metrics: (transfer, control)."""
+    detail = probe_transfer_detail(
+        train_positive, train_negative, test_positive, test_negative, layer, position, config
+    )
+    return detail.transfer_auroc, detail.control_auroc
 
-    Never refits on the test condition — the question is whether a decision
-    boundary learned where the content is *plainly* present still separates the
-    condition where it would have to have been decoded.
+
+def crossval_scores(
+    positive: ActivationBatch,
+    negative: ActivationBatch,
+    layer: int,
+    position: str,
+    config: ProbeConfig,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Out-of-sample decision values for *every* example, via stratified k-fold.
+
+    Needed where the probe is fit inside the condition it reads — measurement #3
+    contrasts harmful against harmless within one encoding condition, so unlike
+    the transfer probe there is no free held-out set. Each example is scored by a
+    probe that never saw it; without that, a per-prompt recognition reading would
+    be reporting the probe's memory of its own training set.
     """
-    train_features = torch.cat(
-        [train_positive.select(layer, position), train_negative.select(layer, position)]
-    )
-    train_labels = np.concatenate(
+    features = np.concatenate(
         [
-            np.ones(train_positive.tensor.shape[0], dtype=int),
-            np.zeros(train_negative.tensor.shape[0], dtype=int),
+            _to_numpy(positive.select(layer, position)),
+            _to_numpy(negative.select(layer, position)),
         ]
     )
-    test_features = _to_numpy(
-        torch.cat([test_positive.select(layer, position), test_negative.select(layer, position)])
-    )
-    test_labels = np.concatenate(
-        [
-            np.ones(test_positive.tensor.shape[0], dtype=int),
-            np.zeros(test_negative.tensor.shape[0], dtype=int),
-        ]
+    n_positive = positive.tensor.shape[0]
+    labels = np.concatenate(
+        [np.ones(n_positive, dtype=int), np.zeros(negative.tensor.shape[0], dtype=int)]
     )
 
-    model = _fit(_to_numpy(train_features), train_labels, config)
-    transfer = _auroc(model, test_features, test_labels)
+    folds = min(config.cv_folds, int(labels.sum()), int(len(labels) - labels.sum()))
+    if folds < 2:
+        raise ValueError(
+            f"cross-validated scoring needs >=2 examples per class, got "
+            f"{int(labels.sum())} positive and {int(len(labels) - labels.sum())} negative"
+        )
+    scores = cross_val_predict(
+        LogisticRegression(
+            C=config.regularization_c, max_iter=config.max_iter, random_state=config.seed
+        ),
+        features,
+        labels,
+        cv=StratifiedKFold(n_splits=folds, shuffle=True, random_state=config.seed),
+        method="decision_function",
+    )
+    return scores[:n_positive], scores[n_positive:]
 
-    rng = np.random.default_rng(config.seed)
-    control_model = _fit(_to_numpy(train_features), rng.permutation(train_labels), config)
-    control = _auroc(control_model, test_features, test_labels)
 
-    return transfer, control
+def reading_threshold(negative_scores: np.ndarray, config: ProbeConfig) -> float:
+    """The score a positive example must beat to read positive *for that cell*.
+
+    Taken from the negative class **in the same condition**, so that the encoding
+    and its attack-template wrapper — which shift both classes together — cannot
+    decide the reading. See the module docstring.
+    """
+    if len(negative_scores) == 0:
+        raise ValueError("no negative examples to set a reading threshold from")
+    return float(np.percentile(negative_scores, config.reading_percentile))
 
 
 def best_by_auroc(results: list[ProbeResult]) -> ProbeResult:

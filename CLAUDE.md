@@ -21,9 +21,11 @@ Research home for the **model-internals safety** line: safety research that oper
 
 The first paper (Paper E, "Can't, didn't, or wouldn't?") is at **S1 complete — direction committed, S2 feasibility open** — see `text_docs/proposal.md` (its `Workflow stage:` line is the state of record) and `text_docs/s1_idea_check.md`.
 
-Code has started, ahead of S2, because the phase-0 pilot is itself the S2 gate. **Build steps 1–4 of `text_docs/project_structure.md` §6 are done** (2026-08-02): the forward-pass spine, the 15-rung encoding ladder, the probe layer, and the judge layer — all four measurements of `s1_idea_check.md` §7 now exist. Next is `scripts/phase0_regime_map.py`, the pilot that gates everything.
+Code has started, ahead of S2, because the phase-0 pilot is itself the S2 gate. **Build steps 1–4 of `text_docs/project_structure.md` §6 are done and the pilot entrypoint is written** (2026-08-02): the forward-pass spine, the 15-rung encoding ladder, the probe layer, the judge layer — all four measurements of `s1_idea_check.md` §7 — and `scripts/phase0_regime_map.py`, which combines them into a per-(model, family) regime map. **The pilot is code-complete and unlaunched**; what it waits on is cluster access, a GPU-hour cost model, and the approval gate below, not more code.
 
-Run tests with `uv run pytest` (hermetic — no network, no keys); `uv run pytest -m slow` adds the real-weights smoke tests. Anything that calls a judge or downloads gated weights needs keys, so prefix it with the repo-root launcher: `./run python scripts/…`.
+Run tests with `uv run pytest` (hermetic — no network, no keys); `uv run pytest -m slow` adds the real-weights smoke tests. Anything that calls a judge or downloads gated weights needs keys, so prefix it with the repo-root launcher: `./run python scripts/…`. `--dry-run` on the pilot prints the work a run would do (capture passes, generations, judge calls) without loading a model or needing a key — that is the input to the approval-gate estimate.
+
+The pilot's corpus is four JSONL prompt sets copied from the guardrail sibling into the gitignored `data/`; a fresh clone re-copies them (`text_docs/project_structure.md` §5).
 
 ## Conventions
 

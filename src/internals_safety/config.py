@@ -91,6 +91,19 @@ class ProbeConfig(StrictModel):
     # chance; the margin is set from the control-task distribution measured in
     # the pilot, not chosen by taste.
     auroc_threshold: float = 0.70
+    # Folds for the out-of-sample per-example scoring measurement #3 needs
+    # (`probes.linear.crossval_scores`). Tuning path: raise it only if the pilot
+    # shows fold-to-fold variance dominating the harmful-vs-benign reading gap;
+    # 5 is the standard default and buys the smallest fold that still leaves a
+    # usable test share per fold.
+    cv_folds: int = 5
+    # Percentile of the *same-condition negative* score distribution a positive
+    # example must beat to read positive. An operating point, not an estimate:
+    # at 50 the benign control's own positive rate is 50% by construction, and
+    # what carries information is the harmful-minus-benign gap. Tuning path: the
+    # pilot reports both rates per rung, so this is set from the benign
+    # false-positive rate the paper is willing to carry.
+    reading_percentile: float = 50.0
 
 
 class BehaviorConfig(StrictModel):
@@ -125,6 +138,22 @@ class JudgeConfig(StrictModel):
     max_concurrency: int = 20
 
 
+class PilotConfig(StrictModel):
+    """`conf/pilot.yaml` — the phase-0 regime-map corpus and sweep.
+
+    Separate from `measurements.yaml` because these are *corpus and scope*
+    choices for one experiment, not knobs of the instruments; phases 1-3 will
+    carry their own.
+    """
+
+    harmful_set: str = "jbb_prompts.jsonl"
+    harmless_set: str = "jbb_benign_prompts.jsonl"
+    n_prompts: int = 100
+    # "all" = every family in conf/encodings.yaml; otherwise an explicit list.
+    families: Literal["all"] | list[str] = "all"
+    models: list[str] = Field(default_factory=list)
+
+
 def load_yaml(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle)
@@ -155,3 +184,7 @@ def load_measurements_config(conf_dir: Path = CONF_DIR) -> MeasurementsConfig:
 
 def load_judge_config(conf_dir: Path = CONF_DIR) -> JudgeConfig:
     return JudgeConfig(**load_yaml(conf_dir / "judges.yaml"))
+
+
+def load_pilot_config(conf_dir: Path = CONF_DIR) -> PilotConfig:
+    return PilotConfig(**load_yaml(conf_dir / "pilot.yaml"))

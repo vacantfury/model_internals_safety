@@ -21,6 +21,7 @@ consistency across layers matters more here than comparability to logits.
 
 from __future__ import annotations
 
+import hashlib
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,7 +30,8 @@ from typing import Iterator, Sequence
 import torch
 
 from internals_safety.config import PositionName, Site
-from internals_safety.models.loader import LoadedModel, PreparedPrompt, tokenize_batch
+from internals_safety.models.loader import LoadedModel, PreparedPrompt, prepare_prompts, tokenize_batch
+from internals_safety.paths import ACTIVATIONS_DIR
 
 
 @dataclass
@@ -212,3 +214,72 @@ def capture_activations(
         model_name=loaded.config.name,
         user_messages=[prompt.user_message for prompt in prompts],
     )
+
+
+def cache_path(
+    loaded: LoadedModel,
+    condition: str,
+    messages: Sequence[str],
+    layers: Sequence[int],
+    positions: Sequence[str],
+    site: str,
+    cache_dir: Path = ACTIVATIONS_DIR,
+) -> Path:
+    """Where a capture of exactly this shape lives in `outputs/activations/`.
+
+    The key covers everything that changes the tensor: the model, the exact
+    prompt strings, and the capture geometry. It deliberately does **not** cover
+    the batch size, which must not change activations — `tokenize_batch` builds
+    mask-aware `position_ids` precisely so a prompt's capture cannot depend on
+    which batch it landed in, and `tests/test_capture.py` pins that.
+    """
+    hasher = hashlib.sha256()
+    for message in messages:
+        hasher.update(message.encode("utf-8"))
+        hasher.update(b"\x00")
+    hasher.update(f"|{site}|{list(layers)}|{list(positions)}".encode("utf-8"))
+    return cache_dir / loaded.config.name / f"{condition}-{hasher.hexdigest()[:16]}.pt"
+
+
+def capture_or_load(
+    loaded: LoadedModel,
+    messages: Sequence[str],
+    condition: str,
+    layers: Sequence[int] | str | None = None,
+    positions: Sequence[PositionName] | None = None,
+    site: Site | None = None,
+    batch_size: int | None = None,
+    cache_dir: Path = ACTIVATIONS_DIR,
+    refresh: bool = False,
+) -> tuple[ActivationBatch, Path, bool]:
+    """Capture `messages`, reusing a cached tensor when one exists.
+
+    Returns `(batch, path, was_cached)`. The path goes into the run record's
+    `activations_path`: capture is the expensive step and is shared across
+    analyses, so a run that reports numbers has to name which cache produced
+    them — otherwise "re-run it" is not a well-defined instruction.
+
+    The plain-text conditions are family-independent, so across a full ladder
+    sweep this turns 2 x n_families captures into 2.
+    """
+    layer_indices = resolve_layers(loaded, layers)
+    position_names = list(positions) if positions is not None else list(loaded.config.capture.positions)
+    capture_site: Site = site if site is not None else loaded.config.capture.site
+    path = cache_path(
+        loaded, condition, messages, layer_indices, position_names, capture_site, cache_dir
+    )
+
+    if path.exists() and not refresh:
+        return ActivationBatch.load(path), path, True
+
+    prompts = prepare_prompts(loaded, messages, positions=position_names)
+    batch = capture_activations(
+        loaded,
+        prompts,
+        layers=layer_indices,
+        positions=position_names,
+        site=capture_site,
+        batch_size=batch_size,
+    )
+    batch.save(path)
+    return batch, path, False

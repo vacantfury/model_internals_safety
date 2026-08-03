@@ -31,7 +31,7 @@ from dataclasses import dataclass
 
 from internals_safety.config import ProbeConfig
 from internals_safety.models.capture import ActivationBatch
-from internals_safety.probes.linear import probe_transfer
+from internals_safety.probes.linear import probe_transfer, probe_transfer_detail, reading_threshold
 
 
 @dataclass(frozen=True)
@@ -72,7 +72,20 @@ class DeploymentCurve:
         return any(result.deployed for result in self.results)
 
     def best(self) -> DeploymentResult:
-        return max(self.results, key=lambda result: result.transfer_auroc)
+        """The cell the per-prompt reading is taken at.
+
+        Restricted to cells that actually read a signal when any does, so the
+        reading comes from a licensed cell rather than from whichever cell won a
+        race among noise. NaN AUROCs (a degenerate class split) sort last rather
+        than propagating through the comparison.
+        """
+        candidates = [result for result in self.results if result.deployed] or self.results
+        return max(
+            candidates,
+            key=lambda result: (
+                result.transfer_auroc if result.transfer_auroc == result.transfer_auroc else -1.0
+            ),
+        )
 
 
 def measure_deployment(
@@ -114,3 +127,82 @@ def measure_deployment(
                 )
             )
     return DeploymentCurve(family=family, results=results)
+
+
+@dataclass(frozen=True)
+class DeploymentReading:
+    """The curve turned into one boolean per prompt — what a regime label needs.
+
+    `licensed` is the population half: unless some cell of the curve reads a
+    signal above its shuffled-label control, nothing per-example is meaningful
+    and every prompt reads False regardless of its score. `harmful` /
+    `harmless` are the per-example readings at the licensed cell, and the pair
+    is the format-decorrelation control (§8's first): both classes went through
+    the *identical* encoding pipeline, so a probe firing on "looks encoded"
+    cannot produce a gap between them.
+    """
+
+    family: str
+    licensed: bool
+    layer: int
+    position: str
+    transfer_auroc: float
+    threshold_score: float
+    harmful: list[bool]
+    harmless: list[bool]
+
+    @property
+    def harmful_rate(self) -> float:
+        return sum(self.harmful) / len(self.harmful) if self.harmful else 0.0
+
+    @property
+    def harmless_rate(self) -> float:
+        """The benign false-positive rate at this operating point. Fixed at
+        `1 - reading_percentile/100` by construction, so it is a check that the
+        threshold was applied, not a finding — the informative quantity is the
+        gap below."""
+        return sum(self.harmless) / len(self.harmless) if self.harmless else 0.0
+
+    @property
+    def gap(self) -> float:
+        """Harmful minus benign reading rate — the part that carries information."""
+        return self.harmful_rate - self.harmless_rate
+
+
+def read_deployment_per_prompt(
+    curve: DeploymentCurve,
+    plain_positive: ActivationBatch,
+    plain_negative: ActivationBatch,
+    encoded_positive: ActivationBatch,
+    encoded_negative: ActivationBatch,
+    config: ProbeConfig,
+) -> DeploymentReading:
+    """Read the licensed cell of `curve` once per prompt.
+
+    Refits the probe at that one cell rather than carrying every cell's scores
+    through the sweep: one logistic fit is cheap next to the forward passes that
+    produced the activations, and keeping scores for all (layer x position)
+    cells would grow the curve by two orders of magnitude for one cell's use.
+    """
+    best = curve.best()
+    detail = probe_transfer_detail(
+        plain_positive,
+        plain_negative,
+        encoded_positive,
+        encoded_negative,
+        layer=best.layer,
+        position=best.position,
+        config=config,
+    )
+    threshold = reading_threshold(detail.negative_scores, config)
+    licensed = curve.deployed
+    return DeploymentReading(
+        family=curve.family,
+        licensed=licensed,
+        layer=best.layer,
+        position=best.position,
+        transfer_auroc=best.transfer_auroc,
+        threshold_score=threshold,
+        harmful=[licensed and bool(score > threshold) for score in detail.positive_scores],
+        harmless=[licensed and bool(score > threshold) for score in detail.negative_scores],
+    )

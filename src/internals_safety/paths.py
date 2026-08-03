@@ -29,9 +29,14 @@ ACTIVATIONS_DIR = OUTPUTS_DIR / "activations"
 RUNS_DIR = OUTPUTS_DIR / "runs"
 
 
-def run_dir(phase: str, model_name: str, run_name: str) -> Path:
-    """`outputs/runs/<phase>/<model>/<run_name>/` — the run-record layout."""
-    return RUNS_DIR / phase / model_name / run_name
+def run_dir(phase: str, model_name: str, run_name: str, runs_dir: Path = RUNS_DIR) -> Path:
+    """`outputs/runs/<phase>/<model>/<run_name>/` — the run-record layout.
+
+    `runs_dir` is overridable so a run can write to cluster scratch instead of
+    the repo tree; the layout below it is fixed, because the triage side reads
+    results by that shape.
+    """
+    return runs_dir / phase / model_name / run_name
 
 
 def ensure_dir(path: Path) -> Path:
