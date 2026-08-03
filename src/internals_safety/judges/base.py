@@ -121,6 +121,7 @@ class Judge(ABC):
                 max_tokens=self.config.max_tokens,
                 temperature=self.config.temperature,
                 max_concurrency=self.config.max_concurrency,
+                use_batch_api=self.config.use_batch_api,
             )
         return self._service
 

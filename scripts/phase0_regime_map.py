@@ -65,6 +65,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -141,8 +142,9 @@ class Plan:
                 f"(<= {generated_tokens:,} new tokens at configured budgets)",
                 f"judge API calls       {self.judge_calls} (2 judges x every attack response)",
                 "",
-                "No run launches from --dry-run. Turn these counts into GPU count/type, $ "
-                "and wall-clock, and get an explicit go first (family rule, owner 2026-07-22).",
+                "No run launches from --dry-run. For the GPU count/type, $ and wall-clock the "
+                "approval gate needs (family rule, owner 2026-07-22), run:",
+                f"    uv run python scripts/cost_model.py --model {self.model}",
             ]
         )
 
@@ -402,6 +404,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     raw_path = directory / "cells.jsonl"
     summaries = []
+    # Gather-and-cover: conf/cost.yaml's throughput numbers are assumptions with
+    # exactly one tuning path — a real run measuring them. Timing the sweep is
+    # what makes the next phase's estimate a measurement instead of a guess, so
+    # the instrumentation ships with the knob rather than after it.
+    started = time.perf_counter()
     with raw_path.open("w", encoding="utf-8") as handle:
         for family in families:
             print(f"\n=== {family}", flush=True)
@@ -422,6 +429,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 handle.write(json.dumps(cell, ensure_ascii=False) + "\n")
             summaries.append(result["summary"])
             print(result["regime_map"], flush=True)
+    elapsed_seconds = time.perf_counter() - started
+
+    # Budgeted, not observed: token-exact accounting would need the tokenizer
+    # and the realised completion lengths, and the point here is a rate good
+    # enough to replace a 4x-wide assumption. Labelled so nobody reads it as a
+    # measured decode rate.
+    budgeted_decode_tokens = (
+        len(families)
+        * len(harmful)
+        * (measurements.ability.max_new_tokens + measurements.behavior.max_new_tokens)
+    )
 
     record = capture_provenance(
         config={
@@ -450,6 +468,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             },
             "raw_output_path": str(raw_path.relative_to(directory)),
             "plan": asdict(plan),
+            "throughput": {
+                "elapsed_seconds": elapsed_seconds,
+                "budgeted_decode_tokens": budgeted_decode_tokens,
+                "budgeted_decode_tokens_per_s": budgeted_decode_tokens / elapsed_seconds
+                if elapsed_seconds
+                else 0.0,
+                "device": plan.device,
+                "note": "upper-bound rate: decode tokens are budgets, not realised "
+                "lengths, and the elapsed time includes probe fitting and judge calls. "
+                "Tightens conf/cost.yaml, which currently spans 4x.",
+            },
             "metrics": {"families": summaries},
         },
     )

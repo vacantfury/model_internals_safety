@@ -11,5 +11,8 @@ Setup: `uv sync`, then `uv run pytest` (hermetic — no network, no keys, no wei
 To see what a pilot run would cost before running one:
 
 ```
-uv run python scripts/phase0_regime_map.py --model qwen2_5_7b_instruct --dry-run
+uv run python scripts/phase0_regime_map.py --model qwen2_5_7b_instruct --dry-run   # the work
+uv run python scripts/cost_model.py --model qwen2_5_7b_instruct                    # GPU-hours and $
 ```
+
+Neither loads model weights, needs a GPU, or spends anything. The cost model tokenises the real corpus under every encoding rung — the ladder inflates prompt length by 1.2× to 14×, so the estimate is measured rather than assumed — and reports ranges against the target partition's wall-clock limit.

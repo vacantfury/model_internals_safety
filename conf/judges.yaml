@@ -25,3 +25,16 @@ temperature: 0.0
 # the phase-0 pilot — raise until 429s appear, then back off. Inherited from the
 # llm_utils default rather than chosen here.
 max_concurrency: 20
+# Realtime, not the provider's native batch API. Same model, same temperature,
+# same prompts — a delivery channel, not a different instrument, so this cannot
+# move a verdict. It is pinned rather than left on auto because llm_utils'
+# auto-router estimates job cost as `max_tokens` per request, and max_tokens
+# above is a deliberately generous ceiling: the estimate lands ~$3.30 against a
+# $1.00 batching threshold, so EVERY judge call would route to the batch queue
+# on a ~40x overestimate of a short JSON verdict. The judges run synchronously
+# inside the pilot with the model resident on the GPU, so unbounded batch
+# latency would be charged to the job's wall-clock allocation and could exhaust
+# it while the GPU sits idle polling. The whole judge bill is single-digit
+# dollars, so the 50% batch discount does not buy back that risk.
+# Tuning path: flip to true for a large offline re-judge that holds no GPU.
+use_batch_api: false

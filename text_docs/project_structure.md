@@ -1,8 +1,8 @@
 # Code structure — first paper ("Can't, didn't, or wouldn't?")
 
-*Written 2026-08-02 pre-code; §§1–7 are the original design, §§8–11 record what was actually built the same day. Companion to `s1_idea_check.md` (the science) and TODO item 1(b) (encoder inventory).*
+*Written 2026-08-02 pre-code; §§1–7 are the original design, §§8–12 record what was actually built the same day. Companion to `s1_idea_check.md` (the science) and TODO item 1(b) (encoder inventory).*
 
-**State: build steps 1–4 of §6 are done and `scripts/phase0_regime_map.py` is written — the pilot is code-complete and unlaunched.** What remains before it runs is not code: cluster access (S2a), a GPU-hour cost model (S2c), and the experiment-run approval gate. 166 hermetic tests + 3 real-weights tests, green.
+**State: build steps 1–4 of §6 are done, `scripts/phase0_regime_map.py` is written, and the cost model behind the approval gate is built (§12) — the pilot is code-complete, costed and unlaunched.** What remains before it runs is not code and not an estimate: the owner's explicit go, and a cluster account whose longevity past graduation is settled (S2a). 182 hermetic tests + 3 real-weights tests, green.
 
 ## 1. Answer first — how much comes from the guardrail sibling
 
@@ -138,7 +138,7 @@ Copying is per the CLAUDE.md scope rule — **copied, never imported**; the oiko
 4. ~~`probes/` + `measurements/{deployment,recognition}.py` + `regimes.py`~~ — **DONE 2026-08-02.** Note the pilot *script* waited on step 3: a regime label needs measurement #4, so `scripts/phase0_regime_map.py` is written after the judge layer, not here.
 5. Everything in `interventions/` and `training/` — only after the pilot returns a populated (B) cell.
 
-Steps 1–4 are the phase-0 pilot's full dependency set and are complete, and `scripts/phase0_regime_map.py` (§11) is written on top of them. Step 5 is gated on the pilot's result; the pilot is gated on cluster access and the approval gate, not on code.
+Steps 1–4 are the phase-0 pilot's full dependency set and are complete, and `scripts/phase0_regime_map.py` (§11) is written on top of them. Step 5 is gated on the pilot's result; the pilot is gated on the approval gate, not on code — and the gate's own input, the cost model, is now built too (§12).
 
 ## 7. Open decisions
 
@@ -225,3 +225,21 @@ What landed, and the decisions inside it that are not obvious from the layout.
 **The dirty-tree guard refuses on GPU and warns on a laptop.** Per the run-logging skill, but the reason is sharper here than the general one: the paper's central object is a regime *label* built by combining four measurements on one prompt, so a silent code change between measurements corrupts the label rather than merely perturbing a number. Local CPU/MPS debugging still records the diff inline — inline rather than a path, because results get rsynced down from the cluster without the tree.
 
 **Verification.** `main()` is covered end to end by a hermetic test — real corpus, two rungs, six prompts, the tiny in-process model and stub judge services — that asserts the run record carries the skill's full schema and that the captured condition is the *attack* prompt, never the restate one. Nothing about the pilot has been run against real weights or a real judge; the first such run is the gated one.
+
+## 12. Cost-model record (2026-08-02)
+
+Built to close S2(c) — the family's experiment-run approval gate (owner 2026-07-22) requires GPU count and type, money, and wall-clock before any launch, and none of those existed as numbers. `scripts/cost_model.py` + `src/internals_safety/cost.py` + `conf/cost.yaml` produce them. It loads a tokenizer but no weights, so it runs on a laptop with no GPU, no key and no cluster.
+
+**Tokens, not passes, because the ladder makes the difference an order of magnitude.** `Plan` in the pilot counts forward passes and generations, which answers "what work happens" but not "how long does it take": wall-clock is driven by tokens, split between compute-bound prefill and bandwidth-bound decode. The encodings make that split load-bearing rather than pedantic — measured against Qwen2.5's tokenizer over the real 100-prompt corpus, the rungs inflate prompt length from **1.2× (reverse_words, 55 tokens) to 13.9× (binary, 758 tokens)** relative to the shortest rung. Any single assumed inflation factor is wrong by an order of magnitude somewhere on the ladder, so the census tokenises every rung for real instead of assuming one.
+
+**What that census returns, per model over the full ladder:** 1,232,922 prefill tokens (measured), ≤1,152,000 decode tokens (the configured budget ceiling), 3,000 judge calls. The longest single prompt is **1,446 tokens against a 131,072-token context** — worth stating because a rung that overflowed context would be silently truncated and every regime in it would be garbage, so the census reports the maximum as a check rather than leaving it implicit.
+
+**Everything is a range, and the ranges cross.** Hardware throughput cannot be known before running on the actual node, so `conf/cost.yaml` carries ranges and every output is a range; the low end of GPU-hours comes from the *high* end of tokens/second, which a test pins because getting it backwards would report the optimistic case as the worst case. The gate is served better by "0.7–2.4 hours against an 8-hour wall" than by a confident single number that is wrong.
+
+**Gather-and-cover.** Those throughput ranges span ~4×, and they have exactly one tuning path: a real run measuring them. So the instrumentation ships with the knob rather than after it — the pilot now times its sweep and writes `throughput` into `results.json`, labelled an upper bound (decode counts are budgets, not realised lengths, and the elapsed time includes probe fitting and judge calls). Phase 1's estimate is then a measurement instead of a second guess.
+
+**Prices are read from `llm_utils`, not configured here.** `LLMModel` already carries the per-model price table the whole family bills against (gpt-5-mini at $0.25/M input, $2.00/M output — verified against OpenAI's pricing page 2026-08-02), so a copy in our YAML would be a second home for a number that changes upstream. What *is* configured is the assumption that number multiplies: gpt-5-mini is a reasoning model whose hidden reasoning tokens bill as output even though they never appear in the verdict, so the judge bill is charged at 150–700 output tokens per verdict rather than the ~60 the visible JSON suggests.
+
+**One defect found and fixed while costing the judge path.** `llm_utils` auto-routes a job to the provider's native batch API when its estimated cost clears $1.00, and it estimates output as `max_tokens` per request. Ours is a deliberately generous 16,384, so the estimate lands at $3.30 per family and **every judge call would have gone to the batch queue on a ~40× overestimate of a short JSON verdict**. The judges are called synchronously inside `run_family` with the model resident on the GPU, so batch latency (poll interval 30s, timeout 3600s, per call, 30 calls per run) would be charged to the job's wall-clock allocation and could exhaust the 8-hour partition limit while the GPU sat idle polling. `conf/judges.yaml` now pins `use_batch_api: false`. This cannot move a verdict — batch and realtime are the same model at the same temperature on the same prompts, a delivery channel rather than an instrument — and the whole judge bill is single-digit dollars, so the 50% batch discount does not buy back the risk. The knob's tuning path is named: a large offline re-judge that holds no GPU is exactly when to flip it.
+
+**Phases 1–3 are projections, and say so.** Phase 0 is costed from measured tokens; the later phases are the phase-0 census times a per-phase multiple declared in `conf/cost.yaml`, plus a fine-tune count for phase 3. They are planning figures for the S3 design doc, each re-derived from real numbers once the phase before it has run.

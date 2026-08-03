@@ -28,6 +28,7 @@ from internals_safety.config import (
     JudgeConfig,
     MeasurementsConfig,
     ProbeConfig,
+    load_measurements_config,
 )
 from internals_safety.data import Prompt
 from internals_safety.encodings.registry import load_ladder
@@ -117,12 +118,15 @@ class TestPlan:
         assert plan.generations == 2 * 3 * 100
         assert plan.judge_calls == 2 * 3 * 100
 
-    def test_describe_names_the_gate(self, pilot):
+    def test_describe_names_the_gate_and_where_to_cost_it(self, pilot):
+        """The dry-run has to hand the reader the next command, not just a pile
+        of counts: the counts are the gate's input, not the gate's answer."""
         from internals_safety.config import ModelConfig
 
         plan = pilot.build_plan(ModelConfig(name="m", hf_id="x", device="cpu"), ["a"], 10)
         text = plan.describe(MEASUREMENTS)
-        assert "explicit go" in text and "wall-clock" in text
+        assert "approval gate" in text and "wall-clock" in text
+        assert "scripts/cost_model.py --model m" in text
 
     def test_select_families_defaults_to_the_whole_ladder(self, pilot):
         ladder = load_ladder()
@@ -244,6 +248,22 @@ class TestMain:
         lines = (run / "cells.jsonl").read_text().splitlines()
         assert len(lines) == 12  # 6 prompts x 2 families
         assert {json.loads(line)["family"] for line in lines} == {"base64", "rot13"}
+
+    def test_the_record_times_itself_for_the_next_cost_estimate(self, run):
+        """conf/cost.yaml's throughput ranges span ~4x because no run has
+        measured them yet. This is the instrumentation that closes that: the
+        knob and the data collection ship together, so phase 1's estimate is a
+        measurement rather than a second guess."""
+        throughput = json.loads((run / "results.json").read_text())["throughput"]
+        assert throughput["elapsed_seconds"] > 0
+        # main() loads conf/measurements.yaml, not this module's MEASUREMENTS.
+        budgets = load_measurements_config()
+        assert throughput["budgeted_decode_tokens"] == 2 * 6 * (
+            budgets.ability.max_new_tokens + budgets.behavior.max_new_tokens
+        )
+        assert throughput["budgeted_decode_tokens_per_s"] > 0
+        # Labelled as an upper bound, so it is never read as a measured rate.
+        assert "upper-bound" in throughput["note"]
 
     def test_metrics_carry_one_summary_per_family(self, run):
         families = json.loads((run / "results.json").read_text())["metrics"]["families"]

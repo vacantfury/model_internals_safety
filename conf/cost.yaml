@@ -1,0 +1,139 @@
+# Cost model — the input to the experiment-run approval gate.
+#
+# Family rule (owner 2026-07-22): before ANY run, report GPU count/type, money
+# and wall-clock, and get an explicit go. `scripts/cost_model.py` turns a token
+# census into those three numbers; this file holds every assumption it uses.
+#
+# ## Which numbers here are measured and which are assumed
+#
+# The token counts are NOT here — they are measured exactly by tokenising the
+# real corpus under every rung (`cost.census_phase0`), because encodings inflate
+# prompt length by 1.2x to 17x and an assumed inflation factor would dominate
+# the estimate's error. What IS assumed is hardware throughput, which cannot be
+# known before running on the actual cluster node.
+#
+# Every throughput number below is therefore a placeholder with one tuning path:
+# **the first real run measures it**. `scripts/phase0_regime_map.py` records
+# observed prefill and decode rates into its run record (`metrics.throughput`),
+# and those observations replace these guesses for phases 1-3. Until then the
+# estimate is reported as a range, never a point.
+
+hardware:
+  # Ranges are wide on purpose: HuggingFace `generate` is not a serving stack,
+  # and its decode rate varies several-fold with batch size, sequence length and
+  # attention implementation. Narrow these from measured runs, not from vendor
+  # peak-FLOPs arithmetic.
+  #
+  # prefill_tokens_per_s — prompt tokens/second in a forward pass with
+  #   `output_hidden_states=True`. Compute-bound. Capture writes every layer's
+  #   residual stream, so it is materially slower than a plain forward pass;
+  #   the low end of each range assumes that cost dominates.
+  # decode_tokens_per_s — aggregate new tokens/second across the batch, greedy.
+  #   Memory-bandwidth-bound, so it tracks HBM bandwidth more than FLOPs.
+  # load_seconds — weights from shared filesystem into VRAM, once per run.
+  a100_40gb:
+    label: "A100 40GB (SXM)"
+    vram_gb: 40
+    prefill_tokens_per_s: [2000, 8000]
+    decode_tokens_per_s: [150, 600]
+    load_seconds: 300
+  a100_80gb:
+    label: "A100 80GB"
+    vram_gb: 80
+    prefill_tokens_per_s: [2000, 8000]
+    decode_tokens_per_s: [150, 600]
+    load_seconds: 300
+  v100_32gb:
+    label: "V100 32GB (SXM2/PCIe)"
+    vram_gb: 32
+    # No bf16 tensor cores (Volta predates them); a bf16 7-8B model either falls
+    # back to fp16 or runs materially slower. Listed so a V100-only allocation
+    # is costed honestly rather than assumed equivalent — and because V100-32GB
+    # is the highest-availability public GPU on NEU Explorer, so it is the
+    # realistic default rather than a fallback.
+    prefill_tokens_per_s: [600, 2500]
+    decode_tokens_per_s: [50, 200]
+    load_seconds: 300
+  h200_144gb:
+    label: "H200 144GB"
+    vram_gb: 144
+    prefill_tokens_per_s: [4000, 16000]
+    decode_tokens_per_s: [300, 1200]
+    load_seconds: 300
+
+# The scheduler's hard walls. A per-model estimate that exceeds
+# `max_wall_clock_hours` is not a slow run, it is a job that gets killed
+# mid-sweep — so the cost model checks against these rather than only reporting
+# hours.
+#
+# NEU Explorer's `gpu` partition. These are not read off a docs page: they were
+# measured from the owner's own account (`scontrol show partition`, `sacctmgr
+# show assoc`) and recorded in the science organ's canonical cluster notes,
+# `knowledge/clusters/nurc_cluster_properties.md`. The 1-GPU-per-job cap is a
+# QOS limit, not a preference — the account carries only the `normal` QOS, so
+# `--gres=gpu:2` never schedules (reason `QOSMaxGRESPerJob`) and `--qos=multigpu`
+# is rejected outright. Single-GPU is the only shape available to this project.
+scheduler:
+  partition: gpu
+  max_wall_clock_hours: 8
+  gpus_per_job: 1
+  max_concurrent_jobs: 4
+  # Explorer is free of charge to Northeastern students and faculty, so the
+  # money line of the approval gate is judge API spend only. If this line ever
+  # becomes non-zero the gate's $ figure changes shape, not just size.
+  gpu_usd_per_hour: 0.0
+
+judge:
+  # Prices are NOT configured here. `llm_utils.LLMModel` already carries the
+  # per-model price table the whole family bills against (gpt-5-mini: $0.25/M
+  # input, $2.00/M output, verified against OpenAI's pricing page 2026-08-02),
+  # and a second copy would drift. The cost model reads it from there.
+  #
+  # Characters per token for judge-side prompts. The judge prompt is English
+  # prose plus a model response, so the standard ~4 holds; it is only used for
+  # the judge bill, which is dollars-scale, not the GPU estimate.
+  # Tuning path: the pilot's judge service reports real token usage
+  # (llm_utils UsageStats), so the first run replaces this with observed counts.
+  chars_per_token: 4
+  # gpt-5-mini is a REASONING model: hidden reasoning tokens are billed as
+  # output tokens even though they never appear in the verdict (OpenAI reasoning
+  # guide, checked 2026-08-02). The visible verdict is a short JSON object, so
+  # reasoning dominates the output bill and ignoring it would understate judge
+  # cost several-fold. Range, not a point, because effort is not pinned in
+  # conf/judges.yaml. Tuning path: the first run's observed completion-token
+  # count per verdict, which llm_utils records.
+  output_tokens_per_verdict: [150, 700]
+
+# Scale of the later phases, relative to the phase-0 census. These are the
+# ROUGH half of "a rough cost model" (TODO item 1c) — phase 0 is costed from
+# measured token counts, phases 1-3 from the design in s1_idea_check.md §7 and
+# a multiplier per phase. They are planning figures for the S3 design doc, and
+# each is re-derived from real numbers once the phase before it has run.
+phases:
+  phase1_diagnosis:
+    # Probes over layers x positions, re-reading phase-0's activation cache;
+    # the new cost is capturing a larger corpus (AdvBench/HarmBench/
+    # MaliciousInstruct + Alpaca), with no generation at all.
+    description: "diagnosis — probe sweep on a larger corpus, capture only"
+    prefill_multiple: 5.0
+    decode_multiple: 0.0
+    judge_multiple: 0.0
+  phase2_causal:
+    # Directional ablation, activation addition and the reply-inversion test:
+    # generation with hooks, over the same ladder, several intervention arms.
+    description: "causal validation — ablation / addition / reply-inversion"
+    prefill_multiple: 1.0
+    decode_multiple: 3.0
+    judge_multiple: 3.0
+  phase3_intervention:
+    # The crossed experiment: LoRA fine-tunes (train-family subsets x held-out
+    # families) plus the must-run baselines, each fine-tune re-evaluated through
+    # the whole phase-0 measurement suite. `finetunes` counts training runs;
+    # each also pays one phase-0-sized evaluation, which is what the decode and
+    # judge multiples encode.
+    description: "crossed intervention — LoRA grid + baselines, each fully evaluated"
+    finetunes: 12
+    gpu_hours_per_finetune: [1.0, 4.0]
+    prefill_multiple: 12.0
+    decode_multiple: 12.0
+    judge_multiple: 12.0

@@ -136,6 +136,20 @@ class JudgeConfig(StrictModel):
     max_tokens: int = 16384
     temperature: float = 0.0
     max_concurrency: int = 20
+    # Delivery channel for judge calls, NOT a change of instrument: batch and
+    # realtime run the same model at the same temperature on the same prompts.
+    #   False — realtime (default), predictable latency, full price
+    #   True  — the provider's native batch API, half price, unbounded latency
+    #   None  — llm_utils decides by estimated job cost
+    # Pinned to realtime because llm_utils routes on `max_tokens` as its output
+    # estimate, and ours is deliberately generous (see conf/judges.yaml): the
+    # auto route therefore sends every judge call to the batch queue on a ~40x
+    # overestimate of a short JSON verdict. That matters here because the judges
+    # are called synchronously inside the run, with the model resident on the
+    # GPU — batch latency would be paid out of the job's wall-clock allocation.
+    # Tuning path: a large offline sweep with no GPU held (a phase-3 re-judge)
+    # is exactly when to flip this to True and take the 50%.
+    use_batch_api: bool | None = False
 
 
 class PilotConfig(StrictModel):
