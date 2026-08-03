@@ -44,13 +44,18 @@ hardware:
     decode_tokens_per_s: [150, 600]
     load_seconds: 300
   v100_32gb:
-    label: "V100 32GB (SXM2/PCIe)"
+    label: "V100 32GB (SXM2/PCIe) — UNUSABLE with the current torch"
     vram_gb: 32
-    # No bf16 tensor cores (Volta predates them); a bf16 7-8B model either falls
-    # back to fp16 or runs materially slower. Listed so a V100-only allocation
-    # is costed honestly rather than assumed equivalent — and because V100-32GB
-    # is the highest-availability public GPU on NEU Explorer, so it is the
-    # realistic default rather than a fallback.
+    # KEPT AS A TOMBSTONE, not an option. V100 is Volta (sm_70), and this
+    # project's torch resolves to 2.13.0+cu130, whose compiled architecture list
+    # is sm_75/80/86/90/100/120 (checked on the cluster 2026-08-02 via
+    # torch.cuda.get_arch_list()). CUDA 13 dropped Volta, so a V100 job does not
+    # run slowly — it does not run. That matters because V100 is by far the
+    # highest-availability GPU in NEU Explorer's public pool, which makes it the
+    # obvious-looking fallback and the wrong one. Costing against it would
+    # produce a confident estimate for hardware the job cannot use.
+    # Reviving it means pinning an older CUDA build, which is a real decision
+    # with its own costs, not a config tweak.
     prefill_tokens_per_s: [600, 2500]
     decode_tokens_per_s: [50, 200]
     load_seconds: 300

@@ -49,10 +49,13 @@ from internals_safety.encodings.registry import load_ladder
 from internals_safety.judges.harmbench import HarmBenchJudge
 from internals_safety.judges.refusal import RefusalJudge
 
-# Default when the caller does not name one: the highest-availability public GPU
-# on the target cluster, not the fastest. An estimate against hardware you have
-# to queue for is not the estimate the gate needs.
-DEFAULT_HARDWARE = "v100_32gb"
+# Default when the caller does not name one. NOT the highest-availability GPU
+# on the target cluster — that is the V100, which this project's torch cannot
+# use at all (Volta/sm_70, dropped by the cu130 build; see conf/cost.yaml). The
+# smallest card the job can actually run on is the honest default, because an
+# estimate against hardware the job would refuse to start on is worse than no
+# estimate.
+DEFAULT_HARDWARE = "a100_40gb"
 
 
 def judge_prices(model: str) -> tuple[float, float]:
