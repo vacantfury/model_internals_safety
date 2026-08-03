@@ -13,13 +13,13 @@ Research home for the **model-internals safety** line: safety research that oper
 ## Scope boundary (load-bearing — read before deciding where work goes)
 
 - **THIS repo owns everything INSIDE the model:** training-time safety interventions, weight/activation-space methods, internals-level analysis of safety behavior, and their evaluation.
-- **`llm_guardrail_security`** owns the black-box model-side line (encoding/imaging jailbreak attacks and content-guard defenses on frozen models; Papers A–D). **`llm_agent_security`** owns the agent line. The **science organ** (`personal/science`) owns cross-project research knowledge (venue records, the shared literature corpus).
+- **`llm_guardrail_security`** owns the black-box model-side line (encoding/imaging jailbreak attacks and content-guard defenses on frozen models; papers AS-1…AS-4, aliases A–D). **`llm_agent_security`** owns the agent line. The **science organ** (`personal/science`) owns cross-project research knowledge (venue records, the shared literature corpus).
 - **One concrete example each side:** "LoRA-fine-tune a 7B on refusal data and measure generalization to unseen encodings" = **THIS repo**; "test whether a decoy image lowers a frozen VLM's ASR" = the guardrail sibling.
 - If this line needs the family's encoders as eval payloads, they get **COPIED**, never imported (oikos charter bars research-bet→research-bet dependencies; rule of two → extract a standalone package).
 
 ## Status
 
-The first paper (Paper E, "Can't, didn't, or wouldn't?") is at **S1 complete — direction committed, S2 feasibility open** — see `text_docs/proposal.md` (its `Workflow stage:` line is the state of record) and `text_docs/s1_idea_check.md`.
+The first paper (Paper AS-6, alias E, "Can't, didn't, or wouldn't?") is at **S1 complete — direction committed, S2 feasibility open** — see `text_docs/proposal.md` (its `Workflow stage:` line is the state of record) and `text_docs/s1_idea_check.md`.
 
 Code has started, ahead of S2, because the phase-0 pilot is itself the S2 gate. **Build steps 1–4 of `text_docs/project_structure.md` §6 are done**: the forward-pass spine, the 15-rung encoding ladder, the probe layer, the judge layer — all four measurements of `s1_idea_check.md` §7 — and `scripts/phase0_regime_map.py`, which combines them into a per-(model, family) regime map.
 
