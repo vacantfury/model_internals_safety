@@ -46,16 +46,18 @@ hardware:
   v100_32gb:
     label: "V100 32GB (SXM2/PCIe) — UNUSABLE with the current torch"
     vram_gb: 32
-    # KEPT AS A TOMBSTONE, not an option. V100 is Volta (sm_70), and this
-    # project's torch resolves to 2.13.0+cu130, whose compiled architecture list
-    # is sm_75/80/86/90/100/120 (checked on the cluster 2026-08-02 via
-    # torch.cuda.get_arch_list()). CUDA 13 dropped Volta, so a V100 job does not
-    # run slowly — it does not run. That matters because V100 is by far the
-    # highest-availability GPU in NEU Explorer's public pool, which makes it the
-    # obvious-looking fallback and the wrong one. Costing against it would
-    # produce a confident estimate for hardware the job cannot use.
-    # Reviving it means pinning an older CUDA build, which is a real decision
-    # with its own costs, not a config tweak.
+    # KEPT AS A TOMBSTONE, not an option. V100 is Volta (sm_70), and no torch
+    # this project can use carries sm_70: measured on the cluster 2026-08-02,
+    # BOTH 2.13.0+cu130 and 2.11.0+cu128 compile for sm_75/80/86/90/100/120
+    # only. PyTorch dropped Volta after 2.10, so this is a torch-version limit,
+    # not a CUDA-version one — pinning an older CUDA build does NOT bring the
+    # V100 pool back (an earlier note here claimed otherwise and was wrong).
+    # Reaching V100 would mean pinning torch==2.10.x exactly, which is what the
+    # guardrail sibling does and why its pin is exact rather than a range.
+    # This matters because V100 is by far the highest-availability GPU in NEU
+    # Explorer's public pool, which makes it the obvious-looking fallback and
+    # the wrong one; costing against it would produce a confident estimate for
+    # hardware the job cannot start on.
     prefill_tokens_per_s: [600, 2500]
     decode_tokens_per_s: [50, 200]
     load_seconds: 300
