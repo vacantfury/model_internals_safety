@@ -29,8 +29,23 @@ dev = [
 [tool.uv]
 package = true
 
+# Torch's CUDA build must match the CLUSTER DRIVER, not the newest release.
+# NEU Explorer's GPU nodes run driver 12.8 (reported as 12080). CUDA 12.x works
+# there by minor-version forward compatibility; CUDA 13 does NOT — a cu130 wheel
+# fails `torch.cuda.is_available()` on every node, and the job then silently
+# falls back to CPU. Same recipe and same reason as the guardrail sibling's
+# cluster env builder, which pins cu128 with the note "cu130 does NOT".
+#
+# Pinned for Linux only: macOS has no CUDA wheels, and local dev wants the
+# default PyPI build for MPS.
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
 [tool.uv.sources]
 llm-utils = { git = "https://github.com/vacantfury/llm_utils.git", rev = "v5.0.0" }
+torch = [{ index = "pytorch-cu128", marker = "sys_platform == 'linux'" }]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/internals_safety"]

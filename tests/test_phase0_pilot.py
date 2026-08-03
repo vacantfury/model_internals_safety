@@ -269,3 +269,64 @@ class TestMain:
         families = json.loads((run / "results.json").read_text())["metrics"]["families"]
         assert [entry["family"] for entry in families] == ["base64", "rot13"]
         assert all("binding_failure_rate" in entry for entry in families)
+
+
+class TestScheduledJobGuard:
+    """A batch job that falls back to CPU is a defect, not a slow run.
+
+    Seed 2026-08-02: the first real cluster job resolved to CPU because torch was
+    built for cu130 against a 12.8 driver. It ran to completion on an allocated,
+    idle A100 and the only trace was a UserWarning in the log. Worse, the
+    dirty-tree guard keys off CUDA (provenance.RESULT_BEARING_DEVICES), so the
+    same silent fallback also downgraded that guard from refuse to warn.
+    """
+
+    def test_cpu_inside_a_slurm_job_is_refused(self, monkeypatch):
+        import torch
+
+        from internals_safety.models.loader import ScheduledJobOnCPU, resolve_device
+
+        monkeypatch.setenv("SLURM_JOB_ID", "123456")
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+        monkeypatch.setattr(torch.backends.mps, "is_available", lambda: False)
+        with pytest.raises(ScheduledJobOnCPU, match="123456"):
+            resolve_device("auto")
+
+    def test_the_refusal_names_the_likely_cause(self, monkeypatch):
+        import torch
+
+        from internals_safety.models.loader import ScheduledJobOnCPU, resolve_device
+
+        monkeypatch.setenv("SLURM_JOB_ID", "1")
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+        monkeypatch.setattr(torch.backends.mps, "is_available", lambda: False)
+        with pytest.raises(ScheduledJobOnCPU) as caught:
+            resolve_device("auto")
+        assert "driver" in str(caught.value) and "cu130" in str(caught.value)
+
+    def test_allow_cpu_overrides_it(self, monkeypatch):
+        import torch
+
+        from internals_safety.models.loader import resolve_device
+
+        monkeypatch.setenv("SLURM_JOB_ID", "1")
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+        monkeypatch.setattr(torch.backends.mps, "is_available", lambda: False)
+        assert resolve_device("auto", allow_cpu_in_job=True).type == "cpu"
+
+    def test_a_laptop_still_falls_back_silently(self, monkeypatch):
+        """Off the cluster, CPU is a legitimate answer — the guard must not fire."""
+        import torch
+
+        from internals_safety.models.loader import resolve_device
+
+        monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+        monkeypatch.setattr(torch.backends.mps, "is_available", lambda: False)
+        assert resolve_device("auto").type == "cpu"
+
+    def test_an_explicit_device_is_never_second_guessed(self, monkeypatch):
+        from internals_safety.models.loader import resolve_device
+
+        monkeypatch.setenv("SLURM_JOB_ID", "1")
+        assert resolve_device("cpu").type == "cpu"

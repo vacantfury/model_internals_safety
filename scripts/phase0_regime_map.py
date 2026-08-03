@@ -150,11 +150,14 @@ class Plan:
 
 
 def build_plan(
-    model_config: ModelConfig, families: Sequence[str], n_prompts: int
+    model_config: ModelConfig,
+    families: Sequence[str],
+    n_prompts: int,
+    allow_cpu: bool = False,
 ) -> Plan:
     return Plan(
         model=model_config.name,
-        device=resolve_device(model_config.device).type,
+        device=resolve_device(model_config.device, allow_cpu_in_job=allow_cpu).type,
         families=list(families),
         n_prompts=n_prompts,
     )
@@ -346,6 +349,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--refresh-activations", action="store_true", help="ignore the capture cache")
     parser.add_argument(
+        "--allow-cpu",
+        action="store_true",
+        help="permit a CPU run inside a SLURM job (refused by default: a batch job "
+        "on CPU means a GPU was allocated and left idle)",
+    )
+    parser.add_argument(
         "--outputs-dir",
         default=None,
         help="root for activations/ and runs/ (default: the repo's outputs/); "
@@ -358,7 +367,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     ladder = load_ladder()
     families = select_families(ladder, args.families if args.families else pilot.families)
 
-    plan = build_plan(model_config, families, args.n_prompts)
+    plan = build_plan(model_config, families, args.n_prompts, allow_cpu=args.allow_cpu)
     print(plan.describe(measurements))
     if args.dry_run:
         return 0
