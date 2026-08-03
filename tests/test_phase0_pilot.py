@@ -218,6 +218,12 @@ class TestMain:
                 "--n-prompts", "6",
                 "--run-name", "unit",
                 "--allow-dirty",
+                # This test IS a CPU run, and the suite itself runs inside a
+                # SLURM job during the cluster env build — where resolve_device
+                # refuses a silent CPU fallback. Saying so explicitly keeps the
+                # test deterministic instead of depending on whether the host
+                # happens to offer CUDA or MPS.
+                "--allow-cpu",
                 "--outputs-dir", str(tmp_path),
             ]
         )
