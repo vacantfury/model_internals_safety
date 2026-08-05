@@ -307,6 +307,15 @@ def tokenize_batch(
     where the architecture wants one, and adding a second would shift every
     position index by one.
 
+    Two measured exceptions to that invariant, both in AS-6's guard slate and
+    both pinned in `tests/test_real_guard_tokenizers.py`. WildGuard ships no chat
+    template at all, so its renderer emits BOS itself (`GuardConfig.prepend_bos`).
+    Llama Guard 3's template emits a stray leading SPACE before
+    `<|begin_of_text|>`, so its token 0 is whitespace and BOS is token 1 —
+    harmless here because positions are negative offsets from the end, and kept
+    rather than normalised because `apply_chat_template` is also how that model's
+    published numbers were produced.
+
     `position_ids` are built from the attention mask rather than left to
     default to `arange(seq_len)`. Without this, left padding shifts every real
     token's position index by that row's pad count, so an activation would

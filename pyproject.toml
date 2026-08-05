@@ -24,6 +24,13 @@ dependencies = [
     "pydantic>=2.10,<3",
     "llm-utils",
     "json-repair>=0.56,<1",
+    # Needed to LOAD one of AS-6's two guards, not for anything we call directly.
+    # WildGuard ships `tokenizer.model` (SentencePiece) with no `tokenizer.json`,
+    # so transformers must convert slow->fast at load; without these two it
+    # misreads the proto as a tiktoken file and dies with a message naming
+    # neither package. Undeclared, that is a cluster job failing at minute one.
+    "sentencepiece>=0.2,<1",
+    "protobuf>=4,<7",
 ]
 
 [dependency-groups]
