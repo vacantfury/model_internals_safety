@@ -6,6 +6,10 @@ Workflow stage: S1 idea check COMPLETE — direction committed (as of 2026-08-02
 
 ## AS-6 — the second paper (registered 2026-08-05, owner order)
 
+**AS-6 workflow stage: S1 external idea check — package ready, `[waiting: haoyu]` (as of 2026-08-05).** Per-paper stage lines now, since the repo carries two papers and this file's top line tracks AS-5. S1 is an owner-hands cspaper gate; the execute-ready package is `text_docs/as6/s1_idea_check.md`. Route on return: pass → S2 (doability + home) · critiques → S0 refine · kill → record. **Nothing downstream of S1 is settled** — in particular `text_docs/as6/design_notes_PREMATURE.md` is S6 material written early and parked, explicitly NOT a design of record.
+
+> **Housekeeping, flagged not fixed (2026-08-05):** this AS-6 section still lives inside `text_docs/as5/proposal.md` after the namespace split, which is the wrong home. Left in place deliberately — the as5 tree is another session's live area and restructuring it mid-flight invites a conflict. Settle it in one deliberate pass: either move this section to `text_docs/as6/proposal.md` with a pointer left behind, or keep one shared proposal above both namespaces.
+
 **This line carries TWO papers, cut by OBJECT — the target's internals (AS-5) and the defense's internals (AS-6).** The cut was settled 2026-08-05 after an owner correction: routing the siblings' inherited work by *which paper it came from* is a provenance cut, not a scientific one. Asking instead what problem AS-2/AS-3/AS-4 share produces one frame.
 
 **The shared problem.** A safety computation is a **chain of stages**, and an attack succeeds by breaking one link. Each sibling established a different link, black-box:
