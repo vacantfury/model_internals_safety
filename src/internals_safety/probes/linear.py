@@ -354,6 +354,96 @@ def permutation_null_max_auroc(
     return maxima
 
 
+def permutation_null_max_transfer_auroc(
+    train_positive: ActivationBatch,
+    train_negative: ActivationBatch,
+    test_positive: ActivationBatch,
+    test_negative: ActivationBatch,
+    config: ProbeConfig,
+) -> np.ndarray:
+    """Null distribution of the MAX TRANSFER AUROC over the (layer x position) grid.
+
+    The deployment twin of `permutation_null_max_auroc`, added 2026-08-05 so
+    deployment is licensed the same way recognition is.
+
+    Why it was needed. Deployment licensing was `transfer_auroc >= 0.70 and
+    selectivity > 0`, applied per cell with `deployed = any(cell)` over the whole
+    grid — the identical pair of errors the recognition version documents above,
+    except worse, because deployment sweeps layers AND positions, so the
+    uncorrected selection is over a larger grid. It is also the axis every regime
+    label is decided on, so an under-powered cut there does not merely weaken a
+    reported number: it turns whole rungs into (U). Measured consequence — 13 of
+    15 rungs on Llama-3.1-8B licensed nowhere, and `hex` missed by 0.009 (0.691
+    against a 0.70 cut) on a rung whose ability is 84/100.
+
+    Which labels are permuted, and why THOSE. The **test** labels are permuted
+    and the fitted direction is the real one. The null hypothesis being tested is
+    the one that matters — *the plain-fit content direction does not rank encoded
+    harmful above encoded harmless* — and permuting the test labels is its exact
+    restatement: under it the probe's scores are exchangeable across the two
+    encoded classes.
+
+    Shuffling the TRAIN labels instead, which is what the per-cell
+    `control_auroc` does, is WRONG as a null for this statistic and was tried
+    first. Fitting logistic regression on shuffled labels yields a near-constant
+    classifier, so its transfer AUROC collapses onto ~0.5 with almost no
+    variance; the resulting null is far too tight and licenses noise. Caught by
+    `test_an_unlicensed_curve_reads_no_prompt_as_deployed`, which is exactly the
+    test that exists to stop a no-signal population reading as deployed. The
+    per-cell `control_auroc` remains useful as a selectivity diagnostic; it is
+    just not a calibrated null.
+
+    Cost: because the direction is fixed, each cell is fitted ONCE and every draw
+    only re-scores cached predictions. That makes the whole test a few seconds
+    per rung on CPU — cheaper than the recognition null, which must refit per
+    draw — so no GPU is needed and cached activations suffice.
+    """
+    if train_positive.layers != train_negative.layers:
+        raise ValueError("both training classes must be captured at the same layers")
+
+    train_labels = np.concatenate(
+        [
+            np.ones(train_positive.tensor.shape[0], dtype=int),
+            np.zeros(train_negative.tensor.shape[0], dtype=int),
+        ]
+    )
+    # Score once per cell with the REAL direction; only the labels move.
+    scores_per_cell: list[np.ndarray] = []
+    for layer in train_positive.layers:
+        for position in train_positive.positions:
+            train_features = _to_numpy(
+                torch.cat(
+                    [
+                        train_positive.select(layer, position),
+                        train_negative.select(layer, position),
+                    ]
+                )
+            )
+            positive_features = _to_numpy(test_positive.select(layer, position))
+            negative_features = _to_numpy(test_negative.select(layer, position))
+            test_features = np.concatenate([positive_features, negative_features])
+            model = _fit(train_features, train_labels, config)
+            scores_per_cell.append(model.decision_function(test_features))
+
+    n_positive = test_positive.tensor.shape[0]
+    n_negative = test_negative.tensor.shape[0]
+    test_labels = np.concatenate(
+        [np.ones(n_positive, dtype=int), np.zeros(n_negative, dtype=int)]
+    )
+
+    rng = np.random.default_rng(config.seed)
+    maxima = np.empty(config.n_permutations, dtype=float)
+    for draw in range(config.n_permutations):
+        shuffled = rng.permutation(test_labels)
+        best = -np.inf
+        for scores in scores_per_cell:
+            auroc = roc_auc_score(shuffled, scores)
+            if not np.isnan(auroc):
+                best = max(best, auroc)
+        maxima[draw] = best
+    return maxima
+
+
 def permutation_p_value(observed: float, null_maxima: np.ndarray) -> float:
     """Empirical p-value with the +1 correction (Phipson & Smyth 2010).
 

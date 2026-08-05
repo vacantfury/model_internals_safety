@@ -134,13 +134,43 @@ class TestDeploymentReading:
     def test_an_unlicensed_curve_reads_no_prompt_as_deployed(self, generator):
         """The load-bearing one. With no signal in the population, per-example
         scores are noise around the threshold and would read ~50% deployed —
-        populating (B) out of nothing."""
-        shared = cluster(0.0, generator)
-        curve, reading = self.read(shared, cluster(0.0, generator), shared, cluster(0.0, generator))
+        populating (B) out of nothing.
+
+        All four batches are INDEPENDENT zero-offset draws (fixed 2026-08-05).
+        This previously passed the same `shared` tensor as both the plain and the
+        encoded positives, which is a train/test leak rather than a signal-free
+        population: the probe memorised `shared` and then recovered it. The old
+        fixed 0.70 cut could not see a leak that small; permutation licensing
+        can, and did — see the test below, which pins that as behaviour.
+        """
+        curve, reading = self.read(
+            cluster(0.0, generator), cluster(0.0, generator),
+            cluster(0.0, generator), cluster(0.0, generator),
+        )
         assert not curve.deployed
         assert reading.licensed is False
         assert not any(reading.harmful)
         assert not any(reading.harmless)
+
+    def test_permutation_licensing_detects_a_leak_the_fixed_cut_missed(self, generator):
+        """A weak-but-real effect must license even when it is far below 0.70.
+
+        Reusing one tensor as both the plain and the encoded positive class makes
+        the probe's transfer partly memorisation. Transfer AUROC is only ~0.56 —
+        so the retired `auroc >= 0.70` rule scored it unlicensed — while the
+        calibrated null puts it comfortably under alpha. That asymmetry is the
+        whole reason licensing moved to a permutation test: the fixed cut
+        discarded real signal, here of exactly the kind an instrument must catch.
+        """
+        shared = cluster(0.0, generator)
+        curve, _ = self.read(shared, cluster(0.0, generator), shared, cluster(0.0, generator))
+
+        assert curve.deployed, "a calibrated null must detect this; the 0.70 cut did not"
+        assert curve.p_value <= curve.alpha
+        # Licensed on SIGNIFICANCE while failing the effect-size bar — the two
+        # are reported separately precisely so this case is legible.
+        assert not curve.meets_effect_size_bar
+        assert curve.observed_max_transfer_auroc < 0.70
 
     def test_a_common_mode_shift_does_not_change_the_reading(self, generator):
         """Encoding a prompt and wrapping it in an attack template moves both
