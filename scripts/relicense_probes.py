@@ -101,21 +101,28 @@ def main() -> None:
         )
         recognition = measure_recognition(encoded_harmful, encoded_harmless, config)
 
-        prior = previous.get(family, {})
-        dep_old = bool(prior.get("deployment", {}).get("licensed", False))
-        rec_old = bool(prior.get("recognition", {}).get("licensed", False))
+        # `None` = this family is absent from the run record, so its OLD
+        # licensing is UNKNOWN. Reporting it as False would invent a
+        # comparison — and the Qwen head run has no record at all, because the
+        # job was killed at the 8h wall before it could write one.
+        prior = previous.get(family)
+        dep_old = bool(prior["deployment"]["licensed"]) if prior else None
+        rec_old = bool(prior["recognition"]["licensed"]) if prior else None
         dep_new, rec_new = curve.deployed, recognition.recognized
 
         change = []
-        if dep_new != dep_old:
+        if dep_old is None:
+            change.append("old licensing UNKNOWN (family absent from run record)")
+        elif dep_new != dep_old:
             change.append(f"deployment {'GAINED' if dep_new else 'LOST'}")
-        if rec_new != rec_old:
+        if rec_old is not None and rec_new != rec_old:
             change.append(f"recognition {'GAINED' if rec_new else 'LOST'}")
 
+        fmt = lambda v: "?" if v is None else str(v)
         print(
-            f"{family:<20} {str(dep_old):>8} {str(dep_new):>8} {curve.p_value:>8.4f} "
+            f"{family:<20} {fmt(dep_old):>8} {str(dep_new):>8} {curve.p_value:>8.4f} "
             f"{curve.observed_max_transfer_auroc:>9.4f}   "
-            f"{str(rec_old):>8} {str(rec_new):>8} {recognition.p_value:>8.4f}   "
+            f"{fmt(rec_old):>8} {str(rec_new):>8} {recognition.p_value:>8.4f}   "
             + ", ".join(change)
         )
         rows.append(
@@ -132,12 +139,17 @@ def main() -> None:
             }
         )
 
-    gained = [r["family"] for r in rows if r["deployment_licensed_new"] and not r["deployment_licensed_old"]]
-    lost = [r["family"] for r in rows if r["deployment_licensed_old"] and not r["deployment_licensed_new"]]
+    known = [r for r in rows if r["deployment_licensed_old"] is not None]
+    gained = [r["family"] for r in known if r["deployment_licensed_new"] and not r["deployment_licensed_old"]]
+    lost = [r["family"] for r in known if r["deployment_licensed_old"] and not r["deployment_licensed_new"]]
+    unknown = [r["family"] for r in rows if r["deployment_licensed_old"] is None]
     print(
-        f"\ndeployment licensing: {sum(r['deployment_licensed_new'] for r in rows)}/{len(rows)} rungs "
-        f"(was {sum(r['deployment_licensed_old'] for r in rows)})"
+        f"\ndeployment licensing NOW: {sum(r['deployment_licensed_new'] for r in rows)}/{len(rows)} rungs"
     )
+    if known:
+        print(f"  comparable rungs (in the run record): was {sum(r['deployment_licensed_old'] for r in known)}/{len(known)}")
+    if unknown:
+        print(f"  old licensing UNKNOWN for {len(unknown)}: {', '.join(unknown)}")
     if gained:
         print(f"  GAINED: {', '.join(gained)}")
     if lost:
