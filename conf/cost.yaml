@@ -102,7 +102,7 @@ hardware:
 #
 # NEU Explorer's `gpu` partition. These are not read off a docs page: they were
 # measured from the owner's own account (`scontrol show partition`, `sacctmgr
-# show assoc`) and recorded in the science organ's canonical cluster notes,
+# show assoc`) and recorded in the devices repo's canonical cluster notes,
 # `knowledge/clusters/nurc_cluster_properties.md`. The 1-GPU-per-job cap is a
 # QOS limit, not a preference — the account carries only the `normal` QOS, so
 # `--gres=gpu:2` never schedules (reason `QOSMaxGRESPerJob`) and `--qos=multigpu`
