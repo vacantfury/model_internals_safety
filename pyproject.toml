@@ -15,6 +15,11 @@ dependencies = [
     "numpy>=2.0,<3",
     "pandas>=2.2,<3",
     "scikit-learn>=1.5,<2",
+    # Imported directly by probes/linear.py's `single_threaded_blas`, which is
+    # load-bearing for wall-clock (31x on the cluster), so it is declared rather
+    # than inherited from scikit-learn's transitive tree — a dep we import must
+    # not depend on another package continuing to pull it in.
+    "threadpoolctl>=3.1,<4",
     "pyyaml>=6.0,<7",
     "pydantic>=2.10,<3",
     "llm-utils",
