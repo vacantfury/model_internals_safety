@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from internals_safety.paths import CONF_DIR
 
@@ -59,6 +59,87 @@ class ModelConfig(StrictModel):
     # Forward-pass batch size for activation capture.
     capture_batch_size: int = 8
     capture: CaptureConfig = CaptureConfig()
+
+
+# How a guard's classification prompt is built.
+#   chat_template — the checkpoint ships one and it hard-wires the safety task
+#                   (Llama Guard 3). Use it as shipped; never restate the task.
+#   literal       — the checkpoint ships NO chat template (WildGuard), so the
+#                   published instruction format IS the contract and is copied
+#                   verbatim into `prompt_template`.
+GuardPromptStyle = Literal["chat_template", "literal"]
+
+
+class GuardConfig(ModelConfig):
+    """One entry of `conf/guards/*.yaml` — a content guard as AS-6's object of study.
+
+    A guard IS a causal LM, so this extends ModelConfig rather than replacing it;
+    everything the capture spine needs is inherited. What a guard adds is the two
+    things a target model does not have: a classification prompt it can only be
+    addressed through, and a verdict token whose probability is its output.
+    """
+
+    prompt_style: GuardPromptStyle
+    # Verbatim upstream format for `literal` guards. Must contain `{prompt}`;
+    # `{response}` is optional and filled with `response_placeholder`.
+    prompt_template: str | None = None
+    # Substituted for `{response}`. AS-6 classifies PROMPTS, so there is no
+    # assistant turn — upstream's own prompt-only path sets this to the empty
+    # string (allenai/wildguard `wildguard.py` sets `item["response"] = ""`
+    # before formatting), which is why it is a named field and not an inline "".
+    response_placeholder: str = ""
+    # Whether the renderer emits BOS itself. Repo-wide, tokenisation runs with
+    # `add_special_tokens=False` because chat templates already emit BOS
+    # (models/loader.tokenize_batch). A literal format carrying no BOS would
+    # therefore run the guard with none at all — a silent distribution shift, not
+    # an error. Upstream reconciles exactly here: the library constant omits `<s>`
+    # because vLLM's tokeniser adds it, while the model card shows `<s><|user|>`.
+    prepend_bos: bool = False
+
+    # --- verdict readout ---
+    # The classifier score is the probability of ONE token at ONE position, read
+    # in a single forward pass with no generation (Meta's model card defines
+    # Llama Guard's score this way, and it separates "format broke" from "verdict
+    # moved"). `verdict_prefix` is the continuation teacher-forced onto the
+    # rendered prompt before that token is read:
+    #   ""                  — the verdict is the first generated token
+    #                         (Llama Guard 3: "First line must read 'safe' or
+    #                         'unsafe'").
+    #   "Harmful request:"  — the guard emits a fixed preamble first, so the
+    #                         verdict is not token 0 (WildGuard answers
+    #                         "Harmful request: yes").
+    # Tuning path, and the reason this is config rather than a literal: it is not
+    # settled whether Llama Guard 3's template emits a leading newline before the
+    # verdict token. If it does, every first-token number is read off the wrong
+    # position, and the fix is this one string. One forward pass settles it
+    # (TODO item 13); until then the value is stated, not assumed.
+    verdict_prefix: str = ""
+    # Label strings, resolved to token ids IN CONTEXT (guards.prompts) rather
+    # than by naive vocabulary lookup, because a leading space changes the id.
+    unsafe_token: str = "unsafe"
+    safe_token: str = "safe"
+
+    @model_validator(mode="after")
+    def _check_prompt_layer(self) -> "GuardConfig":
+        if self.prompt_style == "chat_template":
+            if self.prompt_template is not None:
+                raise ValueError(
+                    "prompt_style=chat_template but prompt_template is set; the shipped "
+                    "template is the contract, so a second one here could only diverge "
+                    "from it silently"
+                )
+            return self
+        if not self.prompt_template:
+            raise ValueError("prompt_style=literal requires prompt_template")
+        if "{prompt}" not in self.prompt_template:
+            raise ValueError("prompt_template must contain the {prompt} placeholder")
+        try:
+            self.prompt_template.format(prompt="x", response="y")
+        except (KeyError, IndexError) as error:
+            raise ValueError(
+                f"prompt_template has a placeholder this layer does not fill: {error}"
+            ) from error
+        return self
 
 
 class AbilityConfig(StrictModel):
@@ -250,6 +331,22 @@ def load_model_config(name: str, conf_dir: Path = CONF_DIR) -> ModelConfig:
         available = sorted(p.stem for p in (conf_dir / "models").glob("*.yaml"))
         raise FileNotFoundError(f"no model config {path}; available: {available}")
     config = ModelConfig(**load_yaml(path))
+    if config.name != name:
+        raise ValueError(f"{path}: name field is {config.name!r} but filename says {name!r}")
+    return config
+
+
+def load_guard_config(name: str, conf_dir: Path = CONF_DIR) -> GuardConfig:
+    """Load `conf/guards/<name>.yaml` (AS-6's objects of study).
+
+    Same filename-is-the-identity rule as `load_model_config`: runs refer to a
+    guard by filename, so a mismatched `name` field would make results ambiguous.
+    """
+    path = conf_dir / "guards" / f"{name}.yaml"
+    if not path.exists():
+        available = sorted(p.stem for p in (conf_dir / "guards").glob("*.yaml"))
+        raise FileNotFoundError(f"no guard config {path}; available: {available}")
+    config = GuardConfig(**load_yaml(path))
     if config.name != name:
         raise ValueError(f"{path}: name field is {config.name!r} but filename says {name!r}")
     return config

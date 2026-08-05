@@ -1,0 +1,47 @@
+# AS-6 object of study #1 — Meta's Llama Guard 3, 8B.
+#
+# Chosen for the paper because it is the guard evaluated in BOTH sibling papers
+# (AS-3 and AS-4), which is what lets AS-6's internal chain be attached to their
+# black-box observations without stitching together incompatible pipelines.
+#
+# It is a Llama-3.1-8B fine-tune, so it shares `model.layers` at 32 x 4096 with
+# the phase-0 pilot's targets — the capture spine attaches unchanged (feasibility
+# spike, text_docs/as6/s0_reshape.md).
+#
+# Gated HF repo: needs an accepted licence on the account running it.
+name: llama_guard_3_8b
+hf_id: meta-llama/Llama-Guard-3-8B
+dtype: auto
+device: auto
+trust_remote_code: false
+system_prompt: null
+capture_batch_size: 8
+
+# The shipped chat template hard-wires the classification task and ends
+# "First line must read 'safe' or 'unsafe'." That is WHY the AS-5 ability
+# measurement cannot be reused here: there is no in-distribution channel through
+# which this checkpoint can be asked to restate anything — it answers `safe`.
+# Decode ability is therefore measured by residual-stream probe, not generation
+# (s0_reshape.md §6, phase 1 step 2).
+prompt_style: chat_template
+
+# UNSETTLED, and deliberately visible rather than assumed: it is not confirmed
+# whether this template emits a leading newline before the verdict token. If it
+# does, the first-token readout lands on the newline and every degradation number
+# built on it is wrong. One forward pass settles it (TODO item 13); the fix, if
+# needed, is this string and nothing else.
+verdict_prefix: ""
+unsafe_token: "unsafe"
+safe_token: "safe"
+
+capture:
+  site: resid_pre
+  layers: all
+  positions:
+    # AS-6's two links map onto the two positions the spine already resolves:
+    #   instruction_final — last token of the payload: did the guard REPRESENT
+    #                       the decoded harm?
+    #   last              — the verdict-formation token: did it CONVERT that
+    #                       representation into a block?
+    - instruction_final
+    - last
