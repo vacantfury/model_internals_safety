@@ -31,6 +31,19 @@ hardware:
   # decode_tokens_per_s — aggregate new tokens/second across the batch, greedy.
   #   Memory-bandwidth-bound, so it tracks HBM bandwidth more than FLOPs.
   # load_seconds — weights from shared filesystem into VRAM, once per run.
+  #
+  # !! MEASUREMENT STATUS (2026-08-04) — read before costing on any profile !!
+  # Only `h200_144gb` has been measured against a real run. Its decode figure
+  # moved from an assumed [300, 1200] to a measured [40, 71]: a 7.5-17x
+  # overestimate that made the phase-0 prediction 2-4x too cheap. The error was
+  # not arithmetic, it was CATEGORY — the assumed numbers were kernel-style
+  # throughput, whereas the estimator needs an EFFECTIVE end-to-end rate that
+  # absorbs model load, capture passes, unbatched generation and synchronous
+  # judge latency.
+  # The a100/v100 entries below are still pre-measurement assumptions of that
+  # same wrong category, so they are optimistic by a similar factor and must be
+  # treated as LOWER BOUNDS on time, not estimates. Measure before trusting one
+  # for an approval-gate figure; do not silently scale them.
   a100_40gb:
     label: "A100 40GB (SXM)"
     vram_gb: 40
@@ -65,7 +78,21 @@ hardware:
     label: "H200 144GB"
     vram_gb: 144
     prefill_tokens_per_s: [4000, 16000]
-    decode_tokens_per_s: [300, 1200]
+    # MEASURED, not assumed (2026-08-04, from the phase-0 pilot's `throughput`
+    # block in results.json — the tuning path this knob was created with):
+    #   Qwen2.5-7B  40.3 tok/s   (11436 s / 460800 budgeted decode tokens)
+    #   Llama-3.1-8B 70.6-71.3 tok/s  (two independent runs, 6523 s and 16158 s)
+    # The previous value here was [300, 1200] — a 7.5-17x overestimate, and
+    # since decode dominates it is the entire reason the pre-run estimate came
+    # in 2-4x under the truth (predicted 0.7-2.4 GPU-h/model, actual 4.5-8+).
+    #
+    # READ THIS AS AN EFFECTIVE END-TO-END RATE, not a kernel benchmark: the
+    # denominator is BUDGETED max_new_tokens (an upper bound on tokens actually
+    # emitted) and the numerator is whole-run wall clock, so it absorbs model
+    # load, capture passes, unbatched generation and synchronous judge latency.
+    # That is precisely what a wall-clock estimate needs; a raw tokens/s figure
+    # would understate the time again in the same direction.
+    decode_tokens_per_s: [40, 71]
     load_seconds: 300
 
 # The scheduler's hard walls. A per-model estimate that exceeds

@@ -30,6 +30,12 @@ from internals_safety.encodings.deterministic.transforms import (
     ReverseWordsEncoder,
     ZeroWidthEncoder,
 )
+from internals_safety.encodings.deterministic.surface import (
+    CombiningMarkEncoder,
+    FullwidthEncoder,
+    HomoglyphEncoder,
+    TagBlockEncoder,
+)
 from internals_safety.paths import CONF_DIR
 
 ENCODER_CLASSES: dict[str, type[Encoder]] = {
@@ -48,6 +54,10 @@ ENCODER_CLASSES: dict[str, type[Encoder]] = {
         ReverseCharactersEncoder,
         ReverseWordsEncoder,
         ZeroWidthEncoder,
+        TagBlockEncoder,
+        HomoglyphEncoder,
+        FullwidthEncoder,
+        CombiningMarkEncoder,
     )
 }
 

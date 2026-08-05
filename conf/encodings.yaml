@@ -103,3 +103,35 @@ families:
     encoding_name: zero-width characters inserted between letters
     params:
       filler: "​"
+
+  # --- comprehension-preserving band (added 2026-08-04) -----------------------
+  # The phase-0 pilot found the twelve cipher rungs uniformly (R) with ability
+  # ~= 0 on both 7-9B models: unmeasurable, because the models cannot read them.
+  # The one rung that produced signal was zero_width (similarity 0.987,
+  # B=5-13 / S=86-95). These four continue that band. The ordering variable is
+  # SURFACE CONSPICUOUSNESS, not decoding difficulty — see
+  # src/internals_safety/encodings/deterministic/surface.py for the reasoning
+  # and the pilot numbers that motivate each rung.
+  tag_block:
+    encoder: TagBlockEncoder
+    # Invisible like zero_width, but the WHOLE payload is invisible rather than
+    # the interleaved filler — so a refusal here cannot be a surface-cue refusal.
+    encoding_name: invisible Unicode tag characters
+
+  homoglyph:
+    encoder: HomoglyphEncoder
+    # Reads as ordinary English; every mapped letter is a different codepoint.
+    encoding_name: Cyrillic and Greek homoglyph substitution
+
+  fullwidth:
+    encoder: FullwidthEncoder
+    # The control for homoglyph: equally readable, obviously altered.
+    encoding_name: fullwidth character forms
+
+  combining_marks:
+    encoder: CombiningMarkEncoder
+    encoding_name: combining diacritical marks after every character
+    params:
+      # A knob, not a formatting choice: different marks normalise differently
+      # under NFC, which plausibly changes tokenisation.
+      mark: "́"

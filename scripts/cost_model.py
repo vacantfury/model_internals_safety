@@ -55,7 +55,7 @@ from internals_safety.judges.refusal import RefusalJudge
 # smallest card the job can actually run on is the honest default, because an
 # estimate against hardware the job would refuse to start on is worse than no
 # estimate.
-DEFAULT_HARDWARE = "a100_40gb"
+DEFAULT_HARDWARE = "h200_144gb"  # the only measured profile (conf/cost.yaml) and what ops/phase0.sbatch requests
 
 
 def judge_prices(model: str) -> tuple[float, float]:
