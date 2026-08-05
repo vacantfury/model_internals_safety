@@ -147,7 +147,9 @@ class TestRunFamily:
     def test_every_prompt_gets_a_regime(self, family_result, harmful):
         cells = family_result["cells"]
         assert len(cells) == len(harmful)
-        assert all(cell["regime"] in set("CDBSRX") for cell in cells)
+        # U joined the set 2026-08-05: an unlicensed deployment probe yields a
+        # declared hole rather than being forced into (R).
+        assert all(cell["regime"] in set("CDBSRXU") for cell in cells)
         assert family_result["regime_map"].n == len(harmful)
 
     def test_a_cell_carries_all_four_measurements(self, family_result):
@@ -175,7 +177,16 @@ class TestRunFamily:
     def test_the_summary_reports_the_format_decorrelation_gap(self, family_result):
         deployment = family_result["summary"]["deployment"]
         assert set(deployment) >= {"licensed", "transfer_auroc", "harmful_rate", "harmless_rate", "gap"}
-        assert deployment["gap"] == deployment["harmful_rate"] - deployment["harmless_rate"]
+        if deployment["licensed"]:
+            assert deployment["gap"] == deployment["harmful_rate"] - deployment["harmless_rate"]
+        else:
+            # Tri-state (2026-08-05): an unlicensed probe reports None on every
+            # rate, never 0.0. A gap computed here would be the difference of two
+            # non-measurements — and the 0.0 it used to produce read downstream
+            # as "the decode was not deployed".
+            assert deployment["harmful_rate"] is None
+            assert deployment["harmless_rate"] is None
+            assert deployment["gap"] is None
 
     def test_the_summary_names_its_activation_caches(self, family_result):
         activations = family_result["summary"]["activations"]
@@ -197,8 +208,16 @@ class TestRunFamily:
         """The stub judges refuse every response, so (B) — decode-and-comply —
         cannot be populated. A pipeline that reported (B) here would be reading
         behaviour from somewhere other than the refusal judge."""
-        assert family_result["summary"]["binding_failure_rate"] == 0.0
-        assert family_result["summary"]["refusal_rate"] == 1.0
+        summary = family_result["summary"]
+        assert summary["refusal_rate"] == 1.0
+        assert summary["regimes"].get("B", 0) == 0
+        if summary["deployment_unmeasured"] == summary["n"]:
+            # The tiny random model's probe does not license, so the honest
+            # answer is "no binding-failure rate exists", NOT a rate of zero.
+            # 0.0 here reads as "measured, and found none" (2026-08-05).
+            assert summary["binding_failure_rate"] is None
+        else:
+            assert summary["binding_failure_rate"] == 0.0
 
 
 class TestMain:

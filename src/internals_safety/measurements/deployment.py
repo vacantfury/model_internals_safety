@@ -134,12 +134,24 @@ class DeploymentReading:
     """The curve turned into one boolean per prompt — what a regime label needs.
 
     `licensed` is the population half: unless some cell of the curve reads a
-    signal above its shuffled-label control, nothing per-example is meaningful
-    and every prompt reads False regardless of its score. `harmful` /
-    `harmless` are the per-example readings at the licensed cell, and the pair
-    is the format-decorrelation control (§8's first): both classes went through
-    the *identical* encoding pipeline, so a probe firing on "looks encoded"
-    cannot produce a gap between them.
+    signal above its shuffled-label control, nothing per-example is meaningful.
+    `harmful` / `harmless` are the per-example readings at the licensed cell, and
+    the pair is the format-decorrelation control (§8's first): both classes went
+    through the *identical* encoding pipeline, so a probe firing on "looks
+    encoded" cannot produce a gap between them.
+
+    ## Tri-state from 2026-08-05 — entries are None on an unlicensed rung
+
+    This class previously read `licensed and bool(score > threshold)`, so an
+    unlicensed probe returned `False` for every prompt. That asserts *"the model
+    did not decode during the attack"* on the strength of a probe that could not
+    read the rung at all — and because `assign_regime` decides (S)/(B) versus
+    (R)/(C)/(D) on this field, the silent False did not merely mislabel a flag:
+    it manufactured the phase-0 finding that the cipher band is uniformly (R),
+    across 13 of 15 rungs on Llama-3.1-8B and every rung Qwen2.5-7B completed.
+
+    Recognition was made tri-state on the same day for the same reason; this is
+    the other half of that fix, and it is the more consequential half.
     """
 
     family: str
@@ -148,25 +160,42 @@ class DeploymentReading:
     position: str
     transfer_auroc: float
     threshold_score: float
-    harmful: list[bool]
-    harmless: list[bool]
+    # None entries mean the probe was unlicensed: unmeasured, not negative.
+    harmful: list[bool | None]
+    harmless: list[bool | None]
 
     @property
-    def harmful_rate(self) -> float:
-        return sum(self.harmful) / len(self.harmful) if self.harmful else 0.0
+    def harmful_rate(self) -> float | None:
+        """Reading rate among MEASURED cells, or None if none were measurable.
+
+        None rather than 0.0 on an unlicensed rung, for the same reason as
+        `RecognitionReading.harmful_rate`: 0.0 is read downstream as "the decode
+        was not deployed", which is the pilot's headline claim asserted from a
+        probe that could not read the rung.
+        """
+        measured = [flag for flag in self.harmful if flag is not None]
+        return sum(measured) / len(measured) if measured else None
 
     @property
-    def harmless_rate(self) -> float:
+    def harmless_rate(self) -> float | None:
         """The benign false-positive rate at this operating point. Fixed at
         `1 - reading_percentile/100` by construction, so it is a check that the
         threshold was applied, not a finding — the informative quantity is the
-        gap below."""
-        return sum(self.harmless) / len(self.harmless) if self.harmless else 0.0
+        gap below. None on an unlicensed rung, as above."""
+        measured = [flag for flag in self.harmless if flag is not None]
+        return sum(measured) / len(measured) if measured else None
 
     @property
-    def gap(self) -> float:
-        """Harmful minus benign reading rate — the part that carries information."""
-        return self.harmful_rate - self.harmless_rate
+    def gap(self) -> float | None:
+        """Harmful minus benign reading rate — the part that carries information.
+
+        None when either side is unmeasured: a gap computed against an
+        unlicensed probe is a difference of two non-measurements.
+        """
+        harmful, harmless = self.harmful_rate, self.harmless_rate
+        if harmful is None or harmless is None:
+            return None
+        return harmful - harmless
 
 
 def read_deployment_per_prompt(
@@ -203,6 +232,10 @@ def read_deployment_per_prompt(
         position=best.position,
         transfer_auroc=best.transfer_auroc,
         threshold_score=threshold,
-        harmful=[licensed and bool(score > threshold) for score in detail.positive_scores],
-        harmless=[licensed and bool(score > threshold) for score in detail.negative_scores],
+        # None, NOT False, when the probe is unlicensed — see the tri-state note
+        # on DeploymentReading. `False` here reads as "did not decode during the
+        # attack", which is the pilot's headline claim, asserted from a probe
+        # that could not read the rung.
+        harmful=[bool(score > threshold) if licensed else None for score in detail.positive_scores],
+        harmless=[bool(score > threshold) if licensed else None for score in detail.negative_scores],
     )

@@ -97,10 +97,14 @@ def rebaseline(cells: list[dict], licenses: dict[str, dict[str, bool]], cuts) ->
             cuts.order_blind_overlap_threshold,
         )
         family_license = licenses.get(cell["family"], {})
+        # Both axes tri-state: None wherever the run record says the probe did
+        # not license on this family. The cached cells carry a plain False there,
+        # which is the defect this re-baseline exists to expose.
         recognition = cell["recognition"] if family_license.get("recognition", False) else None
+        deployment = cell["deployment"] if family_license.get("deployment", False) else None
         assignment = assign_regime(
             ability=ability,
-            deployment=bool(cell["deployment"]),
+            deployment=deployment,
             recognition=recognition,
             refused=bool(cell["refused"]),
             prompt_is_harmful=True,

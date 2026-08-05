@@ -12,34 +12,40 @@ Reproduce with `uv run python scripts/rebaseline_pilot.py` (add `--write` to emi
 
 ### Llama-3.1-8B-Instruct (`phase0-20260802`, 1500 cells)
 
-| rung | abil | dep? | rec? | C | D | B | S | R | X | note |
-|---|---|---|---|---|---|---|---|---|---|---|
-| base64 | 0→0 | n | n | 0 | 0 | 0 | 0 | 100 | 0 | unmeasurable |
-| base32 | 0→0 | n | n | 1 | 0 | 0 | 0 | 99 | 0 | unmeasurable |
-| **hex** | **21→84** | **n** | n | 0 | 2 | 0 | 0 | 98 | 0 | **unmeasurable** |
-| binary | 0→0 | n | n | 3 | 0 | 0 | 0 | 97 | 0 | unmeasurable |
-| ascii_decimal | 0→0 | n | n | 0 | 0 | 0 | 0 | 100 | 0 | unmeasurable |
-| **unicode_escape** | **1→54** | **n** | n | 1 | 1 | 0 | 0 | 98 | 0 | **unmeasurable** |
-| rot13 | 0→0 | n | n | 1 | 0 | 0 | 0 | 99 | 0 | unmeasurable |
-| caesar3 | 0→0 | n | n | 1 | 0 | 0 | 0 | 99 | 0 | unmeasurable |
-| caesar7 | 0→0 | n | n | 0 | 0 | 0 | 0 | 100 | 0 | unmeasurable |
-| atbash | 0→0 | n | n | 0 | 0 | 0 | 0 | 100 | 0 | unmeasurable |
-| vigenere | 0→0 | n | n | 1 | 0 | 0 | 0 | 99 | 0 | unmeasurable |
-| morse | 0→0 | n | n | 2 | 0 | 0 | 0 | 98 | 0 | unmeasurable |
-| reverse_characters | 0→0 | n | y | 0 | 0 | 0 | 0 | 100 | 0 | unmeasurable; **71/100 relabelled X→R** |
-| reverse_words | 17→97 | **y** | y | 0 | 0 | 1 | 88 | 9 | 2 | 78/100 relabelled |
-| **zero_width** | **71→100** | **y** | n | 0 | 0 | **7** | **93** | 0 | **0** | 29/100 relabelled |
+Regime **(U)** = the deployment probe did not license on that rung, so the axis every other label is decided on was never measured. Introduced 2026-08-05 with the tri-state fix; see §3.
 
-**180/1500 relabelled · ability +225 / −0 · 1300/1500 cells sit on an unlicensed deployment probe.**
+| rung | abil | dep? | rec? | C | D | B | S | R | X | **U** |
+|---|---|---|---|---|---|---|---|---|---|---|
+| base64 | 0→0 | n | n | 0 | 0 | 0 | 0 | 0 | 0 | **100** |
+| base32 | 0→0 | n | n | 0 | 0 | 0 | 0 | 0 | 0 | **100** |
+| **hex** | **21→84** | n | n | 0 | 0 | 0 | 0 | 0 | 0 | **100** |
+| binary | 0→0 | n | n | 0 | 0 | 0 | 0 | 0 | 0 | **100** |
+| ascii_decimal | 0→0 | n | n | 0 | 0 | 0 | 0 | 0 | 0 | **100** |
+| **unicode_escape** | **1→54** | n | n | 0 | 0 | 0 | 0 | 0 | 0 | **100** |
+| rot13 | 0→0 | n | n | 0 | 0 | 0 | 0 | 0 | 0 | **100** |
+| caesar3 | 0→0 | n | n | 0 | 0 | 0 | 0 | 0 | 0 | **100** |
+| caesar7 | 0→0 | n | n | 0 | 0 | 0 | 0 | 0 | 0 | **100** |
+| atbash | 0→0 | n | n | 0 | 0 | 0 | 0 | 0 | 0 | **100** |
+| vigenere | 0→0 | n | n | 0 | 0 | 0 | 0 | 0 | 0 | **100** |
+| morse | 0→0 | n | n | 0 | 0 | 0 | 0 | 0 | 0 | **100** |
+| reverse_characters | 0→0 | n | y | 0 | 0 | 0 | 0 | 0 | 0 | **100** |
+| reverse_words | 17→97 | **y** | y | 0 | 0 | **1** | 88 | 9 | 2 | 0 |
+| **zero_width** | **71→100** | **y** | n | 0 | 0 | **7** | **93** | 0 | **0** | 0 |
+
+**1407/1500 relabelled · ability +225 / −0 · 1300/1500 cells (13 of 15 rungs) sit on an unlicensed deployment probe.**
 
 ### Qwen2.5-7B-Instruct (tail run, 600 cells — the head run's licensed rungs were killed at the wall)
 
-| rung | abil | dep? | rec? | C | D | B | S | R | X |
-|---|---|---|---|---|---|---|---|---|---|
-| **reverse_words** | 6→92 | y | y | 0 | 0 | **6** | 82 | 5 | 7 |
-| **zero_width** | 82→99 | y | y | 0 | 0 | **13** | 86 | 0 | 1 |
+| rung | abil | dep? | rec? | C | D | B | S | R | X | U |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **reverse_words** | 6→92 | y | y | 0 | 0 | **6** | 82 | 5 | 7 | 0 |
+| **zero_width** | 82→99 | y | y | 0 | 0 | **13** | 86 | 0 | 1 | 0 |
 
-Qwen's twelve cipher rungs plus `reverse_characters`: **0/1258 relabelled, ability +2**, every cell on an unlicensed deployment probe.
+Qwen's twelve cipher rungs plus `reverse_characters`: ability +2, and **every one of those 1258 cells is (U)** — not a single measured deployment reading across the entire cipher band.
+
+### The one-line summary
+
+**The phase-0 regime map is two rungs, not fifteen.** `zero_width` and `reverse_words` are the only rungs on either model where the deployment probe licensed, so they are the only rungs carrying a decode-versus-enforcement claim in either direction. Everything else is a declared hole.
 
 ---
 
@@ -71,6 +77,18 @@ It is load-bearing, not cosmetic. `deployment` is the term that separates (S)/(B
 
 ---
 
-## 4. Status
+## 4. The tri-state fix, landed
 
-Offline re-baseline complete; the numbers above supersede every pre-2026-08-05 regime figure. What remains is **not** offline: re-license the probes under the permutation test (needs cluster activations), and make `deployment` tri-state in the pipeline. Both filed in `TODO.md`.
+`deployment` is now `bool | None` end to end (2026-08-05, same sitting):
+
+- `DeploymentReading.harmful` / `.harmless` return `None` per prompt on an unlicensed rung instead of `licensed and bool(...)`, which collapsed to `False`. This was the defect at source (`measurements/deployment.py`).
+- `harmful_rate` / `harmless_rate` / `gap` return `None` rather than `0.0` when unmeasured — a gap between two non-measurements is not zero.
+- `assign_regime` skips every rule that reads an unmeasured axis and returns the new regime **(U)**.
+- `RegimeMap` gains `deployment_unmeasured` + `deployment_unmeasured_rate`, and **`binding_failure_rate` is now computed over MEASURED cells and returns `None` when there are none.** Dividing by `n` returned `0.0` on an unmeasured rung, which reads as "no binding failures here" — the same silent zero, one level up, and it is what fed the "cipher band is inert" conclusion.
+- `scripts/phase0_regime_map.py` reports `(B) populated in k/<MEASURED> rungs` and prints a loud `UNMEASURED:` line naming every unlicensed rung.
+
+Tests: 226 green, including four new ones pinning the contract — an unmeasured deployment axis must yield (U) with no coherence flags, must not count as a binding success, and must leave the denominator rather than dilute it.
+
+## 5. Status
+
+Offline work complete; the numbers above supersede every pre-2026-08-05 regime figure. **One piece remains and it is not offline: re-license every probe under the permutation test** (`4d3e78d`) rather than the old fixed 0.70 AUROC cut. That needs the cached activations on the cluster (`/scratch`), not `cells.jsonl`. It matters more than a cleanup — `hex` sits at **0.691**, a hair under the old cut, so re-licensing could convert the pilot's most ambiguous rung into a measured one and turn a 2-rung map back into a 3-rung map. Filed as `TODO.md` item 15(b).

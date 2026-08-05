@@ -313,6 +313,10 @@ def run_family(
         # NO recognition claim in either direction, and this is how the write-up
         # sees that rather than reading the zeros as "no harm represented".
         "recognition_unmeasured": regime_map.recognition_unmeasured,
+        # Same contract for the DEPLOYMENT axis, and this is the one that decides
+        # every other label — a rung at n here has no regime map at all, however
+        # clean its other numbers look (2026-08-05).
+        "deployment_unmeasured": regime_map.deployment_unmeasured,
         "ability_rate": sum(recovered(record.score) for record in ability_records) / n
         if n
         else 0.0,
@@ -518,13 +522,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     results_path = write_results(directory, record)
 
-    populated = [s["family"] for s in summaries if s["binding_failure_rate"] > 0]
+    # `binding_failure_rate` is None on a rung whose deployment probe never
+    # licensed. Those rungs are UNMEASURED, not (B)-empty — reported separately
+    # so "populated in 2/15" can never be read as "13 rungs have no binding
+    # failures" when 13 rungs were never measured (2026-08-05).
+    unmeasured = [s["family"] for s in summaries if s["binding_failure_rate"] is None]
+    populated = [
+        s["family"]
+        for s in summaries
+        if s["binding_failure_rate"] is not None and s["binding_failure_rate"] > 0
+    ]
     incoherent = [s["family"] for s in summaries if s["hard_incoherence_rate"] > 0.1]
+    measured_count = len(summaries) - len(unmeasured)
     print(f"\nwrote {results_path}")
     print(
         "(B) decode-and-comply populated in "
-        f"{len(populated)}/{len(summaries)} rungs: {', '.join(populated) or 'none'}"
+        f"{len(populated)}/{measured_count} MEASURED rungs: {', '.join(populated) or 'none'}"
     )
+    if unmeasured:
+        # Loud, never silent — same contract as recognition_unmeasured.
+        print(
+            f"UNMEASURED: deployment probe unlicensed on {len(unmeasured)}/{len(summaries)} "
+            f"rungs ({', '.join(unmeasured)}) — these carry regime (U) and have NO "
+            "decode-versus-enforcement claim in either direction."
+        )
     if incoherent:
         # Not a caveat on the numbers — the coherence check is what says the
         # instrument is wrong, and regimes computed alongside a failing one are
