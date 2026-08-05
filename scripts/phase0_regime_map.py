@@ -329,11 +329,16 @@ def run_family(
             "harmless_rate": deployment.harmless_rate,
             "gap": deployment.gap,
         },
+        # p_value is the licensing decision; auroc is the magnitude. Both are
+        # reported because a permutation test licenses significance, not size —
+        # a rung can be decisively above chance and still a weak readout.
         "recognition": {
             "licensed": recognition.licensed,
             "layer": recognition.layer,
             "position": recognition.position,
             "auroc": recognition.auroc,
+            "p_value": recognition.p_value,
+            "meets_effect_size_bar": recognition.meets_effect_size_bar,
             "harmful_rate": recognition.harmful_rate,
         },
         # §8 control 4: encodings inflate token counts, and a probe could exploit

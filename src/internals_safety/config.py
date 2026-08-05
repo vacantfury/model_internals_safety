@@ -128,6 +128,23 @@ class ProbeConfig(StrictModel):
     # chance; the margin is set from the control-task distribution measured in
     # the pilot, not chosen by taste.
     auroc_threshold: float = 0.70
+    # Permutation licensing (2026-08-05). `auroc_threshold` above is now an
+    # EFFECT-SIZE report, not the licensing gate: a probe is licensed when its
+    # observed max AUROC beats the shuffled-label null, which is what this file
+    # always named as the tuning path ("the gap between the real task and a
+    # shuffled-label control, not the raw number").
+    #
+    # The null is over the MAX AUROC across layers, so selecting the best layer
+    # is inside the null rather than an uncorrected multiple comparison over ~33
+    # cells. Both numbers below are ordinary statistical conventions rather than
+    # tuned knobs, which is the point — the old 0.70 was neither.
+    #
+    # Cost is measured, not assumed: ~13 ms per fit at the phase-0 shape, so 200
+    # draws over 33 layers is ~1 min per (rung, position) and minutes across the
+    # ladder. Raising it buys p-value resolution (the floor is 1/(n+1)), nothing
+    # else.
+    n_permutations: int = 200
+    alpha: float = 0.05
     # Folds for the out-of-sample per-example scoring measurement #3 needs
     # (`probes.linear.crossval_scores`). Tuning path: raise it only if the pilot
     # shows fold-to-fold variance dominating the harmful-vs-benign reading gap;

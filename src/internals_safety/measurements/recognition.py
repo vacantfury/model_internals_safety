@@ -23,7 +23,7 @@ wrong number for exactly the conditions this paper exists to study.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from internals_safety.config import ProbeConfig
 from internals_safety.models.capture import ActivationBatch
@@ -32,6 +32,8 @@ from internals_safety.probes.linear import (
     ProbeResult,
     best_by_auroc,
     crossval_scores,
+    permutation_null_max_auroc,
+    permutation_p_value,
     probe_sweep,
     reading_threshold,
 )
@@ -47,6 +49,11 @@ class RecognitionResult:
     curves: list[ProbeResult]
     directions: list[Direction]
     threshold: float
+    # Permutation licensing. `p_value` is the empirical probability that chance,
+    # on this data and this many layers, produces a max AUROC at least as large
+    # as the observed one. `alpha` is the level it is compared against.
+    p_value: float = float("nan")
+    alpha: float = 0.05
 
     def at_position(self, position: str) -> list[ProbeResult]:
         return [result for result in self.curves if result.position == position]
@@ -61,17 +68,33 @@ class RecognitionResult:
         raise KeyError(f"no direction at layer {layer}, position {position!r}")
 
     @property
+    def observed_max_auroc(self) -> float:
+        """Best AUROC anywhere on the harmfulness curve — the tested statistic."""
+        return best_by_auroc(self.at_position(HARMFULNESS_POSITION)).auroc
+
+    @property
     def recognized(self) -> bool:
         """Harm is represented somewhere in the harmfulness curve.
 
         `any cell` rather than `a fixed layer`: the layer at which recognition
         appears is a finding, not a constant, and fixing it in advance would
-        build the v1 assumption back in.
+        build the v1 assumption back in. But `any cell` over ~33 layers is an
+        uncorrected multiple comparison, so the test is on the MAX AUROC against
+        a null of maxima under shuffled labels — the layer search is inside the
+        null, and the licensing decision is one test, not thirty-three.
         """
-        return any(
-            result.reads_signal(self.threshold)
-            for result in self.at_position(HARMFULNESS_POSITION)
-        )
+        return self.p_value <= self.alpha
+
+    @property
+    def meets_effect_size_bar(self) -> bool:
+        """Separate from licensing, and reported beside it.
+
+        A permutation test licenses SIGNIFICANCE, not magnitude: on n=200 an
+        AUROC of 0.62 can be unmistakably above chance while still being a weak
+        readout. Reporting only the boolean would let a weak-but-real signal be
+        written up as if it were a strong one.
+        """
+        return self.observed_max_auroc >= self.threshold
 
 
 def measure_recognition(
@@ -85,10 +108,23 @@ def measure_recognition(
     harm. That confound is the one §8's control battery exists to answer, and
     the coherence check in `regimes` is what detects it if it slips through.
     """
-    return RecognitionResult(
-        curves=probe_sweep(harmful, harmless, config),
+    curves = probe_sweep(harmful, harmless, config)
+    result = RecognitionResult(
+        curves=curves,
         directions=sweep_directions(harmful, harmless),
         threshold=config.auroc_threshold,
+        alpha=config.alpha,
+    )
+    if HARMFULNESS_POSITION not in harmful.positions:
+        # Nothing to license. `p_value` stays NaN and `recognized` is therefore
+        # False — fail-closed, so a capture missing the harmfulness position can
+        # never silently license a probe. `read_recognition_per_prompt` raises
+        # the actionable error for this case.
+        return result
+    null_maxima = permutation_null_max_auroc(harmful, harmless, HARMFULNESS_POSITION, config)
+    return replace(
+        result,
+        p_value=permutation_p_value(result.observed_max_auroc, null_maxima),
     )
 
 
@@ -108,6 +144,10 @@ class RecognitionReading:
     layer: int
     position: str
     auroc: float
+    # The licensing decision (permutation p-value) and the magnitude (auroc) are
+    # both carried: significance is not size.
+    p_value: float
+    meets_effect_size_bar: bool
     threshold_score: float
     # None entries mean the probe was unlicensed: unmeasured, not negative.
     harmful: list[bool | None]
@@ -147,8 +187,11 @@ def read_recognition_per_prompt(
             f"no probe cells at {HARMFULNESS_POSITION!r}; recognition needs that position "
             "captured (see conf/models/*.yaml capture.positions)"
         )
-    signalling = [cell for cell in at_position if cell.reads_signal(result.threshold)]
-    best = best_by_auroc(signalling or at_position)
+    # The MAX-AUROC cell, unconditionally — it is the statistic the permutation
+    # null was built on, so reading a different cell would license one thing and
+    # report another. (This used to pre-filter by the fixed AUROC cut, which is
+    # no longer the gate.)
+    best = best_by_auroc(at_position)
 
     positive_scores, negative_scores = crossval_scores(
         harmful, harmless, layer=best.layer, position=best.position, config=config
@@ -157,6 +200,8 @@ def read_recognition_per_prompt(
     licensed = result.recognized
     return RecognitionReading(
         licensed=licensed,
+        p_value=result.p_value,
+        meets_effect_size_bar=result.meets_effect_size_bar,
         layer=best.layer,
         position=best.position,
         auroc=best.auroc,

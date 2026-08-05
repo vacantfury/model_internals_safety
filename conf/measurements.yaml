@@ -65,7 +65,21 @@ probes:
   # Above this AUROC a probe counts as reading a signal. Tuning path: set from
   # the control-task AUROC distribution measured in the pilot — the point is the
   # gap between the real task and a shuffled-label control, not the raw number.
+  # NO LONGER THE LICENSING GATE (changed 2026-08-05) — kept as the reported
+  # effect-size bar. Licensing is now a permutation test, which is what the line
+  # below always said it should be: the gap against a shuffled-label control,
+  # not the raw number. The old fixed cut discarded real-but-weak signal (Llama
+  # zero_width read AUROC 0.617 on a rung with deployment 200/200) while `any
+  # cell over ~33 layers` simultaneously left the selection uncorrected.
   auroc_threshold: 0.70
+  # Draws for the shuffled-label null over the MAX AUROC across layers. The max
+  # puts layer selection inside the null, giving family-wise control by
+  # construction. Cost measured: ~13 ms/fit at the phase-0 shape, so 200 draws x
+  # 33 layers is ~1 min per (rung, position). The p-value floor is 1/(n+1).
+  n_permutations: 200
+  # Significance level for licensing. A convention, deliberately, so that no
+  # per-rung tuning enters the gate.
+  alpha: 0.05
   # Folds for out-of-sample per-example scoring (measurement #3 fits inside the
   # condition it reads, so it has no free held-out set). Tuning path: raise only
   # if pilot fold-to-fold variance dominates the harmful-vs-benign reading gap.
@@ -80,3 +94,22 @@ probes:
   # benign false-positive rate the paper is willing to carry.
   reading_percentile: 50.0
 
+
+# MEASURED against the real Llama-3.1-8B zero_width activations (2026-08-05,
+# n=100/100, 32 layers, d_model 4096, 200 draws):
+#
+#   observed max AUROC   0.6167   (reproduces the pilot's recorded value exactly)
+#   null max AUROC       median 0.5758   95th pct 0.6856   max 0.7156
+#   permutation p-value  0.2637   -> NOT licensed
+#
+# This REFUTES the expectation that motivated the change. Selecting the best of
+# 32 layers on this sample size inflates chance AUROC hard: the null's own 95th
+# percentile is 0.686, so the old fixed cut of 0.70 was approximately RIGHT
+# rather than too conservative, and Llama zero_width genuinely carries no
+# linearly-decodable harmfulness signal at the instruction-final token. That is
+# now a result rather than an artefact of a guessed threshold.
+#
+# The permutation test is still the better instrument, for the opposite reason:
+# the null max reached 0.7156, ABOVE the old cut, so a fixed 0.70 can license
+# pure noise on a lucky layer. Significance now scales with n and layer count
+# instead of being asserted.

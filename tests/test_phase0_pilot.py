@@ -42,7 +42,13 @@ N = 8
 MEASUREMENTS = MeasurementsConfig(
     ability=AbilityConfig(max_new_tokens=4, batch_size=4),
     behavior=BehaviorConfig(max_new_tokens=4, batch_size=4),
-    probes=ProbeConfig(seed=0, test_fraction=0.3, auroc_threshold=0.70, cv_folds=3),
+    # n_permutations is tiny here ON PURPOSE: these tests exercise the pilot's
+    # wiring, not the licensing statistic, and the production default (200)
+    # multiplies every fixture by the layer count. The permutation test's own
+    # behaviour is covered in tests/test_probes.py.
+    probes=ProbeConfig(
+        seed=0, test_fraction=0.3, auroc_threshold=0.70, cv_folds=3, n_permutations=3
+    ),
 )
 
 

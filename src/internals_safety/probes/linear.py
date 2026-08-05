@@ -283,3 +283,84 @@ def best_by_auroc(results: list[ProbeResult]) -> ProbeResult:
     it: picking the best cell post hoc is a selection effect, and the layer at
     which the signal peaks is itself a finding."""
     return max(results, key=lambda result: (result.auroc if result.auroc == result.auroc else -1))
+
+
+def permutation_null_max_auroc(
+    positive: ActivationBatch,
+    negative: ActivationBatch,
+    position: str,
+    config: ProbeConfig,
+) -> np.ndarray:
+    """Null distribution of the MAX AUROC across layers, under shuffled labels.
+
+    Why the max, and why this exists at all.
+
+    Licensing was a fixed `auroc >= 0.70` cut applied cell-by-cell, with
+    `recognized = any(cell reads signal)` over every layer. Both halves of that
+    are wrong in opposite directions:
+
+    - **The number was a guess.** `conf/measurements.yaml` always said so, and
+      named this as its tuning path: "the point is the gap between the real task
+      and a shuffled-label control, not the raw number." A cut of 0.70 on n=200
+      is far above chance, so it silently discards real-but-weak signal — which
+      is exactly the state Llama `zero_width` was left in (AUROC 0.617,
+      unlicensed, on a rung with deployment 200/200).
+    - **`any()` over ~33 layers is an uncorrected multiple comparison.** Simply
+      lowering the cut to a per-cell significance test would make it worse: at
+      alpha=0.05 over 33 cells, roughly 1.6 cells license by chance alone, so
+      almost every rung would "read signal".
+
+    Permuting the labels and recording the max AUROC over the whole curve solves
+    both at once. The observed max is compared against the distribution of maxima
+    that chance produces on the *same* data, sample size and layer count, so the
+    selection over layers is inside the null rather than unaccounted for. That is
+    family-wise error control by construction.
+
+    Cost, measured rather than assumed: one `LogisticRegression` fit at the
+    phase-0 shape (200 x 4096) is ~13 ms, so one permutation over 33 layers is
+    ~0.2 s and the configured default is minutes across the whole ladder — a few
+    percent of a run that already spends 18-37 min per rung on generation.
+    """
+    if positive.layers != negative.layers:
+        raise ValueError("both classes must be captured at the same layers")
+
+    labels = np.concatenate(
+        [np.ones(positive.tensor.shape[0], dtype=int), np.zeros(negative.tensor.shape[0], dtype=int)]
+    )
+    # Features are gathered once; only the labels are permuted, so the null holds
+    # the representation fixed and varies nothing but the label assignment.
+    per_layer = [
+        _to_numpy(torch.cat([positive.select(layer, position), negative.select(layer, position)]))
+        for layer in positive.layers
+    ]
+
+    rng = np.random.default_rng(config.seed)
+    maxima = np.empty(config.n_permutations, dtype=float)
+    for draw in range(config.n_permutations):
+        shuffled = rng.permutation(labels)
+        best = -np.inf
+        for features in per_layer:
+            x_train, x_test, y_train, y_test = train_test_split(
+                features,
+                shuffled,
+                test_size=config.test_fraction,
+                random_state=config.seed,
+                stratify=shuffled,
+            )
+            auroc = _auroc(_fit(x_train, y_train, config), x_test, y_test)
+            if not np.isnan(auroc):
+                best = max(best, auroc)
+        maxima[draw] = best
+    return maxima
+
+
+def permutation_p_value(observed: float, null_maxima: np.ndarray) -> float:
+    """Empirical p-value with the +1 correction (Phipson & Smyth 2010).
+
+    The correction matters: a plain `mean(null >= observed)` can report p=0,
+    which is not a possible p-value from a finite permutation set and would
+    overstate the evidence in a paper table.
+    """
+    if null_maxima.size == 0:
+        return float("nan")
+    return float((np.sum(null_maxima >= observed) + 1) / (null_maxima.size + 1))
