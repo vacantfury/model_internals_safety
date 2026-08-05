@@ -309,6 +309,10 @@ def run_family(
         },
         "binding_failure_rate": regime_map.binding_failure_rate,
         "hard_incoherence_rate": regime_map.hard_incoherence_rate,
+        # Loud, never silent: a rung whose harmfulness probe was unlicensed has
+        # NO recognition claim in either direction, and this is how the write-up
+        # sees that rather than reading the zeros as "no harm represented".
+        "recognition_unmeasured": regime_map.recognition_unmeasured,
         "ability_rate": sum(recovered(record.score) for record in ability_records) / n
         if n
         else 0.0,
