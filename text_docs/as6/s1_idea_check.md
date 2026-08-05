@@ -114,9 +114,44 @@ Genuinely useful despite the weak pool — stage and verify via `lit-review-loop
 - **#6 PRP** (ACL 2024) — universal adversarial prefixes against guard models; prior art on *attacking* guards, useful for threat-model positioning.
 - **#4 DeRTa** (ACL 2025) — refusal position bias; already known to AS-5, and the token-position dynamics bear on where the convert step reads.
 
-### Route taken
+### Adversarial separation pass (2026-08-05) — verdict: REJECT AS SCOPED
 
-**Pass → S2 (doability + home decision).** No refine loop back to S0: the check surfaced no prior work that threatens the claim, and the two gap statements are on-target. The unanswered objection (b) is handled by the adversarial pass, not by re-screening the idea.
+Run in a fresh hostile-reviewer context per the workflow's idea-check rigor checklist, precisely because cspaper does not do this job. **It overturns the routing.** Its three fatal-as-scoped objections, with the two load-bearing factual claims verified before being accepted:
+
+**① The empty middle — fatal, and it is built from our own pilot data.** LlamaGuard-3-8B is a fine-tune of Llama-3.1-8B. AS-5's phase-0 pilot measured that base at decode-and-restate similarity **0.03–0.30 across all twelve cipher rungs** — it cannot read them. WildGuard is Mistral-7B-based, older and weaker. So:
+- **Cipher band: the decode link is empty by construction.** Every failure is trivially "can't". No (B) cell to attribute.
+- **Surface band: no decoding is required.** Zero-width, homoglyph, fullwidth, combining marks, tag block *are* plaintext modulo the tokenizer. "Did the guard decode it" degenerates into "did the tokenizer preserve it" — answerable in milliseconds with no forward pass, no probe, no GPU.
+
+The regime where a guard genuinely decodes a non-trivially transformed input — the only regime where "which link broke" is a real question — is **essentially unpopulated at 8B**.
+
+> **This retracts my own reasoning, and the retraction matters more than the objection.** `design_notes_PREMATURE.md` §3 argued that "AS-5's dead band is AS-6's populated cell" — that the cipher band's inertness, useless to AS-5, becomes a positive result for AS-6 because "never decoded" *is* the answer to RQ1 there. **That is wrong.** An attribution predictable from the base model's decode ability, without opening the guard, is not an attribution — it is a restatement of a known capability limit wearing interpretability vocabulary. I inverted a null result into an asset instead of confronting it. Treat §3 of the design notes as withdrawn.
+
+**② The collapse objection — fatal as scoped, and cspaper never touched it.** A transformer guard has no module labelled "decoder" and none labelled "converter"; it is one continuous map. "Feature present at layer k, readout wrong" *is the definition* of distribution shift in a deep network — what Wei et al. (NeurIPS 2023) called **mismatched generalization** in one phrase, with no probes and no layers. Worse, token identities of a base64 string *analytically determine* the plaintext, so a sufficiently expressive probe achieves near-perfect "recoverability" by learning base64 itself — reading the guard's **input**, not its computation. And the natural defence (a guard may represent decoded content without being able to emit it) removes the behavioural anchor that made the AS-5 instrument credible, leaving the probe as sole arbiter of a quantity with no ground truth. **①  and ② are coupled: escaping either lands in the other.**
+
+**③ Prior work is closer than the scoop check found — a defect in my check, not in the idea.** Two verified misses:
+- **Zhou et al., "How Alignment and Jailbreak Work", Findings of EMNLP 2024 (arXiv 2406.05644)** — **read and verified 2026-08-05.** Weak classifiers on intermediate hidden states separate malicious from normal inputs at >95% in the *early* layers; alignment associates those early concepts with emotion tokens in the middle layers (16–24); and verbatim, *"Jailbreak disturbs the transformation of early unethical classification into negative emotions."* Table 2 shows classifiers separate jailbreak inputs early too — the model **recognises and fails to convert**. They then prove it *causally* via **Logit Grafting**. That is the convert-link finding, published 2024, across 7B–70B and five model families. Differences that survive: target chat models not guards, jailbreak templates not encodings, and no decode link. But the conceptual novelty of "represented but not converted" is **established, not ours**.
+- **Our own AS-3.** "Recover, Decode, Reguard" (arXiv 2607.26574, 29 Jul 2026) is the guardrail sibling's Decode Gap paper — confirmed present in the science `llm-security` bib and matching the portfolio's AS-3 = C entry. It **selected and validated the pre-decoder repair from black-box observation alone**. If attribution machinery were necessary to choose the repair, that paper could not exist — which guts contribution (3) as written.
+
+**Why the check missed these:** I ran signature terms over a recent window only. The workflow's rigor checklist specifies a **dual-channel** check — signature terms recent *plus* alias terms an adjacent subfield would use over a longer window. Zhou et al. is 2024 and speaks of "emotion association", not decode/convert. Re-run the alias channel before any re-screen.
+
+Serious-but-addressable objections worth carrying regardless: probe validity on an encoding ladder is maximal-risk because every rung has a unique surface signature (*False Sense of Security*, arXiv 2509.03888, verified); a **tokenizer null model must be beaten explicitly** (Broken-Token, arXiv 2510.26847 — characters-per-token alone separates encoded from natural text near-perfectly); link (a) is un-instrumented yet may dominate real deployments (tokenizers dropping payloads, arXiv 2504.11168, Emoji Attack ICML 2025); a fourth cell is missing (**blocked without decoding** — the guard as format detector, the most policy-relevant cell); B=5–13 at n=100 cannot support "the nulls carry the evidence" without **TOST equivalence bounds**; and "matching DSR" across two guards is **threshold-manufacturable** and confounded on six axes.
+
+**The constructive path it names — all cheap and inside existing infrastructure except the last:**
+1. **Causal, not correlational:** fit the harm direction on plaintext, then **inject** where absent and **ablate** where present. Decode-failure ≡ direction absent *and* injecting flips the verdict; convert-failure ≡ direction present at plaintext strength, injection does nothing, late-layer intervention flips it. A double dissociation is immune to the re-description charge. Hooks and forward passes; the capture cache already supports it.
+2. **Dial the decode link instead of observing it** — bijection encodings with graded, verified per-model dispersion (Bijection Learning, ICLR 2025), and/or LoRA-finetune a guard on a cipher and show the attribution *moves*. Manipulating the link is what turns a taxonomy into science, and it is what fills the empty middle.
+3. **Probes fit on plaintext only, tested on encoded**, plus per-rung selectivity controls.
+4. **Beat the tokenizer null model** per rung.
+5. (Expensive, and what separates a paper from a workshop note) the **repair 2×2 actually run**, with TOST bounds and ≥4 guards spanning architectures.
+
+### Route taken — REVISED
+
+**NOT S2. Route: critiques → refine and re-screen (S0).**
+
+cspaper passed the idea; the adversarial pass says reject as scoped, and it is the better instrument here — it argued from our own pilot numbers and surfaced two prior works our scoop check missed. Under the workflow's three outcomes this is "loop back", and the named stage is S0.
+
+**This is a refine, not a kill.** The object cut (target internals vs defense internals) survives untouched; what fails is the *scoping* — an observational decode/convert split on two 8B guards over a ladder whose two bands are respectively impossible and trivial for them. Items 1 and 2 above are a different and better paper from the same materials: causal manipulation of a dialed decode link inside a guard. That reshape is the S0 work.
+
+**Owner decision this now needs** — recorded rather than guessed: whether to spend the reshape effort at all, given AS-5 is mid-flight and this line's paper count is his call.
 
 ---
 

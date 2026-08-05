@@ -30,7 +30,9 @@ RQ3 is the one that makes this a paper rather than a measurement. If two guards 
 
 ---
 
-## 3. What the pilot already tells us — AS-5's dead band is AS-6's populated cell
+## 3. ~~What the pilot already tells us — AS-5's dead band is AS-6's populated cell~~ WITHDRAWN 2026-08-05
+
+> **RETRACTED.** The adversarial separation pass (see `s1_idea_check.md`) refuted this section, and it was the section I called "the most important design inheritance". The argument below claims the cipher band's inertness becomes a *positive* result for AS-6 because "never decoded" is the answer to RQ1 there. It is not: an attribution predictable from the base model's decode ability, **without opening the guard**, is a restatement of a known capability limit, not an attribution. Worse, the same pass points out the other half — the surface band needs no decoding at all, since those rungs are plaintext modulo the tokenizer — so the decode/convert axis is undefined in one band and trivial in the other. Kept visible rather than deleted so the error stays legible. Everything below this line in §3 is withdrawn.
 
 This is the most important design inheritance, and it inverts a null result into an asset.
 
