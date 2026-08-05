@@ -53,3 +53,6 @@ secrets/
 *.fdb_latexmk
 *.fls
 *.toc
+
+# task-estate store + operational state (personal data — never committed; task-estate refactor 2026-08-04)
+/state/
