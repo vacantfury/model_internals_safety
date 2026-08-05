@@ -22,7 +22,14 @@ def _record(family: str, recovered: bool, similarity: float, echoed: bool = Fals
         ciphertext="c",
         response="r",
         score=RecoveryScore(
-            exact=recovered, contains=recovered, similarity=similarity, echoed_ciphertext=echoed
+            exact=recovered,
+            contains=recovered,
+            similarity=similarity,
+            echoed_ciphertext=echoed,
+            # Tracks `recovered` on purpose: a non-recovery must not carry high
+            # content overlap, or it would pass the order-blind branch and this
+            # fixture would stop testing what it claims to.
+            content_overlap=1.0 if recovered else 0.0,
         ),
     )
 

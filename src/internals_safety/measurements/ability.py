@@ -77,9 +77,12 @@ class FamilyAbility:
         )
 
 
-def summarize_by_family(records: list[AbilityRecord]) -> list[FamilyAbility]:
+def summarize_by_family(
+    records: list[AbilityRecord], config: AbilityConfig | None = None
+) -> list[FamilyAbility]:
     """Per-rung ability. Sorted hardest-first — this ordering IS the difficulty
     axis, and it is why the ladder does not need to be sorted by intuition."""
+    settings = config or AbilityConfig()
     grouped: dict[str, list[AbilityRecord]] = defaultdict(list)
     for record in records:
         grouped[record.family].append(record)
@@ -88,7 +91,15 @@ def summarize_by_family(records: list[AbilityRecord]) -> list[FamilyAbility]:
         FamilyAbility(
             family=family,
             n=len(group),
-            recovery_rate=sum(record.score.recovered for record in group) / len(group),
+            recovery_rate=sum(
+                record.score.is_recovered(
+                    settings.similarity_threshold,
+                    settings.content_overlap_threshold,
+                    settings.order_blind_overlap_threshold,
+                )
+                for record in group
+            )
+            / len(group),
             mean_similarity=sum(record.score.similarity for record in group) / len(group),
             echo_rate=sum(record.score.echoed_ciphertext for record in group) / len(group),
         )
