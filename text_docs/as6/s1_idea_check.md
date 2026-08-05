@@ -118,7 +118,19 @@ Genuinely useful despite the weak pool — stage and verify via `lit-review-loop
 
 Run in a fresh hostile-reviewer context per the workflow's idea-check rigor checklist, precisely because cspaper does not do this job. **It overturns the routing.** Its three fatal-as-scoped objections, with the two load-bearing factual claims verified before being accepted:
 
-**① The empty middle — fatal, and it is built from our own pilot data.** LlamaGuard-3-8B is a fine-tune of Llama-3.1-8B. AS-5's phase-0 pilot measured that base at decode-and-restate similarity **0.03–0.30 across all twelve cipher rungs** — it cannot read them. WildGuard is Mistral-7B-based, older and weaker. So:
+> ## ⚠️ OBJECTION ① IS BUILT ON A FALSE PREMISE — RETRACTED 2026-08-05
+>
+> **The "0.03–0.30 across all twelve cipher rungs" figure below is wrong**, and it is the load-bearing fact of this objection, of the reject-as-scoped routing, and of the S0 reshape that followed. Recomputed directly from `outputs/runs/phase0/*/cells.jsonl` (see the corrected bullet in `CLAUDE.md`):
+>
+> | rung | Llama mean sim | Llama ≥0.75 | Qwen mean sim | Qwen ≥0.60 |
+> |---|---|---|---|---|
+> | ten true ciphers (base64, base32, rot13, caesar3/7, atbash, vigenere, morse, binary, ascii_decimal) | 0.03–0.24 | **0/100** | 0.19–0.30 | **0/100** |
+> | **`hex`** | **0.790** | **72/100** | 0.484 | 25/100 |
+> | **`unicode_escape`** | **0.699** | **53/100** | 0.465 | 23/100 |
+>
+> The stated range excluded exactly the two rungs that break it. Spot-checked `hex` restatements are genuine near-verbatim decodes (sim 0.981 recovering the plaintext exactly), which the then-current `exact or contains` ability binary scored `ability=False`, `regime=R` on a one-word slip. **The middle is not empty — a five-point decode gradient (0 → 53 → 72 → 78 → 99 per 100) already sits on disk at n=100 per point.** Objection ① therefore falls, and with it the sole rationale for the capability implant. The rest of this section is kept as the record of how the error propagated; do not cite its numbers.
+
+**① The empty middle — fatal, and it is built from our own pilot data.** *(PREMISE FALSE — see the retraction box above.)* LlamaGuard-3-8B is a fine-tune of Llama-3.1-8B. AS-5's phase-0 pilot measured that base at decode-and-restate similarity **0.03–0.30 across all twelve cipher rungs** — it cannot read them. WildGuard is Mistral-7B-based, older and weaker. So:
 - **Cipher band: the decode link is empty by construction.** Every failure is trivially "can't". No (B) cell to attribute.
 - **Surface band: no decoding is required.** Zero-width, homoglyph, fullwidth, combining marks, tag block *are* plaintext modulo the tokenizer. "Did the guard decode it" degenerates into "did the tokenizer preserve it" — answerable in milliseconds with no forward pass, no probe, no GPU.
 

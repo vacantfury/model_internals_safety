@@ -36,7 +36,7 @@ RQ3 is the one that makes this a paper rather than a measurement. If two guards 
 
 This is the most important design inheritance, and it inverts a null result into an asset.
 
-AS-5's phase-0 pilot found the **twelve cipher rungs inert at 7–9B**: ability ≈ 0, mean decode-and-restate similarity 0.03–0.30, map uniformly (R). For AS-5 that band is *uninformative* — "can't, didn't, or wouldn't?" has one answer there, `can't`, and the interesting distinctions are unmeasurable.
+AS-5's phase-0 pilot found the **twelve cipher rungs inert at 7–9B**: ability ≈ 0, mean decode-and-restate similarity 0.03–0.30, map uniformly (R). **[FALSE — corrected 2026-08-05: only TEN are inert; `hex` (0.790 mean, 72/100) and `unicode_escape` (0.699, 53/100) are readable on Llama. See `s0_reshape.md` §1 and §5.2.]** For AS-5 that band is *uninformative* — "can't, didn't, or wouldn't?" has one answer there, `can't`, and the interesting distinctions are unmeasurable.
 
 **For AS-6 the identical finding is a positive result.** The guards are the same scale (both 32 × 4096, 7–8B class). If they also cannot decode the cipher band, then "the guard never decoded it" is not a dead cell — it is *the answer to RQ1 on that band*, and it says the repair for those rungs is decode-side (a pre-decoder, as DecipherGuard built) rather than boundary-side. The rungs AS-5 must discard are rungs AS-6 can report.
 

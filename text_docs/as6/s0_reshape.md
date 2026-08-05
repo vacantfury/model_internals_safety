@@ -6,9 +6,11 @@
 
 ---
 
-## 1. What failed, in one paragraph
+## 1. What failed, in one paragraph — ⚠️ ITSELF FALSE, RETRACTED 2026-08-05
 
-The object cut (AS-5 measures the chain inside the *target*, AS-6 inside the *defense*) survived review untouched. The **scoping** failed: we planned to *observe* whether a guard decodes an encoded payload, across AS-5's ladder. At 8B that ladder has no usable middle. LlamaGuard-3-8B is a fine-tune of Llama-3.1-8B, which AS-5's own pilot measured at 0.03–0.30 decode-and-restate similarity across all twelve cipher rungs — it cannot read them, so every failure there is trivially "can't". The surface band (`zero_width`, `homoglyph`, `fullwidth`, `combining_marks`, `tag_block`) is plaintext modulo the tokenizer, so nothing needs decoding and "did it decode?" is answerable without a forward pass. Undefined on one side, trivial on the other. Compounding it, a correlational probe cannot separate *never decoded* from *decoded but unused* — that gap is the textbook description of distribution shift (Wei et al., NeurIPS 2023, "mismatched generalization").
+> **The premise of this section is wrong, verified against our own data.** `hex` (Llama mean sim 0.790, 72/100 above threshold) and `unicode_escape` (0.699, 53/100) are cipher-band rungs and are substantially readable; only **ten** of the twelve are inert. The "0.03–0.30 across all twelve" figure excluded the two rungs that break it. **The middle cell was never empty**, so the capability implant below was designed to manufacture a condition the pilot already measured — at n=100 per point, on disk, paid for. See `CLAUDE.md`'s corrected bullet and §5.2. Kept as the record of the error; the paragraph below is superseded.
+
+The object cut (AS-5 measures the chain inside the *target*, AS-6 inside the *defense*) survived review untouched. The **scoping** failed: we planned to *observe* whether a guard decodes an encoded payload, across AS-5's ladder. At 8B that ladder has no usable middle. LlamaGuard-3-8B is a fine-tune of Llama-3.1-8B, which AS-5's own pilot measured at 0.03–0.30 decode-and-restate similarity across all twelve cipher rungs — it cannot read them, so every failure there is trivially "can't". The surface band (`zero_width`, `homoglyph`, `fullwidth`, `combining_marks`, `tag_block`) is plaintext modulo the tokenizer, so nothing needs decoding and "did it decode?" is answerable without a forward pass. Undefined on one side, trivial on the other. Compounding it, a correlational probe cannot separate *never decoded* from *decoded but unused* — that gap is the textbook description of distribution shift (Wei et al., NeurIPS 2023, "mismatched generalization"). **[The first three sentences after "At 8B" are the false part; the distribution-shift objection in the last sentence stands and is unaffected.]**
 
 ## 2. The reshape — make decode ability a controlled variable
 
@@ -124,8 +126,77 @@ So the strongest available framing is no longer "we manufacture the middle cell.
 
 **Bib debt:** ~20 new entries to stage in the science repo's `literature/model-internals/references.bib` as CANDIDATE. Deferred to one pass after all sweeps land, to avoid duplicate entries — the remaining checks are also literature-bearing. One item in the sweep is flagged UNVERIFIED by the agent (Wu, Kambhatla & Sarkar, ALW2 2018 — PDF extraction failed); it stays UNVERIFIED.
 
-### 5.2 Hostile review of this reshape — *in flight*
+### 5.2 Hostile review of this reshape — RETURNED 2026-08-05. Verdict: **reject as scoped. The reshape relocates the v1 objections into a training run rather than defeating them.**
 
-### 5.3 Feasibility and cost — *in flight*
+**Finding 0 — the premise is false against our own data.** Verified independently by this session before acceptance (`outputs/runs/phase0/*/cells.jsonl`, spot-checked restatements, `scripts/rescore_ability.py`). Recorded in §1's retraction box and corrected in `CLAUDE.md`. **This alone removes the reshape's entire rationale**: the middle cell exists natively, so no intervention is needed to create it.
 
-*Any FATAL finding routes back to S0 again or to kill; the owner's paper-count decision governs a second reshape.*
+**Finding 1 — THE KILL SHOT, and it is the sharpest objection anyone has raised in this arc.** The implant grants decode **ability** under a *decode prompt*. The paper needs decode **deployment** — decoding that happens inside the *classification* forward pass. Our own `measurements/ability.py` docstring already states the distinction and indicts the design: *"It is not evidence that the model decoded anything during an attack. It runs a different prompt in a different forward pass… the (D) regime is precisely the gap between the two."* So a post-implant guard that still emits `safe` is **(D) didn't decode**, not **(B) decoded and complied** — the implant manufactures the cell AS-5's whole instrument exists to separate *out*. And the squeeze closes: the only way to implant *deployment* is to train decoding inside the safety task, which is one step from the safety-label contamination §2.1 step 2 forbids.
+
+**Finding 2 — step 1 of the method is un-runnable on the object of study.** Llama Guard 3's chat template hard-wires the classification task and ends *"First line must read 'safe' or 'unsafe'."* (verified from the shipped `tokenizer_config.json` by both reviewers independently). There is no in-distribution channel through which a guard can be asked to restate anything — it answers `safe`. So "verify a guard cannot read E" cannot be done with the AS-5 instrument "reused unchanged", and in fact our premise was inferred from the *base* model's numbers — exactly the "predictable without opening the guard" error the v1 rejection condemned.
+
+**Finding 3 — the control table controls the probe and never the intervention.** For a paper whose whole claim is that the intervention is causal, that is backwards. Both arms are confounded: the null arm by ordinary fine-tuning erosion (Qi et al., ICLR 2024/2025 — alignment is concentrated in the *first output tokens*, and a guard's verdict **is** a first-token behaviour, so a decode implant perturbs precisely that shallow locus for reasons unrelated to capability); the positive arm by the LoRA moving E-encoded inputs onto the training manifold, which is a distribution-shift statement. Also flagged: a guard trained to emit decoded plaintext **is a decode oracle** — we would be building an attack surface.
+
+**Finding 4 — the collapse objection is NOT defeated.** §2.1 claimed the intervention defeats it. It does not: the claim needs an **exclusion restriction** — that ΔW affects the verdict *only* through decoding — and nothing establishes it while the erosion literature says it is false. LoRA is a low-rank perturbation spread across layers, not an added decode module. Deeper: writing the guard as `f = h∘g`, "decoded but not converted" means some functional of `g(x_E)` recovers content while `h`'s functional does not use it — and `h` was trained on `g(x_plain)`. **Our decomposition is a special case of mismatched generalization, not a rival to it.** The one escape — define conversion by the model's *own* verdict-token readout rather than an arbitrary probe — is occupied by Zhou et al.'s Logit Grafting.
+
+**Finding 5 — the double dissociation has two near-certain positive arms.** Injecting a harm direction flips verdicts in essentially any model; ablating one degrades any classifier. Without pre-registered *magnitude matching* (inject at exactly the strength observed on plaintext) it is two sanity checks wearing the word "dissociation". Fragile on our own evidence too: `measurements.yaml` records Llama/`zero_width` harmfulness probe at max AUROC **0.6167, permutation p = 0.2637 → NOT licensed**, on the flagship rung of the comprehension band.
+
+**Finding 6 — the null claims are underpowered by construction, and power is not purchasable with GPU.** Against the corpora on disk:
+
+| paired n | tightest supportable equivalence margin (80% power, α=.05) |
+|---|---|
+| 100 (JBB matched) | **±7.9 pp** (±10.8 after Bonferroni ×10) |
+| 240 (HarmBench) | ±5.1 pp (±7.0 corrected) |
+| 340 (pooled) | ±4.3 pp (±5.9 corrected) |
+
+**The effect being declared absent is the (B) cell itself, measured at 3–13 per 100 — so at n=100 the equivalence bound is wider than the effect.** And buying power costs the control that licenses measurement #2: HarmBench has no theme-matched benign set, which is precisely what `conf/pilot.yaml` says stops the content probe separating on topic. §2.2's "the nulls carry the evidence" is dead.
+
+**Repo defects it surfaced (all verified by this session):** the false premise in four documents · `rescore_ability.py` self-check now RED (74/1500) · `CLAUDE.md` stale on both instrument fixes and on "verified offline". All corrected this session except the re-baseline, which is filed.
+
+### 5.3 Feasibility and cost — RETURNED 2026-08-05. Verdict: **compute is a non-issue; the encoding choice was wrong; two identification defects confirmed independently.**
+
+**Compute is roughly an order of magnitude from binding.** r=256 all-linear LoRA on 8B ≈ 25–34 GB, fits H200-141GB and A100-80GB (not A100-40GB). A 20k×3-epoch run ≈ **0.7–1.7 GPU-h on H200**. **Important correction to my own brief:** the pilot's ~4.5 h / ~8 h figures are *not* a valid prior — they absorb per-layer activation dumps, unbatched `generate`, and synchronous judge calls. Do not carry the 2–4× pessimism factor into a training loop.
+
+**The crux has a published answer at our exact scale, and it inverts the encoding choice.** Guo, Sleight & Roger, *All Code, No Thought* (2510.09714), fine-tuned Qwen2.5-3B/7B/14B on 28 ciphers and measured translation separately from reasoning-in-cipher:
+
+| cipher | 7B BLEU (fluency bar = 50) | 7B reasoning retention |
+|---|---|---|
+| Caesar / rot13 | **83.9 / 85.6** | 57.4% / 56.6% |
+| Morse | 50.5 (*on* the bar) | 25.7% |
+| **base64** | **47.3 — below the bar** | **2.6%** |
+
+base64's 1.4 → 47.3 → 89.0 curve across 3B→7B→14B is the sharpest in the table and its knee is *inside* 7–14B. **Ranking: Caesar-7 → Morse → base64**, and start at shift 7 not 3 (shift-3 is pretraining-contaminated: 4/6 models spontaneously assume it). Corroborated by Youstra et al. — "smaller models such as Llama 3.1-8B-instruct prove insufficient for cipher-based attacks" — and by Halawi, where GPT-3.5 stayed near chance on the identical recipe that took GPT-4 to 80.5%.
+
+**Reported against itself, which is why I trust it:** the reviewer's a-priori tokenizer census predicted morse should win (7.89× inflation but only 17 distinct pieces) and it does not — pretraining prevalence and structure preservation dominate tokenizer alignment (Guo et al. fit 4-gram frequency to accuracy at R²=0.906). The census did validate one free lever: writing ciphertext as `h|e|l|l|o` collapses caesar3 from 104 chaotic pieces to 36 clean per-character tokens.
+
+**Two identification defects, converging with §5.2:** (a) *you cannot ask Llama Guard 3 to decode anything* — same finding as §5.2's Finding 2, reached independently; proposed fix is on-thesis: **measure decode ability by probe on the residual stream, not by generation** (we already have `probes/linear.py` and `measurements/deployment.py`). (b) *the step-3→step-4 inference is not identified* — needs a **random-bijection control adapter** (same format, same token budget, arbitrary mapping; if verdicts move under *this*, the effect isn't decode capability), encoded-benign prompts, a held-out E′, and `disable_adapter()` as an exact zero-drift baseline on the same weights.
+
+**A genuinely useful instrument it found:** Meta's own model card defines the classifier score as the **first-token probability**, and `safe`/`unsafe` are single tokens (19193 / 39257). So `P(first token = "unsafe")` is a continuous, format-independent degradation signal readable in **one forward pass, no generation** — it separates "format broke" from "verdict moved", and no prior work uses it.
+
+**Format survival is less bleak than §5.1 suggested.** NVIDIA Aegis (2404.05993) LoRA-fine-tuned Llama Guard with a *fully replaced 22-category taxonomy* and off-policy performance was flat-to-improved (ToxicChat AUPRC 0.664 → 0.703); Meta ships guard fine-tuning recipes in `llama-cookbook`. Note also that 2605.02914's *behavioural* metric is unusable (keyword "refusal rate" over n=20, with unmodified Llama Guard scoring 90% "ambiguous" at baseline — evidence the template was not applied); its judged-ASR half is credible. **Cite it, but do not over-weight it — §5.1 did.**
+
+**Cost, in approval-gate format, for the cheapest decisive test:** 1 × H200-141GB · **$0.00** (no judge needed at any point — decode scoring is deterministic, guard verdicts are the guard's own logits) · **30–45 min** single point, **1.0–1.5 h** as a 3-point learning curve at 1k/4k/16k. Full experiment if it passes: ~13 runs × 1.5–3 h = **20–40 GPU-h, $0–5, 2–4 days calendar** (queue-dominated).
+
+**New scoop risk, published 2026-08-04 — one day old:** **arXiv 2608.03201** — refusal-cue shortcut in LlamaGuard3/Qwen3Guard, mitigated by suppressing specific attention heads and MLP neurons. Squarely on the AS-6 guard-internals line. Also **2508.17158** (CIFR, Anthropic-affiliated): ciphers + LoRA + probes on internal activations, >99% detection generalizing to unseen cipher families — the nearest prior work to the whole AS-5/AS-6 thesis, and it appears nowhere in `CLAUDE.md`.
+
+**Unverified, flagged by the reviewer:** A100-80GB's 312 TFLOPS dense BF16 (search budget exhausted) · whether Llama Guard 3's template emits a leading `\n\n` before the verdict token — **must be tested empirically before building any first-token-probability instrument**, it silently changes which token you read · WildGuard licence acceptance inferred from download success · `conf/cost.yaml` labels the H200 profile 144 GB; actual is 141 GB.
+
+---
+
+## 6. Route decision — S0 again, and the expensive path is NOT the one to take first
+
+**All three checks converge on the same conclusion from different directions: the implant is the wrong next move, and the cheap measurement nobody has made is sitting on disk.**
+
+The implant was invented to manufacture a middle cell that (Finding 0) already exists; it cannot deliver decode *deployment* (Finding 1), which is the quantity the paper needs; its first method step is un-runnable on a guard (Finding 2, found twice independently); its evidence rests on nulls that are underpowered by construction (Finding 6); and its headline result was published on a generator in ICML 2024 (§5.1). Meanwhile the encoding it assumed (base64) is below the learnability bar at 8B (§5.3).
+
+**The route: keep AS-6's object cut, drop the implant to a conditional phase 2, and lead with the free measurement.**
+
+**Phase 1 — forward passes only, no training, $0, hours not days.** Three steps, in order:
+1. **Correct the premise and re-baseline** the cached cells against the fixed instrument, so `rescore_ability.py` goes green again. *(Blocks everything; also owed to AS-5.)*
+2. **Measure the guards' actual decode ability by residual-stream probe**, not generation — the only method that works through a format-locked template, and it reuses `probes/linear.py`. This has never been measured for any guard.
+3. **Stratify within a rung by per-prompt decode success and compare verdicts.** `unicode_escape` (53/100) and `hex` (72/100) on Llama are the natural strata. **Surface form is held constant, so characters-per-token is constant, which kills the Broken-Token null model for free** — the control the reshape had to buy with a placebo arm comes free here.
+
+**Phase 2 — the implant, conditional on phase 1 and re-scoped if it runs:** Caesar-7 not base64; kill test on the *base* model first (~30–45 min) to isolate "is the capability implantable?" from "does the guard's format survive?"; dose-response over checkpoints rather than a single before/after switch; random-bijection control adapter; `P(unsafe)` first-token probability as the degradation signal; Halawi et al. named as the parent.
+
+**What this costs us:** the paper stops being "we causally created the middle cell" and becomes "we measured decode-versus-enforcement inside guards, on a gradient that exists natively." That is a smaller claim and a much more defensible one, and per §5.2 the guard-internals-under-encoded-input question is **confirmed open** — Zhou et al. contains zero occurrences of guard model / Llama Guard / WildGuard.
+
+**Owner decision this needs (not a session call):** phase 1 is cheap enough to run without a gate, but whether AS-6 continues at all while AS-5 is mid-flight — and whether it joins the 8/12 AIA abstract registration — is the paper-slot decision, which is sovereign.
