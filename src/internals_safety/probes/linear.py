@@ -38,16 +38,64 @@ the *gap* between the harmful and benign rates, which the pilot reports.
 
 from __future__ import annotations
 
+import functools
 from dataclasses import dataclass
+from typing import Callable, TypeVar
 
 import numpy as np
 import torch
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedKFold, cross_val_predict, train_test_split
+from threadpoolctl import threadpool_limits
 
 from internals_safety.config import ProbeConfig
 from internals_safety.models.capture import ActivationBatch
+
+_T = TypeVar("_T")
+
+
+def single_threaded_blas(function: Callable[..., _T]) -> Callable[..., _T]:
+    """Pin BLAS to one thread for the duration of `function`.
+
+    ## This is not a micro-optimisation; it is the difference between a run that
+    ## finishes and a run that hits the wall.
+
+    Every probe fit here is a *small* problem — 140 x 4096, a few dozen lbfgs
+    iterations, each dominated by matrix-vector products. Multi-threaded BLAS
+    parallelises those by splitting work across threads and synchronising at
+    every call. At this size the synchronisation costs far more than the
+    arithmetic saves, so throughput collapses as threads are added.
+
+    Measured on the cluster's real cached activations (Llama-3.1-8B,
+    plain-harmful vs plain-harmless, one layer, shuffled labels — the exact
+    workload the permutation null runs):
+
+        OMP_NUM_THREADS=1     118 ms/fit     ->  12.5 min per rung
+        OMP_NUM_THREADS=4   3,500 ms/fit     ->   6.2 h  per rung
+        OMP_NUM_THREADS=8   3,680 ms/fit     ->   6.5 h  per rung
+
+    **Single-threaded is 31x faster than the 8 threads an 8-CPU allocation gets
+    by default.** The 2026-08-05 comprehension-band sweep was killed at the 8 h
+    wall having finished one rung of seven, with `sacct` reporting 2d14h of CPU
+    time over an 8 h wall — all eight cores saturated, doing almost nothing.
+    That is the signature this decorator exists to prevent.
+
+    Why a decorator on the entry points rather than `_fit`: `crossval_scores`
+    fits through sklearn's own `cross_val_predict`, which never calls `_fit`, so
+    a choke-point wrapper would miss it. Pinning at the entry points also pays
+    the (small) threadpoolctl overhead once per sweep instead of once per fit.
+
+    Scope is deliberately narrow — `user_api="blas"`, and only around probe
+    fitting. Torch's GPU work and its own CPU thread pool are untouched.
+    """
+
+    @functools.wraps(function)
+    def wrapper(*args, **kwargs) -> _T:
+        with threadpool_limits(limits=1, user_api="blas"):
+            return function(*args, **kwargs)
+
+    return wrapper
 
 
 @dataclass(frozen=True)
@@ -87,6 +135,7 @@ def _auroc(model: LogisticRegression, features: np.ndarray, labels: np.ndarray) 
     return float(roc_auc_score(labels, model.decision_function(features)))
 
 
+@single_threaded_blas
 def fit_probe(
     features: torch.Tensor, labels: torch.Tensor, config: ProbeConfig
 ) -> tuple[LogisticRegression, float, float]:
@@ -112,6 +161,7 @@ def fit_probe(
     return model, auroc, control_auroc
 
 
+@single_threaded_blas
 def probe_sweep(
     positive: ActivationBatch, negative: ActivationBatch, config: ProbeConfig
 ) -> list[ProbeResult]:
@@ -160,6 +210,7 @@ class TransferScores:
     negative_scores: np.ndarray
 
 
+@single_threaded_blas
 def probe_transfer_detail(
     train_positive: ActivationBatch,
     train_negative: ActivationBatch,
@@ -206,6 +257,7 @@ def probe_transfer_detail(
     )
 
 
+@single_threaded_blas
 def probe_transfer(
     train_positive: ActivationBatch,
     train_negative: ActivationBatch,
@@ -222,6 +274,7 @@ def probe_transfer(
     return detail.transfer_auroc, detail.control_auroc
 
 
+@single_threaded_blas
 def crossval_scores(
     positive: ActivationBatch,
     negative: ActivationBatch,
@@ -285,6 +338,7 @@ def best_by_auroc(results: list[ProbeResult]) -> ProbeResult:
     return max(results, key=lambda result: (result.auroc if result.auroc == result.auroc else -1))
 
 
+@single_threaded_blas
 def permutation_null_max_auroc(
     positive: ActivationBatch,
     negative: ActivationBatch,
@@ -316,10 +370,15 @@ def permutation_null_max_auroc(
     selection over layers is inside the null rather than unaccounted for. That is
     family-wise error control by construction.
 
-    Cost, measured rather than assumed: one `LogisticRegression` fit at the
-    phase-0 shape (200 x 4096) is ~13 ms, so one permutation over 33 layers is
-    ~0.2 s and the configured default is minutes across the whole ladder — a few
-    percent of a run that already spends 18-37 min per rung on generation.
+    Cost — the first figure here was WRONG and cost a sweep. It read "~13 ms per
+    fit, minutes across the whole ladder", measured on synthetic well-conditioned
+    data rather than on activations. On the real cached tensors a shuffled-label
+    fit is **118 ms** single-threaded, so this null is ~12.5 min per rung and
+    ~1.5 h across a 7-rung band — real, budgetable, and roughly 30x the estimate.
+
+    Unpinned it is far worse: see `single_threaded_blas`, without which the same
+    null costs 6.5 h per rung and will not fit inside an 8 h wall. This function
+    is decorated accordingly; do not remove it to "parallelise".
     """
     if positive.layers != negative.layers:
         raise ValueError("both classes must be captured at the same layers")
@@ -354,6 +413,7 @@ def permutation_null_max_auroc(
     return maxima
 
 
+@single_threaded_blas
 def permutation_null_max_transfer_auroc(
     train_positive: ActivationBatch,
     train_negative: ActivationBatch,

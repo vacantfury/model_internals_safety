@@ -34,6 +34,7 @@ from internals_safety.probes.directions import (
     projection_scores,
     sweep_directions,
 )
+from internals_safety.probes import linear
 from internals_safety.probes.linear import probe_sweep, probe_transfer
 from internals_safety.probes.overlap import (
     decision_threshold,
@@ -355,3 +356,50 @@ class TestPermutationLicensing:
         assert not result.meets_effect_size_bar, "and must still read as weak"
         assert result.observed_max_auroc < result.threshold
         assert result.p_value < 0.05
+
+
+class TestBlasPinning:
+    """Regression, 2026-08-05: the sweep that died at the 8 h wall.
+
+    Multi-threaded BLAS on these small (140 x 4096) fits is catastrophically
+    slower than single-threaded — 3,680 ms vs 118 ms per fit, measured on the
+    cluster's real activations. The 8-CPU allocation gave BLAS 8 threads by
+    default, which turned a ~12 min permutation null into a ~6.5 h one and
+    finished one rung of seven in eight hours.
+
+    These tests pin the FIX in place, because the failure is invisible locally:
+    everything still returns correct answers, just ~31x slower.
+    """
+
+    ENTRY_POINTS = [
+        "fit_probe",
+        "probe_sweep",
+        "probe_transfer_detail",
+        "probe_transfer",
+        "crossval_scores",
+        "permutation_null_max_auroc",
+        "permutation_null_max_transfer_auroc",
+    ]
+
+    @pytest.mark.parametrize("name", ENTRY_POINTS)
+    def test_every_fitting_entry_point_pins_blas(self, name):
+        function = getattr(linear, name)
+        assert getattr(function, "__wrapped__", None) is not None, (
+            f"{name} fits probes but is not wrapped by single_threaded_blas; "
+            "unpinned it costs ~31x more CPU and will miss the cluster wall"
+        )
+
+    def test_the_pin_is_actually_applied_while_the_body_runs(self):
+        from threadpoolctl import threadpool_info
+
+        seen = {}
+
+        @linear.single_threaded_blas
+        def probe_the_pool():
+            seen["limits"] = {entry["num_threads"] for entry in threadpool_info()
+                              if entry["user_api"] == "blas"}
+
+        probe_the_pool()
+        # No BLAS backend visible in this environment is not a failure of the
+        # decorator; a backend visible and NOT pinned to 1 is.
+        assert seen["limits"] <= {1}

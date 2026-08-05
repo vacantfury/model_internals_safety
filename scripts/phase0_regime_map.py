@@ -64,6 +64,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from dataclasses import asdict, dataclass
@@ -441,15 +442,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     raw_path = directory / "cells.jsonl"
+    partial_path = directory / "summaries.partial.jsonl"
     summaries = []
     # Gather-and-cover: conf/cost.yaml's throughput numbers are assumptions with
     # exactly one tuning path — a real run measuring them. Timing the sweep is
     # what makes the next phase's estimate a measurement instead of a guess, so
     # the instrumentation ships with the knob rather than after it.
     started = time.perf_counter()
-    with raw_path.open("w", encoding="utf-8") as handle:
+    # CHECKPOINT PER FAMILY (2026-08-05). Both are cheap and both were earned by
+    # a real loss: the comprehension-band sweep was killed at the 8 h wall having
+    # COMPLETED `zero_width` on two models, and recovered nothing — `cells.jsonl`
+    # was 0 bytes because Python's buffer had not filled, and `results.json` is
+    # only written after the loop. A rung that finished must survive the job that
+    # did not, or every wall-clock kill silently re-buys work already paid for.
+    with raw_path.open("w", encoding="utf-8") as handle, partial_path.open(
+        "w", encoding="utf-8"
+    ) as partial_handle:
         for family in families:
             print(f"\n=== {family}", flush=True)
+            family_started = time.perf_counter()
             result = run_family(
                 loaded,
                 ladder[family],
@@ -465,8 +476,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             for cell in result["cells"]:
                 handle.write(json.dumps(cell, ensure_ascii=False) + "\n")
-            summaries.append(result["summary"])
+            # flush + fsync: a SIGKILL at the wall does not run buffers out, and
+            # on a networked scratch filesystem a flush alone can still sit in
+            # the page cache.
+            handle.flush()
+            os.fsync(handle.fileno())
+            summary = result["summary"]
+            summary["elapsed_seconds"] = round(time.perf_counter() - family_started, 1)
+            summaries.append(summary)
+            partial_handle.write(json.dumps(summary, ensure_ascii=False) + "\n")
+            partial_handle.flush()
+            os.fsync(partial_handle.fileno())
             print(result["regime_map"], flush=True)
+            print(f"    ({summary['elapsed_seconds'] / 60:.1f} min)", flush=True)
     elapsed_seconds = time.perf_counter() - started
 
     # Budgeted, not observed: token-exact accounting would need the tokenizer

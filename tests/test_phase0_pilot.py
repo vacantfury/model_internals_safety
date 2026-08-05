@@ -280,6 +280,22 @@ class TestMain:
         assert len(lines) == 12  # 6 prompts x 2 families
         assert {json.loads(line)["family"] for line in lines} == {"base64", "rot13"}
 
+    def test_a_completed_family_survives_a_job_that_never_finishes(self, run):
+        """Regression, 2026-08-05. The comprehension-band sweep was killed at the
+        8 h wall having COMPLETED `zero_width` on both models and recovered
+        nothing: `cells.jsonl` was 0 bytes (Python's buffer had not filled) and
+        `results.json` is only written after the family loop. Eight GPU-hours of
+        finished work were unrecoverable.
+
+        So every family checkpoints as it completes. This asserts the per-family
+        record exists and carries the timing the cost model needs; the fsync that
+        makes it survive a SIGKILL cannot be tested in-process, which is exactly
+        why the flush must never be quietly dropped."""
+        partial = run / "summaries.partial.jsonl"
+        rows = [json.loads(line) for line in partial.read_text().splitlines()]
+        assert [row["family"] for row in rows] == ["base64", "rot13"]
+        assert all(row["elapsed_seconds"] >= 0 for row in rows)
+
     def test_the_record_times_itself_for_the_next_cost_estimate(self, run):
         """conf/cost.yaml's throughput ranges span ~4x because no run has
         measured them yet. This is the instrumentation that closes that: the

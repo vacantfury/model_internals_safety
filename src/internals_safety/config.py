@@ -139,10 +139,19 @@ class ProbeConfig(StrictModel):
     # cells. Both numbers below are ordinary statistical conventions rather than
     # tuned knobs, which is the point — the old 0.70 was neither.
     #
-    # Cost is measured, not assumed: ~13 ms per fit at the phase-0 shape, so 200
-    # draws over 33 layers is ~1 min per (rung, position) and minutes across the
-    # ladder. Raising it buys p-value resolution (the floor is 1/(n+1)), nothing
-    # else.
+    # Cost, RE-measured 2026-08-05 after the first estimate proved wrong by ~30x
+    # and killed a sweep at the wall. The "~13 ms per fit" recorded here was
+    # taken on synthetic well-conditioned data; on the cluster's REAL cached
+    # activations a shuffled-label fit is 118 ms single-threaded, so 200 draws
+    # over 32 layers is ~12.5 min per rung — ~1.5 h across a 7-rung band, not
+    # "minutes across the ladder".
+    #
+    # That figure holds ONLY with BLAS pinned to one thread
+    # (`probes.linear.single_threaded_blas`). Unpinned on an 8-CPU allocation the
+    # same fit takes 3,680 ms and the same 200 draws take 6.5 h per rung. Any
+    # change to this number must be costed against the pinned figure.
+    #
+    # Raising it buys p-value resolution (the floor is 1/(n+1)), nothing else.
     n_permutations: int = 200
     alpha: float = 0.05
     # Folds for the out-of-sample per-example scoring measurement #3 needs
