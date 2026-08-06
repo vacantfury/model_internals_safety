@@ -553,3 +553,108 @@ def permutation_p_value(observed: float, null_maxima: np.ndarray) -> float:
     if null_maxima.size == 0:
         return float("nan")
     return float((np.sum(null_maxima >= observed) + 1) / (null_maxima.size + 1))
+
+
+# ---------------------------------------------------------------------------
+# Control 2 of the two that gate any I5/I6 claim: control-task selectivity
+# (Hewitt & Liang, EMNLP 2019). Build plan §4 lists it as NOT BUILT, defeating
+# "probe capacity memorising rather than reading".
+#
+# ⚠️ MEASURED DEGENERATE IN THIS REGIME (2026-08-06). Implemented anyway, and
+# the implementation is what proves it — see `ControlTaskSelectivity`.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ControlTaskSelectivity:
+    """Hewitt & Liang selectivity, with the check that it means anything here.
+
+    **Their construction.** Assign a RANDOM label to each input, fit the same
+    probe on that control task, and report `selectivity = real - control`. A
+    probe that scores well on both is memorising rather than reading, and their
+    prescription is to choose probe capacity to maximise selectivity.
+
+    **Why it does not transfer to us, measured rather than argued.** Their
+    control task assigns a random label per WORD TYPE, so the same type recurs
+    in train and test and memorisation is visible at test time. Our inputs are
+    one-off continuous activation vectors — nothing recurs, so a random labelling
+    has nothing memorisable that transfers. Measured on a 200x4096 fixture at
+    C = 0.01 / 1.0 / 100.0:
+
+        control-task TRAIN auroc   1.000   1.000   1.000
+        control-task TEST auroc    0.517   0.420   0.483
+
+    Two consequences. (1) `selectivity` reduces to `real_auroc - 0.5` at every
+    capacity, so it carries no information the real AUROC does not, and the
+    capacity sweep their method prescribes has nothing to select on. (2) TRAIN
+    AUROC is 1.000 for ANY labelling at ANY regularisation, because d >> n makes
+    the training set linearly separable regardless — which is fine for held-out
+    evaluation but makes any claim resting on train-set separation vacuous.
+
+    **So this class reports the numbers and flags the degeneracy rather than
+    returning a reassuring one.** `is_degenerate` is what a caller must check
+    before quoting selectivity; the controls that actually do this job in our
+    setting are the shuffled-label control in `fit_probe`, the length null, and
+    the ability-0 floor.
+    """
+
+    real_auroc: float
+    control_task_train_auroc: float
+    control_task_test_auroc: float
+    regularization_c: float
+
+    @property
+    def selectivity(self) -> float:
+        return self.real_auroc - self.control_task_test_auroc
+
+    @property
+    def is_degenerate(self) -> bool:
+        """True when the control task carries no information.
+
+        Held-out control-task AUROC at chance means a random labelling did not
+        transfer, so selectivity is the real AUROC shifted by a constant. The
+        band is deliberately generous: anything inside it is chance at the sample
+        sizes we run.
+        """
+        return abs(self.control_task_test_auroc - 0.5) < 0.10
+
+    @property
+    def memorises_the_training_set(self) -> bool:
+        """True when the probe fits an arbitrary labelling perfectly in-sample.
+
+        Expected whenever d >> n, which is every rung we run. Recorded so that a
+        train-set number can never be quoted as evidence.
+        """
+        return self.control_task_train_auroc > 0.99
+
+
+@single_threaded_blas
+def control_task_selectivity(
+    features: torch.Tensor, labels: torch.Tensor, config: ProbeConfig
+) -> ControlTaskSelectivity:
+    """Fit the real task and a random control task on the same split."""
+    x = _to_numpy(features)
+    y = _to_numpy(labels).astype(int)
+
+    x_train, x_test, y_train, y_test = train_test_split(
+        x, y, test_size=config.test_fraction, random_state=config.seed, stratify=y
+    )
+    real = _auroc(_fit(x_train, y_train, config), x_test, y_test)
+
+    # ONE random labelling used for both halves — their control task, not the
+    # shuffled-TRAIN-labels control `fit_probe` already runs. The two answer
+    # different questions: that one asks whether the signal is in the labels,
+    # this one asks whether the probe could fit any labels at all.
+    generator = np.random.default_rng(config.seed)
+    random_labels = generator.permutation(y)
+    x_train_c, x_test_c, y_train_c, y_test_c = train_test_split(
+        x, random_labels, test_size=config.test_fraction,
+        random_state=config.seed, stratify=random_labels,
+    )
+    control = _fit(x_train_c, y_train_c, config)
+    return ControlTaskSelectivity(
+        real_auroc=real,
+        control_task_train_auroc=_auroc(control, x_train_c, y_train_c),
+        control_task_test_auroc=_auroc(control, x_test_c, y_test_c),
+        regularization_c=config.regularization_c,
+    )

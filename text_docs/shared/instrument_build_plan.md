@@ -714,10 +714,47 @@ Every instrument runs all of these. Not optional, not per-instrument judgment.
 | **Lexical transparency screen** | probes firing on words that were never hidden (`reverse_words`) | validated as a diagnostic; make it a gate |
 | **Lexical decorrelation — XSTest** (scary-but-benign) | firing on alarming vocabulary rather than harm | **NOT built** — import from Kwon 2026 |
 | **Black-box baseline** (P4) | an internals claim a surface classifier would have made | **NOT built** — needed per Pando (arXiv 2604.11061) |
-| **Matched-norm random direction** | steering "working" because you perturbed anything | **NOT built** — needed before any I5/I6 claim |
-| **Control task / selectivity** (Hewitt-Liang style) | probe capacity memorising rather than reading | **NOT built** — see arXiv 2102.12452 |
+| **Matched-norm random direction** | steering "working" because you perturbed anything | **BUILT 2026-08-06** — `causal_license.matched_norm_random_direction` + `random_direction_null` |
+| **Control task / selectivity** (Hewitt-Liang style) | probe capacity memorising rather than reading | **BUILT AND MEASURED DEGENERATE 2026-08-06** — see §4.1 |
 
-The bottom four are build items, filed with the instruments that need them.
+The bottom two are build items, filed with the instruments that need them.
+
+### 4.1 Control-task selectivity does not transfer to this setting (measured 2026-08-06)
+
+Hewitt & Liang (EMNLP 2019) assign a random label per **word type**, so the same
+type recurs across the train/test split and a memorising probe is caught at test
+time. Our probe inputs are one-off continuous activation vectors: nothing
+recurs, so a random labelling has nothing memorisable that transfers. Measured
+on a 200x4096 fixture at three capacities:
+
+| regularisation C | real test AUROC | control-task TRAIN | control-task TEST |
+|---|---|---|---|
+| 0.01 | 0.802 | 1.000 | 0.517 |
+| 1.0 | 0.784 | 1.000 | 0.420 |
+| 100.0 | 0.780 | 1.000 | 0.483 |
+
+Two consequences, both load-bearing:
+
+1. **Selectivity reduces to `real_auroc - 0.5` at every capacity**, so it carries
+   no information the real AUROC does not — and the capacity sweep the method
+   prescribes has nothing to select on, because the control term is pinned at
+   chance.
+2. **Train AUROC is 1.000 for ANY labelling at ANY regularisation**, because
+   d >> n makes the training set linearly separable regardless. Harmless for
+   held-out evaluation, but it means **no claim may ever rest on a train-set
+   number** in this project.
+
+It is implemented anyway — `probes/linear.py::control_task_selectivity` — because
+the implementation is what establishes the above, and `is_degenerate` keys on the
+measurement rather than being hard-coded, so a future setting where the control
+DOES transfer is not silently treated as this one. The controls that actually do
+this job here are the shuffled-label control in `fit_probe`, the length null, and
+the ability-0 floor.
+
+**The general point, which is why this is in the canonical doc rather than a
+commit message:** a control imported from a paper whose input regime differs from
+ours can produce a number that looks like a control and is not one. Porting a
+control requires checking its assumption holds, exactly as porting a method does.
 
 ---
 

@@ -166,3 +166,89 @@ def licenses(
     represented".
     """
     return any(not is_discarded(c, n_layers, config) for c in candidates)
+
+
+# ---------------------------------------------------------------------------
+# Control 1 of the two that gate any I5/I6 claim: the matched-norm random
+# direction. Build plan §4 lists it as NOT BUILT and names what it defeats —
+# "steering 'working' because you perturbed anything".
+# ---------------------------------------------------------------------------
+
+
+def matched_norm_random_direction(
+    direction: torch.Tensor, generator: torch.Generator | None = None
+) -> torch.Tensor:
+    """A random direction with the SAME norm as `direction`.
+
+    **Why matched norm rather than any random vector.** Ablation and activation
+    addition both scale with the magnitude of what is written, so a random vector
+    of arbitrary length tests magnitude rather than direction. Matching the norm
+    holds the one thing that trivially changes behaviour fixed, leaving only the
+    claim actually at issue: that THIS direction is the mechanism, not that
+    perturbing the residual stream by this much does something.
+
+    Drawn from a Gaussian and renormalised rather than uniformly per-coordinate:
+    in high dimensions a Gaussian is the isotropic choice, and anything else puts
+    the null's own structure into the comparison.
+    """
+    norm = float(direction.norm())
+    if norm == 0.0:
+        raise ValueError("cannot match the norm of a zero direction")
+    noise = torch.randn(
+        direction.shape, generator=generator, dtype=torch.float32, device=direction.device
+    )
+    return (noise / noise.norm() * norm).to(direction.dtype)
+
+
+@dataclass(frozen=True)
+class RandomDirectionNull:
+    """The real direction's effect against matched-norm random ones."""
+
+    observed_bypass: float
+    # One bypass score per random direction, from the identical intervention.
+    null_bypass: tuple[float, ...]
+    alpha: float = 0.05
+
+    @property
+    def p_value(self) -> float:
+        """Fraction of random directions bypassing at least as much, +1-smoothed.
+
+        The +1 is the standard permutation correction: with `n` draws the
+        smallest reportable p-value is `1/(n+1)`, never 0, because a null that
+        has never produced an equal value has not proved it cannot.
+        """
+        if not self.null_bypass:
+            return float("nan")
+        at_least = sum(value >= self.observed_bypass for value in self.null_bypass)
+        return (at_least + 1) / (len(self.null_bypass) + 1)
+
+    @property
+    def licensed(self) -> bool:
+        """Fails closed on NaN — an undrawn null licenses nothing."""
+        p = self.p_value
+        return p == p and p <= self.alpha
+
+    @property
+    def margin(self) -> float:
+        """How far the real direction beats the mean random one."""
+        if not self.null_bypass:
+            return float("nan")
+        return self.observed_bypass - sum(self.null_bypass) / len(self.null_bypass)
+
+
+def random_direction_null(
+    observed: CausalEvidence,
+    controls: Sequence[CausalEvidence],
+    alpha: float = 0.05,
+) -> RandomDirectionNull:
+    """Score a real direction against matched-norm random ones.
+
+    `controls` is the SAME causal test run with random directions of matched
+    norm — the caller produces them, because doing so needs a model. This module
+    stays pure scoring, as the rest of it does.
+    """
+    return RandomDirectionNull(
+        observed_bypass=observed.bypass_score,
+        null_bypass=tuple(c.bypass_score for c in controls),
+        alpha=alpha,
+    )
