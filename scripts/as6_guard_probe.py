@@ -436,7 +436,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             flush=True,
         )
 
-    summaries, elapsed_seconds = run_families(
+    summaries, readings, elapsed_seconds = run_families(
         families,
         directory,
         lambda family: run_family(
@@ -471,7 +471,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "cells_path": str(raw_path),
         },
     )
-    path = write_run_record(directory, record)
+    path = write_run_record(directory, record, readings)
     print(f"\nwrote {path}")
     return 0
 

@@ -80,3 +80,85 @@ def test_the_contract_is_the_layer_s_sink():
     """
     for module in PURE_MODULES + INSTRUMENTS:
         assert not sibling_imports(module) & set(INSTRUMENTS)
+
+
+# Modules not yet reachable from any entrypoint, each with the reason it is not.
+# **This list may only ever SHRINK.** `pipeline_architecture.md` §1.4 counted six
+# orphans — 97 tests, all green, none reachable from a run — as one of the four
+# problems the architecture pass existed to fix. A list is what stops that
+# recurring silently: a new orphan fails this test at the moment it is created,
+# rather than being noticed in an audit weeks later.
+DECLARED_ORPHANS = {
+    # I1. Needs one target forward pass per (prompt, layer), so wiring it
+    # changes what a run COSTS — that goes through the approval gate with a
+    # dry-run estimate, never in by default.
+    "measurements.decode_lens",
+    "models.patching",
+    # I3. Needs a lens readout per (prompt, layer). Same reason.
+    "measurements.entropy_dynamics",
+    "models.lens",
+    # I5/I6. Causal write operations; gated on the matched-norm random-direction
+    # control, which is not built.
+    "measurements.causal_license",
+    "models.interventions",
+    # Predates the contract; H4 overlap metric, used from the docs not the spine.
+    "probes.overlap",
+}
+
+
+def reachable_modules() -> set[str]:
+    """Every library module reachable by imports from any script."""
+    from collections import deque
+
+    package = Path(measurements.__file__).parent.parent
+
+    def deps(path: Path) -> set[str]:
+        found: set[str] = set()
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.ImportFrom) or not node.module:
+                continue
+            if not node.module.startswith("internals_safety"):
+                continue
+            module = node.module.removeprefix("internals_safety").lstrip(".")
+            if module:
+                found.add(module)
+            for alias in node.names:
+                candidate = f"{module}.{alias.name}" if module else alias.name
+                if (package / (candidate.replace(".", "/") + ".py")).exists():
+                    found.add(candidate)
+        return found
+
+    seen: set[str] = set()
+    queue: deque[str] = deque()
+    for script in (package.parent.parent / "scripts").glob("*.py"):
+        queue.extend(deps(script))
+    while queue:
+        module = queue.popleft()
+        if module in seen:
+            continue
+        seen.add(module)
+        path = package / (module.replace(".", "/") + ".py")
+        if path.exists():
+            queue.extend(deps(path))
+    return seen
+
+
+def test_no_module_is_an_orphan_except_the_declared_ones():
+    """Every built module is reachable from a run, or declared with its reason.
+
+    An instrument that no entrypoint can reach is not an instrument yet, however
+    well tested. This is the check that turns that from a periodic audit finding
+    into a build failure.
+    """
+    package = Path(measurements.__file__).parent.parent
+    built = {
+        str(path.relative_to(package)).removesuffix(".py").replace("/", ".")
+        for path in package.rglob("*.py")
+        if path.name != "__init__.py"
+    }
+    orphans = built - reachable_modules()
+    assert orphans == DECLARED_ORPHANS, (
+        f"orphan set changed: newly unreachable {sorted(orphans - DECLARED_ORPHANS)}, "
+        f"newly wired {sorted(DECLARED_ORPHANS - orphans)}. If a module was wired, "
+        "delete it from DECLARED_ORPHANS; if one was added, wire it or declare why."
+    )

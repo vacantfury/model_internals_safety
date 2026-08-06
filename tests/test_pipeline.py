@@ -108,8 +108,9 @@ class TestRunPaths:
 
 class TestRunFamilies:
     def test_cells_and_summaries_are_written(self, tmp_path):
-        summaries, elapsed = run_families(["a", "b"], tmp_path, lambda f: cells(f))
+        summaries, readings, elapsed = run_families(["a", "b"], tmp_path, lambda f: cells(f))
         assert [s["family"] for s in summaries] == ["a", "b"]
+        assert readings == []
         assert elapsed >= 0
         rows = [json.loads(line) for line in (tmp_path / "cells.jsonl").read_text().splitlines()]
         assert [row["family"] for row in rows] == ["a", "a", "b", "b"]
@@ -117,7 +118,7 @@ class TestRunFamilies:
     def test_each_summary_is_stamped_with_its_own_elapsed_time(self, tmp_path):
         """Gather-and-cover: conf/cost.yaml's throughput numbers have exactly one
         tuning path, a real run measuring them."""
-        summaries, _ = run_families(["a", "b"], tmp_path, lambda f: cells(f))
+        summaries, _, _ = run_families(["a", "b"], tmp_path, lambda f: cells(f))
         assert all("elapsed_seconds" in summary for summary in summaries)
 
     def test_a_completed_rung_survives_a_crash_in_the_next_one(self, tmp_path):
@@ -144,6 +145,20 @@ class TestRunFamilies:
         ]
         assert [row["family"] for row in partial] == ["a"]
 
+    def test_readings_are_accumulated_across_rungs(self, tmp_path):
+        """A run whose instruments emit verdicts and whose record does not carry
+        them cannot say what it withheld — and that must not be possible in one
+        paper and not the other."""
+        def run_one(family):
+            return {**cells(family), "readings": [reading(instrument=f"probe_{family}")]}
+
+        _, readings, _ = run_families(["a", "b"], tmp_path, run_one)
+        assert [r.instrument for r in readings] == ["probe_a", "probe_b"]
+
+    def test_a_rung_emitting_no_readings_is_fine(self, tmp_path):
+        _, readings, _ = run_families(["a"], tmp_path, lambda f: cells(f))
+        assert readings == []
+
     def test_the_report_callback_receives_the_whole_result(self, tmp_path):
         """Paper-specific printing stays with the paper — AS-5 prints a regime
         map, AS-6 prints decode/null/block lines."""
@@ -152,7 +167,7 @@ class TestRunFamilies:
         assert seen[0]["summary"]["family"] == "a"
 
     def test_no_families_writes_empty_files_rather_than_failing(self, tmp_path):
-        summaries, _ = run_families([], tmp_path, lambda f: cells(f))
+        summaries, _, _ = run_families([], tmp_path, lambda f: cells(f))
         assert summaries == []
         assert (tmp_path / "cells.jsonl").read_text() == ""
 

@@ -292,6 +292,40 @@ class TestMain:
         }
         assert record["seed"] == 0
 
+    def test_the_record_carries_typed_readings_and_what_was_withheld(self, run):
+        """**The proof that the contract is load-bearing, not merely available.**
+
+        A run record that lists three numbers and silently drops the rest is
+        indistinguishable from a run that measured three things. Every
+        instrument's verdict is recorded here with its evidence, and every
+        non-reportable one names why — for a real end-to-end run, not a fixture.
+        """
+        record = json.loads((run / "results.json").read_text())
+        assert {"readings", "withheld", "n_reportable"} <= set(record)
+
+        # Five instruments per rung x two rungs.
+        instruments = {reading["instrument"] for reading in record["readings"]}
+        assert instruments == {
+            "ability", "behavior", "deployment", "recognition", "trajectory"
+        }
+        # Every reading states how to read its number and whether it was measured.
+        for reading in record["readings"]:
+            assert reading["operating_point"]
+            assert reading["licensed"] in (True, False, None)
+
+    def test_the_two_measurements_without_a_negative_control_are_withheld(self, run):
+        """TODO 37/38, asserted end to end rather than only at the unit level.
+
+        Ability scores a response against its own plaintext and nothing else;
+        the judges never run on the benign-encoded arm. Both must be withheld
+        with a stated reason until those controls exist — if this test ever goes
+        green by accident, a control was added or the bar was lowered.
+        """
+        withheld = json.loads((run / "results.json").read_text())["withheld"]
+        for instrument in ("ability", "behavior"):
+            assert instrument in withheld
+            assert any("no negative control" in why for why in withheld[instrument])
+
     def test_the_record_names_every_activation_cache_it_read(self, run):
         paths = json.loads((run / "results.json").read_text())["activations_path"]
         assert Path(paths["plain_harmful"]).exists()

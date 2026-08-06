@@ -81,11 +81,17 @@ from internals_safety.encodings.base import EncodedPrompt, Encoder
 from internals_safety.encodings.registry import load_ladder
 from internals_safety.judges.harmbench import HarmBenchJudge
 from internals_safety.judges.refusal import RefusalJudge
+from internals_safety.measurements import ability as ability_module
+from internals_safety.measurements import behavior as behavior_module
+from internals_safety.measurements import deployment as deployment_module
+from internals_safety.measurements import recognition as recognition_module
+from internals_safety.measurements import trajectory as trajectory_module
 from internals_safety.measurements.ability import measure_ability
 from internals_safety.measurements.behavior import measure_behavior
 from internals_safety.measurements.deployment import measure_deployment, read_deployment_per_prompt
 from internals_safety.measurements.length_null import measure_length_null
 from internals_safety.measurements.recognition import (
+    HARMFULNESS_POSITION,
     measure_recognition,
     read_recognition_per_prompt,
 )
@@ -403,7 +409,71 @@ def run_family(
             "cache_hits": [harmful_hit, harmless_hit],
         },
     }
-    return {"summary": summary, "cells": cells, "curve": curve, "regime_map": regime_map}
+    # ---- the contract layer -------------------------------------------------
+    # Every instrument's condition-level verdict, with its evidence attached, so
+    # `results.json` carries what was WITHHELD beside what was measured. The
+    # length-null margin is computed against each instrument's own statistic
+    # rather than shared: it is "how far THIS number clears what raw length
+    # alone would produce", and deployment's AUROC and ability's recovery rate
+    # are not on the same scale.
+    ability_summary = ability_module.summarize_by_family(ability_records, measurements.ability)[0]
+    behavior_summary = behavior_module.summarize_by_family(behavior_records)[0]
+    readings = [
+        # No control passed: measurement #1 has none (TODO 37), so this reads
+        # non-reportable and names the reason. Deliberate — see the module.
+        ability_module.reading(
+            ability_summary,
+            length_null_margin=length_null.margin(ability_summary.recovery_rate),
+        ),
+        # Likewise measurement #4 (TODO 38): the judges never run on the
+        # benign-encoded arm, so there is no ASR control to pass.
+        behavior_module.reading(
+            behavior_summary,
+            length_null_margin=length_null.margin(behavior_summary.attack_success_rate),
+        ),
+        deployment_module.reading(curve, length_null_margin=length_margin),
+        recognition_module.reading(
+            recognition_result,
+            length_null_margin=length_null.margin(recognition_result.observed_max_auroc),
+        ),
+    ]
+
+    # I2 — no new forward pass: the curves are already in the captured batches.
+    # Wired here rather than left an orphan, which is what `pipeline_architecture`
+    # §1.4 counted as the problem.
+    trajectory_probe = trajectory_module.fit_trajectory_probe(
+        encoded_harmful_batch,
+        encoded_harmless_batch,
+        HARMFULNESS_POSITION,
+        measurements.probes,
+    )
+    readings.append(
+        trajectory_module.reading(
+            auroc=trajectory_probe.auroc,
+            licensed=trajectory_probe.licensed,
+            control_auroc=trajectory_probe.control_auroc,
+            control_margin=measurements.probes.length_null_min_margin,
+            length_null_margin=length_null.margin(trajectory_probe.auroc),
+            # The feature matrix is fitted whole and licensed by a permutation
+            # null over it; no layer or position is searched over.
+            selection_inside_null=True,
+            blocks=trajectory_probe.blocks,
+            detail={
+                "family": family,
+                "position": trajectory_probe.position,
+                "n_features": trajectory_probe.n_features,
+                "p_value": trajectory_probe.p_value,
+            },
+        )
+    )
+
+    return {
+        "summary": summary,
+        "cells": cells,
+        "curve": curve,
+        "regime_map": regime_map,
+        "readings": readings,
+    }
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -455,7 +525,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     raw_path = directory / "cells.jsonl"
-    summaries, elapsed_seconds = run_families(
+    summaries, readings, elapsed_seconds = run_families(
         families,
         directory,
         lambda family: run_family(
@@ -525,7 +595,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "metrics": {"families": summaries},
         },
     )
-    results_path = write_run_record(directory, record)
+    results_path = write_run_record(directory, record, readings)
 
     # `binding_failure_rate` is None on a rung whose deployment probe never
     # licensed. Those rungs are UNMEASURED, not (B)-empty — reported separately

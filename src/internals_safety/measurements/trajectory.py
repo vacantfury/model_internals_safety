@@ -47,8 +47,16 @@ from dataclasses import dataclass
 
 import torch
 
+import numpy as np
+
+from internals_safety.config import ProbeConfig
 from internals_safety.measurements.contract import Kind, Reading
 from internals_safety.models.capture import ActivationBatch
+from internals_safety.probes.linear import (
+    fit_probe,
+    permutation_p_value,
+    single_threaded_blas,
+)
 
 # Every feature block this module can emit, in a fixed order so that a feature
 # matrix's columns mean the same thing across runs and models.
@@ -163,6 +171,77 @@ def feature_names(traj: Trajectory, blocks: tuple[str, ...] = FEATURE_BLOCKS) ->
         else:
             raise ValueError(f"unknown feature block {name!r}")
     return names
+
+
+@dataclass(frozen=True)
+class TrajectoryProbe:
+    """A probe fitted on trajectory features, with its licensing evidence."""
+
+    position: str
+    blocks: tuple[str, ...]
+    n_features: int
+    auroc: float
+    # Shuffled-label refit on the SAME split — one draw, the control.
+    control_auroc: float
+    # From the full permutation null over shuffled labels. NaN if it was not
+    # drawn, and `licensed` fails closed on NaN.
+    p_value: float
+    alpha: float
+
+    @property
+    def licensed(self) -> bool:
+        return self.p_value <= self.alpha
+
+
+@single_threaded_blas
+def fit_trajectory_probe(
+    positive: ActivationBatch,
+    negative: ActivationBatch,
+    position: str,
+    config: ProbeConfig,
+    blocks: tuple[str, ...] = FEATURE_BLOCKS,
+) -> TrajectoryProbe:
+    """Fit one probe on the trajectory feature matrix and license it.
+
+    **Cheap, and the reason is worth stating because the per-layer probes are
+    not.** This fits ONE probe on a [n_prompts, ~3 x n_layers] matrix — about 96
+    features for a 32-layer model — not one probe per layer on [n_prompts, 4096].
+    So the permutation null is `n_permutations` fits total rather than
+    `n_permutations x n_layers`, and the whole thing is seconds per rung against
+    the ~12.5 min the per-layer transfer null costs (`config` documents that
+    figure and the BLAS pinning it depends on, which this function inherits).
+
+    **No new forward pass.** The curves this reads are already persisted by every
+    run, which is the build plan's argument for I2's promotion: it costs no
+    capture.
+    """
+    positive_traj = trajectory(positive, position)
+    negative_traj = trajectory(negative, position)
+    features = torch.cat(
+        [feature_matrix(positive_traj, blocks), feature_matrix(negative_traj, blocks)]
+    )
+    labels = torch.cat(
+        [torch.ones(positive_traj.n_prompts), torch.zeros(negative_traj.n_prompts)]
+    )
+
+    _, auroc, control_auroc = fit_probe(features, labels, config)
+
+    generator = np.random.default_rng(config.seed)
+    null = np.array(
+        [
+            fit_probe(features, labels[torch.from_numpy(generator.permutation(len(labels)))], config)[1]
+            for _ in range(config.n_permutations)
+        ]
+    )
+    return TrajectoryProbe(
+        position=position,
+        blocks=tuple(blocks),
+        n_features=int(features.shape[1]),
+        auroc=auroc,
+        control_auroc=control_auroc,
+        p_value=permutation_p_value(auroc, null),
+        alpha=config.alpha,
+    )
 
 
 def reading(

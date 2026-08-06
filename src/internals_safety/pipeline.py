@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
 from internals_safety.data import Prompt, prompt_set
+from internals_safety.measurements.contract import Reading
 from internals_safety.paths import OUTPUTS_DIR, run_dir
 
 
@@ -114,12 +115,18 @@ def run_families(
     directory: Path,
     run_one: Callable[[str], dict[str, Any]],
     report: Callable[[dict[str, Any]], None] | None = None,
-) -> tuple[list[dict[str, Any]], float]:
+) -> tuple[list[dict[str, Any]], list[Reading], float]:
     """Drive the per-family loop with a crash-durable checkpoint after each rung.
 
-    `run_one(family)` returns `{"cells": [...], "summary": {...}}`; `report` gets
-    the summary for whatever the paper wants printed. Returns the summaries and
+    `run_one(family)` returns `{"cells": [...], "summary": {...}}` and MAY return
+    `"readings"`; `report` gets the whole result for whatever the paper wants
+    printed. Returns the summaries, every `Reading` collected across rungs, and
     the total elapsed seconds.
+
+    **Readings are accumulated here rather than in each script** for the same
+    reason the checkpoint is: a run whose instruments emit verdicts and whose
+    record does not carry them is a run that cannot say what it withheld, and
+    that must not be possible in one paper and not the other.
 
     **The checkpoint is why this is in the spine.** Both halves were earned by a
     real loss: the comprehension-band sweep was killed at the 8 h wall having
@@ -136,6 +143,7 @@ def run_families(
     measuring them. Gather-and-cover: the instrumentation ships with the knob.
     """
     summaries: list[dict[str, Any]] = []
+    readings: list[Reading] = []
     started = time.perf_counter()
     with (directory / "cells.jsonl").open("w", encoding="utf-8") as handle, (
         directory / "summaries.partial.jsonl"
@@ -155,10 +163,12 @@ def run_families(
             partial_handle.write(json.dumps(summary, ensure_ascii=False) + "\n")
             _checkpoint(partial_handle)
 
+            readings.extend(result.get("readings", []))
+
             if report is not None:
                 report(result)
             print(f"    ({summary['elapsed_seconds'] / 60:.1f} min)", flush=True)
-    return summaries, time.perf_counter() - started
+    return summaries, readings, time.perf_counter() - started
 
 
 def _checkpoint(handle) -> None:
