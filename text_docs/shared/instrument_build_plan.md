@@ -13,19 +13,54 @@ search — be very comprehensive, do not rush to experiments.*
 Both papers CITE this file; neither copies it. `instrument_layer.md` §6.4's
 shortlist is superseded by §3 here and now points at it.
 
-### Read status of the literature cited here — stated, not implied
+### Evidence tier and read status — both stated, because they are different things
 
-Rigor rule for this repo (global law: method-provenance labelling): a paper is
-cited at the strength it was actually read.
+**Corrected 2026-08-05 after the owner flagged the defect.** The first version of
+this document ran an arXiv-only sweep and labelled its results *"established
+literature, imported"*. A verification pass (OpenAlex CLI with a title-equality
+check, plus venue lookups) showed that label was wrong for most of them. The
+standing rule now, canonical in science `handbook/literature_search.md`:
 
-- **Read in full (structured report):** arXiv 2507.11878.
-- **Read at abstract + retrieved summary depth:** everything else below.
-- **Not yet read:** all PDFs. Full reads are filed per instrument in §3 as
-  prerequisites to that instrument's build, not to this plan.
+**Tier — how well the WORLD has verified it:**
 
-Nothing in this document asserts a paper's *result* as established beyond what
-its abstract states. Where a paper's detail is load-bearing for a build
-decision, the deep read is named as a gate on that build.
+- **(A)** peer-reviewed at a named venue.
+- **(B)** preprint with substantial independent uptake.
+- **(C)** recent unrefereed preprint, no uptake yet.
+- **(D)** claim not verified beyond an abstract by us.
+
+**Read status — how well WE have verified it:** stated separately; neither
+substitutes for the other.
+
+Verified status of the load-bearing citations:
+
+| paper | tier | verified as |
+|---|---|---|
+| 2507.11878 harmfulness/refusal separately | **A** | **NeurIPS 2025** (poster; OpenReview `zLkpt30ngy`) — *read in full* |
+| 2102.12452 probing classifiers (Belinkov) | **A** | *Computational Linguistics* (journal) |
+| 2006.00995 amnesic probing | **A** | *TACL* (journal) |
+| 2402.10588 do Llamas work in English | **A** | conference paper, 2024 |
+| 2303.08112 tuned lens · 2410.20526 Llama Scope · 2411.04986 semantic hub · 2409.14507 absorption · 2404.14082 MI review | **B** | preprints with real uptake; venue not re-verified here |
+| **2605.00269** two-pathway / length confound | **C** | unrefereed preprint, 0 citations |
+| **2604.02608** steerable-but-not-decodable | **C** | unrefereed preprint, 0 citations |
+| 2605.02958 · 2606.25182 · 2605.11887 · 2607.14147 · 2606.18322 · 2604.18519 · 2603.18353 · 2604.11061 and the rest of the 26xx/27xx block | **C** | unrefereed preprints, 0 citations (2604.11061 not found at all) |
+| 2512.01222 Fang & Marks | **C/D** | claimed NeurIPS 2025 workshop; **not re-verified** — workshop ≠ main-track review |
+
+**The binding consequence, and it is not cosmetic: a (C) citation may motivate a
+design decision but may not by itself drive one.** Two places in this plan
+violated that before the correction and are now marked in place — §3.2 (the
+trajectory promotion) and §3.1's caveat. Where a (C) claim matters, the plan now
+names **what we would run on our own data to replicate it**, since replication is
+the upgrade path available to us and peer review is not.
+
+Read status: **2507.11878 read in full**; everything else at abstract + retrieved
+summary depth; **no PDFs read.** Deep reads are filed per instrument in §3 as
+gates on that instrument, not on this plan.
+
+*Retrieval provenance: alphaXiv (arXiv-native) + web search, then status
+verification via the `literature-search-openalex` skill's CLI. The first pass
+skipped the installed `literature-review` / `literature-search-openalex` skills
+entirely — that is the root defect and is recorded as a handbook point, not just
+fixed here.*
 
 ---
 
@@ -69,32 +104,39 @@ is the control-calibrated floor of `instrument_layer.md` §2.2, generalised from
 the deployment probe to every instrument. **An instrument that cannot be shown to
 be silent on unreadable text is not evidence.**
 
-**P3. Every instrument must clear the length null.** Established independently
-and recently: arXiv 2605.00269 finds white-box OOD detection scores — naming
+**P3. Every instrument must clear the length null.** This principle rests on OUR
+OWN measurement, not on the literature, and that ordering matters: raw character
+length separates JBB-harmful from benign at AUROC 0.6544 on our corpus, and the
+rungs that newly licensed sat at mean 0.659 against a length null of 0.654. A
+tier-(C) preprint corroborates it — arXiv 2605.00269 finds white-box OOD detection scores — naming
 CED, RAUQ and **WildGuard confidence** — are structurally confounded by sequence
 length at |r| >= 0.61, and **collapse to ~0.50, chance, under length-matched
-evaluation**. We found the same thing empirically before seeing that paper (raw
-character length separates JBB-harmful from benign at AUROC 0.6544, and our
-newly-licensed rungs sat at mean 0.659 against a length null of 0.654). Our
+evaluation** — but the corroboration is a bonus, not the warrant. Our
 `measurements/length_null.py` and length-matched permutation strata (`a1ae5f7`)
-are the same control the literature converged on. It is now mandatory for every
+were built from our own data before that paper was seen. **P3 would stand
+unchanged if 2605.00269 were retracted tomorrow.** Mandatory for every
 instrument, not just the probe.
 
 **P4. Every internals claim must beat a black-box baseline.** arXiv 2604.11061
-(*Pando*) makes the point that interpretability evaluations often fail to
+(*Pando*) — **tier (C), and not retrievable in OpenAlex at all** — makes the point
+that interpretability evaluations often fail to
 control whether a black-box method would have sufficed. For us the baselines are
 concrete and cheap: raw length, surface-feature classifiers, and the model's own
 generated restatement (the ability measurement). An internals number that does
-not beat those is not an internals finding.
+not beat those is not an internals finding. *The principle is ordinary
+methodological hygiene and needs no citation to bind; the paper is named as where
+we met it, not as its authority.*
 
 **P5. Correlational and causal claims are labelled separately and never
 substituted.** Everything currently implemented is read-out. AS-5's Move C is a
 *repair* claim and cannot be made from read-out. Two independent warnings:
-Kwon 2026 (arXiv 2607.14147) reports the harm direction is "a read-out but not a
-selective write-handle" with no clean steering window; arXiv 2603.18353
-(*Interpretability without actionability*) reports mechanistic methods failing to
-correct model errors **despite near-perfect internal representations**. Treat a
-successful repair as a finding to be earned, not assumed.
+Kwon 2026 (arXiv 2607.14147, **tier C**) reports the harm direction is "a read-out
+but not a selective write-handle" with no clean steering window; arXiv 2603.18353
+(*Interpretability without actionability*, **tier C**) reports mechanistic methods
+failing to correct model errors **despite near-perfect internal representations**.
+Both are unrefereed, so neither predicts our null — they are reasons to *design
+for* a null rather than to expect one. Treat a successful repair as a finding to
+be earned, not assumed.
 
 **P6. The operating point is chosen by a non-circular criterion, stated in
 advance.** Established for this repo in `instrument_layer.md` §2.3: hard
@@ -149,8 +191,10 @@ implemented method answers this. The current deployment probe answers only "is
 harm linearly decodable", which we have shown fires on surface form and on
 lexical presence.
 
-**Provenance — established literature, imported:**
-- **Fang & Marks, arXiv 2512.01222** (Goodfire AI / Anthropic; NeurIPS 2025
+**Provenance — mixed tiers; see §0. The primary import is (C/D): its NeurIPS 2025
+workshop status is claimed, NOT re-verified, and a workshop is not main-track
+review. The tuned lens is (B).**
+- **Fang & Marks, arXiv 2512.01222** **(C/D)** (Goodfire AI / Anthropic; NeurIPS 2025
   Mech-Interp workshop) — logit lens recovers ROT-13 chain-of-thought from
   activations alone, peaking intermediate-late. *The primary import.*
 - **Tuned Lens, arXiv 2303.08112** — learned per-layer affine correction; lower
@@ -183,12 +227,19 @@ Information?*) and arXiv 2603.10771 (*Word Recovery ... Enables Character-Level
 Tokenization Robustness*) — the second names the mechanism our
 `zero_width`/`homoglyph`/`fullwidth` band exercises.
 
-**Known risk, must be stated in the paper:** arXiv 2604.02608, *Steerable but Not
-Decodable: Function Vectors Operate Beyond the Logit Lens* — some task-relevant
-directions steer the model without being readable along the unembedding. **A lens
-null is therefore not proof of no decoding.** This is the single most important
-caveat on I1 and the reason I2–I4 are built alongside it rather than after it.
-*Deep read of 2604.02608 is a gate on I1's write-up, not on its build.*
+**Known risk, must be stated in the paper:** arXiv 2604.02608 **(C, unrefereed,
+0 citations)**, *Steerable but Not Decodable: Function Vectors Operate Beyond the
+Logit Lens* — some task-relevant directions steer the model without being
+readable along the unembedding. **A lens null is therefore not proof of no
+decoding.** This is the most important caveat on I1 and the reason I2–I4 are
+built alongside it rather than after it.
+
+*Tier note (added after the 2026-08-05 correction): this is a (C) source, so the
+caveat is carried as a **stated limitation** rather than as an established
+result — which is the conservative direction and costs us nothing, since it only
+ever makes us hedge a null. Its load-bearing use is defensive, not affirmative;
+no build decision rests on it except "don't ship I1 alone", which the plan wants
+anyway. Deep read of 2604.02608 is a gate on I1's write-up, not on its build.*
 
 **Validation gate (all must pass before any claim):**
 1. Fires on the three sound rungs — `zero_width`, `homoglyph`, `fullwidth`.
@@ -214,9 +265,12 @@ method is not merely better for AS-6; it is the only one available.
 no single best cell carries? Distinct from I1 (which asks about token identity)
 and from the current probe (which asks about one cell).
 
-**Provenance — established literature, imported:**
+**Provenance — ⚠️ TIER (C), unrefereed preprints with zero citations. Read §0
+before weighting anything here.** This section originally promoted trajectory
+analysis to first-class on the strength of 2605.00269 alone. That promotion is
+now **conditional**, and the condition is stated at the end of this entry.
 - **arXiv 2605.00269, *How Language Models Process Out-of-Distribution Inputs: A
-  Two-Pathway Framework*** — the most important paper this search returned.
+  Two-Pathway Framework*** **(C)** — the most striking paper this search returned.
   Under **length-matched evaluation** all attention-derived scores collapse to
   chance (~0.50) while **trajectory features retain genuine signal (0.721 avg
   AUROC; jailbreak 0.850)**. It also formalises a **vocabulary-transparency
@@ -250,7 +304,21 @@ of peak signal (already validated as a diagnostic, §3.1 of `instrument_layer.md
 `reverse_words`/`combining_marks` early at `last`.
 
 **Cost:** offline, $0, no new capture. **Build regardless of what else is
-adopted.**
+adopted** — and note this recommendation does NOT depend on the tier-(C)
+citations: it was already justified before the sweep by our own data (the curves
+exist, the layer-index diagnostic is validated on both models independently,
+`instrument_layer.md` §3.1), and it costs nothing. The literature raised its
+*rank*, not its *justification*.
+
+**⚠️ The condition on the promotion.** "Trajectory features survive
+length-matching where single-cell scores collapse" is a tier-(C) claim, and this
+plan may not adopt it as fact. **The replication is cheap and we can run it
+ourselves on data already on disk:** compare single-cell probe AUROC against
+trajectory-feature AUROC on the SAME cells under the SAME length-matched strata,
+using the 1,400-cell band run. If trajectory does not beat single-cell under
+length matching **on our data**, the promotion is withdrawn regardless of what
+2605.00269 reports. That comparison is added to I2's validation gate above and is
+the upgrade path §0 requires.
 
 **AS-6 use:** guard trajectories are the natural expression of "where in the
 guard does the verdict form" — and Gamma-Guard's finding that clean vs attacked
@@ -264,7 +332,7 @@ already a trajectory claim.
 **Question:** does the model's *uncertainty profile across layers* mark encoded
 harmful input, without any classifier trained on our labels?
 
-**Provenance — established literature, imported:** **arXiv 2606.25182, *What
+**Provenance — ⚠️ TIER (C), unrefereed, 0 citations:** **arXiv 2606.25182, *What
 Intermediate Layers Know: Detecting Jailbreaks from Entropy Dynamics***.
 Related readout: TriLens (arXiv 2606.01033) uses per-layer lens entropy for
 hallucination detection.
@@ -290,7 +358,9 @@ surface-anomaly feature? No implemented method can tell these apart, and that
 distinction is exactly the unexplained recognition anomaly of
 `instrument_layer.md` §5.
 
-**Provenance — established resources, imported (no SAE training needed):**
+**Provenance — (B) for the SAE suites themselves (real uptake, and the artifacts
+are downloadable and checkable, which is a stronger guarantee than a citation
+count); (C) for the refusal-SAE study. No SAE training needed.**
 - **Llama Scope, arXiv 2410.20526** — 256 TopK SAEs, every layer and sublayer,
   32K/128K features. **VERIFIED: trained on Llama-3.1-8B-*Base*, while our target
   is Instruct.** The paper explicitly studies generalisation to fine-tuned
@@ -340,8 +410,9 @@ model may drift further from base than an instruct-tune does.)*
 opposed to its surface behavior? This is the causal question AS-5 needs and the
 only cheap way to get at it.
 
-**Provenance — established literature, imported: arXiv 2507.11878, *LLMs Encode
-Harmfulness and Refusal Separately*** (Zhao, Huang, Bau, Wu, Shi — Northeastern
+**Provenance — ✅ TIER (A), the strongest citation in this plan: arXiv 2507.11878,
+*LLMs Encode Harmfulness and Refusal Separately*, published at **NeurIPS 2025**
+(poster; OpenReview `zLkpt30ngy`)** (Zhao, Huang, Bau, Wu, Shi — Northeastern
 + Stanford). *The one paper read in full for this plan.* It matters to us three
 ways:
 
