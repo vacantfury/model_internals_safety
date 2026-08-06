@@ -15,52 +15,88 @@ shortlist is superseded by §3 here and now points at it.
 
 ### Evidence tier and read status — both stated, because they are different things
 
-**Corrected 2026-08-05 after the owner flagged the defect.** The first version of
-this document ran an arXiv-only sweep and labelled its results *"established
-literature, imported"*. A verification pass (OpenAlex CLI with a title-equality
-check, plus venue lookups) showed that label was wrong for most of them. The
-standing rule now, canonical in science `handbook/literature_search.md`:
+**Re-verified 2026-08-06 through the `literature-review` front door** (Semantic
+Scholar batch lookup by EXACT arXiv ID — no fuzzy title matching, so the
+wrong-match failure mode cannot occur — cross-checked against OpenAlex). This
+supersedes both the original arXiv-only labelling AND the first correction pass,
+which was itself too harsh in places. Standing rule, canonical in science
+`handbook/literature_search.md`:
 
-**Tier — how well the WORLD has verified it:**
+**Tier — how well the WORLD has verified it:** **(A)** peer-reviewed at a named
+venue · **(B)** preprint with substantial independent uptake · **(C)** recent
+unrefereed preprint, little or no uptake · **(D)** not verified beyond an
+abstract by us. **Read status — how well WE have verified it** — stated
+separately; neither substitutes for the other.
 
-- **(A)** peer-reviewed at a named venue.
-- **(B)** preprint with substantial independent uptake.
-- **(C)** recent unrefereed preprint, no uptake yet.
-- **(D)** claim not verified beyond an abstract by us.
+#### Tier (A) — peer-reviewed, venue confirmed
 
-**Read status — how well WE have verified it:** stated separately; neither
-substitutes for the other.
-
-Verified status of the load-bearing citations:
-
-| paper | tier | verified as |
+| paper | venue | cites |
 |---|---|---|
-| 2507.11878 harmfulness/refusal separately | **A** | **NeurIPS 2025** (poster; OpenReview `zLkpt30ngy`) — *read in full* |
-| 2102.12452 probing classifiers (Belinkov) | **A** | *Computational Linguistics* (journal) |
-| 2006.00995 amnesic probing | **A** | *TACL* (journal) |
-| 2402.10588 do Llamas work in English | **A** | conference paper, 2024 |
-| 2303.08112 tuned lens · 2410.20526 Llama Scope · 2411.04986 semantic hub · 2409.14507 absorption · 2404.14082 MI review | **B** | preprints with real uptake; venue not re-verified here |
-| **2605.00269** two-pathway / length confound | **C** | unrefereed preprint, 0 citations |
-| **2604.02608** steerable-but-not-decodable | **C** | unrefereed preprint, 0 citations |
-| 2605.02958 · 2606.25182 · 2605.11887 · 2607.14147 · 2606.18322 · 2604.18519 · 2603.18353 · 2604.11061 and the rest of the 26xx/27xx block | **C** | unrefereed preprints, 0 citations (2604.11061 not found at all) |
-| 2512.01222 Fang & Marks | **C/D** | claimed NeurIPS 2025 workshop; **not re-verified** — workshop ≠ main-track review |
+| 2102.12452 probing classifiers (Belinkov) | *Computational Linguistics* (journal) | 942 |
+| 2404.14082 MI for AI safety review | **TMLR** | 499 |
+| 2402.10588 do Llamas work in English | **ACL** | 314 |
+| 2409.14507 *A is for Absorption* (SAE splitting) | **NeurIPS** | 142 |
+| 2006.00995 amnesic probing | *TACL* (journal) | 121 |
+| 2411.04986 semantic hub hypothesis | **ICLR** | 71 |
+| **2507.11878 harmfulness/refusal separately** | **NeurIPS 2025** (OpenReview `zLkpt30ngy`) | 49 | 
+| 2411.08745 separating tongue from thought | **ACL** | 41 |
+| 2505.23556 understanding refusal with SAEs | **EMNLP** | 21 |
+| 2505.11770 internal causal mechanisms predict OOD | **ICML** | 12 |
+| 2502.07424 RomanLens | **ACL** | 10 |
+| 2408.15510 reliability of causal probing | **IJCNLP-AACL** | 7 |
+| 2509.17030 transfer neurons | **EMNLP** | 5 |
+| 2506.11673 mean projection / LEACE | **ACL** | 1 |
+| 2602.05347 character-level information | **EACL** | 0 |
+| 2607.08883 · 2605.02914 | AAAI Symposium Series | 0–4 |
 
-**The binding consequence, and it is not cosmetic: a (C) citation may motivate a
-design decision but may not by itself drive one.** Two places in this plan
-violated that before the correction and are now marked in place — §3.2 (the
-trajectory promotion) and §3.1's caveat. Where a (C) claim matters, the plan now
-names **what we would run on our own data to replicate it**, since replication is
-the upgrade path available to us and peer review is not.
+#### Tier (B) — preprint, real uptake
 
-Read status: **2507.11878 read in full**; everything else at abstract + retrieved
-summary depth; **no PDFs read.** Deep reads are filed per instrument in §3 as
-gates on that instrument, not on this plan.
+2303.08112 tuned lens (**542**) · 2410.20526 Llama Scope (**137**) · 2503.11667
+LogitLens4LLMs (21) · 2512.18792 dead salmons (10) · 2603.18353 interpretability
+without actionability (10, 5 influential) · 2508.21258 RelP (10) · 2605.11887
+Qwen-Scope (7).
 
-*Retrieval provenance: alphaXiv (arXiv-native) + web search, then status
-verification via the `literature-search-openalex` skill's CLI. The first pass
-skipped the installed `literature-review` / `literature-search-openalex` skills
-entirely — that is the root defect and is recorded as a handbook point, not just
-fixed here.*
+#### Tier (C) — recent unrefereed, ~no uptake. **These may not drive a decision.**
+
+**2605.00269** two-pathway / length confound (**0 cites**) · **2604.02608**
+steerable-but-not-decodable (2) · **2512.01222 Fang & Marks (4)** · 2605.02958 ·
+2606.25182 · 2606.01033 · 2607.18348 · 2606.18322 · 2607.10226 · 2607.12166 ·
+2606.27510 · 2606.09899 · 2606.08292 · 2605.24614 · 2604.08524 · 2607.08349 ·
+2604.11061 · 2607.14147 · 2607.00572 · 2606.16349 · 2605.08513 · 2604.09544 ·
+2606.28153 · 2606.08044 · 2608.03201 · 2608.03838 · 2604.26130 · 2603.19426 ·
+2511.16288 · 2603.10771 · 2604.18519 · 2604.05090.
+
+#### What the re-verification changed, stated plainly
+
+- **Three papers were under-rated by the first correction and are actually (A):**
+  2505.23556 (EMNLP), 2409.14507 (NeurIPS), 2411.04986 (ICLR). The over-harsh
+  pass was itself a labelling error, in the opposite direction.
+- **⚠️ The primary method import for I1 — Fang & Marks 2512.01222 — is tier (C),
+  4 citations, and its claimed NeurIPS-2025-workshop status is NOT reflected in
+  either database.** The whole logit-lens instrument rests on an unrefereed
+  preprint. That does not make the method wrong (logit lens itself is tier B at
+  542 citations via the tuned lens, and the mechanism is supported by tier-(A)
+  semantic-hub work), but the specific "lens recovers ROT-13 CoT" result is
+  unreplicated. **I1's validation gate is therefore doing real work, not
+  ceremony** — we are replicating an unrefereed result, on our own rungs, and
+  should say so in the paper.
+- **2605.00269 stays (C) at 0 citations**, so §3.2's conditional trajectory
+  promotion stands exactly as written.
+- **The two databases disagree, and neither is authoritative.** Semantic Scholar
+  mis-mapped Belinkov to "International Conference on Computational Logic" and
+  recorded amnesic probing as arXiv-only at 25 cites, where OpenAlex correctly
+  gives *Computational Linguistics* and *TACL* at 121. Cross-checking is not
+  belt-and-braces; it is required. Filed as a new handbook point.
+
+Read status: **2507.11878 read in full**; everything else at abstract +
+retrieved-summary depth; **no PDFs read.** Deep reads are filed per instrument in
+§3 as gates on that instrument, not on this plan.
+
+*Retrieval provenance: pass 1 (2026-08-05) alphaXiv + web search, arXiv-only —
+defective, root cause was skipping the installed skills. Pass 2 (2026-08-06) via
+the `literature-review` front door: Semantic Scholar exact-ID batch resolution +
+OpenAlex cross-check + a published-venue-filtered topical sweep over Semantic
+Scholar and DBLP.*
 
 ---
 
