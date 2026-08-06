@@ -348,8 +348,19 @@ directly on claims both papers intend to make:
 #### 6.3.1 The causal harness already exists, peer-reviewed — and it would have caught our length confound
 
 *Settled 2026-08-06 by reading `other_repos/refusal_direction` (Arditi et al.,
-arXiv 2406.11717, **NeurIPS 2024, 914c**), the paper the coverage sweep found we
-had missed. This is instrument knowledge, so it lives here; both papers cite it.*
+arXiv 2406.11717, **NeurIPS 2024, 914c**). This is instrument knowledge, so it
+lives here; both papers cite it.*
+
+**⚠️ Correction to how this read was first reported.** It was framed as "the
+paper the coverage sweep found we had missed." **Arditi was not missed** — it is
+cited in `probes/directions.py` line 1, `measurements/recognition.py` line 3, and
+four places in `as5/s1_idea_check.md`, including measurement #3's own table row
+and the phase-2 plan ("the Arditi trio: directional ablation for necessity,
+activation addition for sufficiency"). The estimator was ported from them
+deliberately at S1. What the coverage sweep actually found is that the *instrument
+build plan* omitted them. The findings below stand on their own — they came from
+reading the source, not from the sweep — but the "we missed this" framing was
+wrong and is withdrawn.
 
 **What they do that we do not.** Their direction is a **difference in means**
 between harmful and harmless activations (`generate_directions.py`), swept over
@@ -384,7 +395,10 @@ this separation real?"; it never answers "is this separation *the thing*?"
 
 1. **I5/I6 stop being the last instruments and become the licensing layer.** §6.3
    lists causal evidence as a gap to close eventually; this read says the causal
-   test belongs *upstream*, gating which direction is used at all.
+   test belongs *upstream*, gating which direction is used at all. **What is new
+   here is the SEQUENCING, not the technique** — `as5/s1_idea_check.md` already
+   planned "the Arditi trio" for phase 2. The claim is that a validation scheduled
+   *after* the correlational measurement should instead gate it.
 2. **The estimator question is now live.** We fit a discriminative probe; they
    take a difference in means. Diff-in-means is the weaker classifier and that is
    the point — a fitted probe can exploit any separating feature, including
@@ -397,8 +411,13 @@ this separation real?"; it never answers "is this separation *the thing*?"
    advance. Our spine's two fixed positions (`instruction_final`, `last`) are a
    design choice we made before knowing a sweep-and-select precedent existed.
 
-**Contribution check for AS-5 — measurement #3 is NOT a reimplementation.** Three
-genuine differences: estimator (fitted probe vs difference in means), selection
+**Contribution check for AS-5 — measurement #3 is NOT a reimplementation, but the
+estimator axis is narrower than first reported.** We already compute
+difference-in-means (`probes/directions.py`, ported from them); what rides on the
+*fitted probe* is the licensing decision (`best_by_auroc` +
+`permutation_null_max_auroc` in `measurements/recognition.py`), and measurement #2
+(deployment) uses the fitted probe alone. So the estimator difference is real for
+#2 and only partial for #3. Two genuine differences remain: selection
 (permutation licensing vs causal filtering), and **input distribution** — they
 ask whether a single direction mediates refusal on *readable* harmful prompts,
 while AS-5 asks whether the harmfulness representation forms at all when the

@@ -31,8 +31,9 @@ separately; neither substitutes for the other.
 #### Tier (A) — peer-reviewed, venue confirmed
 
 *This table covers the citations the arXiv-only pass had already found. The
-coverage sweep below adds fifteen more tier-(A) papers, several of them higher-cited
-than anything here — read both tables together.*
+coverage sweep below adds twelve genuinely new tier-(A) papers (plus three that
+were already cited elsewhere in the repo but not here), several higher-cited than
+anything in this table — read both together.*
 
 | paper | venue | cites |
 |---|---|---|
@@ -158,21 +159,43 @@ preprint-dominated; the 20-item window was.
 | trajectory | 40/45 | 39 |
 | unlearning | 69/86 | 68 |
 
-**494 peer-reviewed papers appear in neither canonical doc; 119 are on-object
-after excluding off-domain hits.** The queries are broad and pull surveys, so the
-raw count overstates. What does not overstate is *which* papers were missed —
-these are the field's most-cited work in the exact areas this plan builds
-instruments for:
+**⚠️ CORRECTED 2026-08-06 — the first version of this section overstated the gap
+and named three papers as missed that were not.** It compared the sweep against
+only this file and `instrument_layer.md`, then reported the result as what the
+*project* had missed. The repo's literature knowledge also lives in
+`text_docs/as5/s1_idea_check.md`, `text_docs/as6/`, `project_structure.md`, and
+module docstrings. Recomputed against the whole repo:
+
+| | first reported | actual |
+|---|---|---|
+| absent from the repo | 494 | **473** |
+| on-object | 119 | **94** |
+| already cited somewhere | — | **21** |
+
+**Three of the headline examples were already known and cited**, and must not be
+re-reported as misses: **2406.11717 (Arditi)** — cited in `probes/directions.py`
+line 1, `measurements/recognition.py` line 3, and four places in
+`as5/s1_idea_check.md`, including measurement #3's own table row and the phase-2
+causal plan; the method was deliberately ported and attributed at S1.
+**2307.02483 (Wei et al.)** — cited by name in both `as6/` docs as the
+"mismatched generalization" source. **2406.04313 (Circuit Breakers, Zou et al.)**
+— named in `project_structure.md` and `as5/s1_idea_check.md` as an objection to
+answer. They stay in the table below because both papers still owe them
+citations *here*, but the "missed" column is corrected.
+
+**The gap is still large and seven genuine misses stand** — these are the field's
+most-cited work in areas this plan builds instruments for and had no prior
+mention anywhere in the repo:
 
 | paper | venue | cites | what it is to us |
 |---|---|---|---|
-| **2307.02483** Jailbroken: how does safety training fail | **NeurIPS 2023** | **2052** | the founding encoded-jailbreak paper, base64 included — AS-5's attack surface descends from it |
+| 2307.02483 Jailbroken: how does safety training fail | **NeurIPS 2023** | **2052** | *already cited by name in `as6/`* as the mismatched-generalization source; owed a citation HERE |
 | **2309.08600** SAEs find highly interpretable features | **ICLR 2023** | **1432** | I4's foundation |
 | **2310.03693** Fine-tuning aligned LMs compromises safety | **ICLR 2023** | **1313** | this repo's training-time half |
 | **2312.06681** Steering Llama 2 via contrastive activation addition | **ACL 2023** | **936** | I6's steering method |
-| **2406.11717** Refusal is mediated by a single direction | **NeurIPS 2024** | **914** | **measurement #3 is a variant of its method** |
+| 2406.11717 Refusal is mediated by a single direction | **NeurIPS 2024** | **914** | *already cited at S1* — measurement #3's estimator was ported from it deliberately; owed a citation HERE, not a discovery |
 | **2402.10260** StrongREJECT for empty jailbreaks | **NeurIPS 2024** | 356 | the refusal-judge question, benchmarked |
-| **2406.04313** Circuit breakers | **NeurIPS 2024** | 317 | representation-level defense — AS-6-adjacent |
+| 2406.04313 Circuit breakers | **NeurIPS 2024** | 317 | *already named* in `project_structure.md` + `as5/s1_idea_check.md` as an objection to answer |
 | **2309.16042** Best practices of activation patching | **ICLR 2023** | 294 | a best-practices paper for the instrument I6 plans to build |
 | **2410.02707** LLMs know more than they show | **ICLR 2024** | 240 | internals encode what the output does not — structurally our gap |
 | **2401.06102** **Patchscopes** | **ICML 2024** | 233 | **see below — this changes I1** |
