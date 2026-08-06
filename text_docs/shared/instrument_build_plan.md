@@ -713,11 +713,53 @@ Every instrument runs all of these. Not optional, not per-instrument judgment.
 | **Format decorrelation** (harmful-encoded vs benign-encoded through the identical pipeline) | "looks encoded" | built, structural |
 | **Lexical transparency screen** | probes firing on words that were never hidden (`reverse_words`) | validated as a diagnostic; make it a gate |
 | **Lexical decorrelation — XSTest** (scary-but-benign) | firing on alarming vocabulary rather than harm | **NOT built** — import from Kwon 2026 |
-| **Black-box baseline** (P4) | an internals claim a surface classifier would have made | **NOT built** — needed per Pando (arXiv 2604.11061) |
+| **Black-box baseline** (P4) | an internals claim a surface classifier would have made | **BUILT AND MEASURED WEAK 2026-08-06** — see §4.2 |
 | **Matched-norm random direction** | steering "working" because you perturbed anything | **BUILT 2026-08-06** — `causal_license.matched_norm_random_direction` + `random_direction_null` |
 | **Control task / selectivity** (Hewitt-Liang style) | probe capacity memorising rather than reading | **BUILT AND MEASURED DEGENERATE 2026-08-06** — see §4.1 |
 
 The bottom two are build items, filed with the instruments that need them.
+
+### 4.2 The black-box baseline is built, and it is WEAK on this corpus
+
+`measurements/black_box_baseline.py` — TF-IDF over character 2–5-grams, capped
+at 5,000 features, 5-fold cross-validated, two-sided like the length null.
+Measured over all 19 rungs, n=100/class, JBB harmful vs JBB benign:
+
+| | surface AUROC | length AUROC |
+|---|---|---|
+| **plaintext** | **0.615** | 0.654 |
+| tag_block · morse · caesar3 · fullwidth · rot13 · reverse_characters · atbash · caesar7 · homoglyph | 0.613–0.617 | 0.647–0.654 |
+| binary · reverse_words · hex · ascii_decimal | 0.600–0.607 | 0.654–0.657 |
+| unicode_escape · zero_width · base64 · combining_marks | 0.589–0.596 | 0.653–0.655 |
+| **vigenere** | **0.529** | 0.654 |
+| **base32** | **0.514** | 0.649 |
+
+Three findings, all of which change how this control is used:
+
+1. **It is NOT a superset of the length null — that claim was written and then
+   refuted by measurement.** TF-IDF l2-normalises, so the classifier is blind to
+   length by construction, and the length null scores HIGHER on **every rung**,
+   by 0.03–0.14. The two read different surface properties and neither contains
+   the other. Folding length back in (dropping the normalisation) was considered
+   and rejected: it would make the controls redundant and hide which surface
+   property is doing the work.
+2. **The plaintext baseline is only 0.615**, so there is very little surface
+   separability for an encoder to destroy, and the screen has correspondingly
+   little power. Seventeen of nineteen rungs sit within 0.03 of plaintext. A
+   failed screen means "not established", never "the content is on the surface".
+3. **Only `base32` (0.514) and `vigenere` (0.529) meaningfully hide content from
+   the surface** — a loss of ~0.09–0.10 against plaintext. Notably this does NOT
+   flag `reverse_words`, the rung `instrument_layer.md` identified as
+   lexically transparent — because that rung's problem is word-level lexical
+   presence, which character n-grams under l2 normalisation barely see. The layer
+   index remains the sharper diagnostic for it.
+
+**A design note that generalises.** The property was first written with an
+absolute cut (`encoded_auroc < 0.60`). The measurement showed 17 of 19 rungs land
+between 0.589 and 0.617 — so that cut assigned rungs by noise. It is now relative
+to the corpus's own plaintext baseline, which is non-arbitrary by construction.
+Absolute thresholds on a quantity whose scale is corpus-dependent are magic
+numbers even when they look principled.
 
 ### 4.1 Control-task selectivity does not transfer to this setting (measured 2026-08-06)
 
