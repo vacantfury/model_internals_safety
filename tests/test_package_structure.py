@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 from internals_safety import measurements
+from internals_safety.completion import reachable_modules
 
 MEASUREMENTS_DIR = Path(measurements.__file__).parent
 
@@ -114,43 +115,6 @@ DECLARED_ORPHANS = {
 # gate is approving. `Plan.describe` costs them separately — extra forward passes
 # for I1, lens readouts for I3 — so a --dry-run states the delta before anyone
 # approves a run.
-
-
-def reachable_modules() -> set[str]:
-    """Every library module reachable by imports from any script."""
-    from collections import deque
-
-    package = Path(measurements.__file__).parent.parent
-
-    def deps(path: Path) -> set[str]:
-        found: set[str] = set()
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if not isinstance(node, ast.ImportFrom) or not node.module:
-                continue
-            if not node.module.startswith("internals_safety"):
-                continue
-            module = node.module.removeprefix("internals_safety").lstrip(".")
-            if module:
-                found.add(module)
-            for alias in node.names:
-                candidate = f"{module}.{alias.name}" if module else alias.name
-                if (package / (candidate.replace(".", "/") + ".py")).exists():
-                    found.add(candidate)
-        return found
-
-    seen: set[str] = set()
-    queue: deque[str] = deque()
-    for script in (package.parent.parent / "scripts").glob("*.py"):
-        queue.extend(deps(script))
-    while queue:
-        module = queue.popleft()
-        if module in seen:
-            continue
-        seen.add(module)
-        path = package / (module.replace(".", "/") + ".py")
-        if path.exists():
-            queue.extend(deps(path))
-    return seen
 
 
 def test_no_module_is_an_orphan_except_the_declared_ones():

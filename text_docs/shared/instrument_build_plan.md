@@ -931,6 +931,48 @@ loading is SAELens and should be used.)*
 
 ---
 
+## 5.1 Is the build done? — one command, not a sweep
+
+    uv run python scripts/build_status.py
+
+Founded 2026-08-06 after the question *"is the build all done?"* was asked twice
+and answering it both times meant sweeping code, tests and three canonical docs
+by hand. **The second sweep got the orphan count wrong**, which is the ordinary
+argument for automating a fact: not that the sweep is slow, but that it is
+error-prone and its errors flatter.
+
+**The design rule, and the reason it will not rot: anything derivable is
+DERIVED.** `completion.py` declares only the ROSTER and the control battery —
+what we *intend* to build, which no filesystem can report — and reads the rest off
+the tree: whether a module exists, whether any entrypoint can reach it, whether a
+config knob is still marked PLACEHOLDER. `tests/test_completion.py` then
+reconciles the declaration against the tree, so building an instrument and
+forgetting the manifest is a **failing test**, not a cheerful status report.
+Verified by construction: adding an unlisted module to `measurements/` turns it
+red.
+
+Two things it deliberately does NOT do:
+
+- **It does not judge claims.** Whether a number may appear in a paper is a
+  per-run property the contract already answers (`reportable`, `withheld`). An
+  instrument can be finished and still produce withheld readings all day, and
+  letting "the build is done" drift into meaning "the numbers are good" would be
+  a much stronger claim than the check can support.
+- **It does not find unmarked knobs.** The placeholder count is of MARKED ones.
+  The defence against an untuned value nobody marked is the tuning-path law at
+  the moment a knob is introduced, not this script.
+
+Two defects in its own first version, both caught by running it and both worth
+keeping as the shape of the failure: the placeholder match was case-insensitive
+and reported 12 knobs, 5 of them prose about *string* placeholders — **a check
+that over-reports gets ignored exactly like one that under-reports**; and I6 read
+as "wired" from module reachability while its own note said patching-based
+attribution was unwritten, so incompleteness is now DECLARED and dominates every
+derived signal. **A completion check that can report done when it is not done is
+worse than no check.**
+
+---
+
 ## 6. Build sequence, and the scheduling fact that fixes it
 
 **The scheduling fact: I1–I4 all read the same forward pass.** No generation, no
