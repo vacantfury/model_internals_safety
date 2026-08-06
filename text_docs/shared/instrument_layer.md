@@ -345,6 +345,68 @@ directly on claims both papers intend to make:
   and the analysis keeps the argmax cell. §4.2's displacement hypothesis is
   untestable against it.
 
+#### 6.3.1 The causal harness already exists, peer-reviewed — and it would have caught our length confound
+
+*Settled 2026-08-06 by reading `other_repos/refusal_direction` (Arditi et al.,
+arXiv 2406.11717, **NeurIPS 2024, 914c**), the paper the coverage sweep found we
+had missed. This is instrument knowledge, so it lives here; both papers cite it.*
+
+**What they do that we do not.** Their direction is a **difference in means**
+between harmful and harmless activations (`generate_directions.py`), swept over
+every layer and every position in the end-of-instruction token span
+(`positions=range(-len(eoi_toks), 0)`). Then — the part that matters — they
+**select the direction causally, not correlationally** (`select_direction.py`):
+
+| their criterion | what it tests |
+|---|---|
+| `refusal_score` after ablation | ablate the direction → does refusal on harmful prompts actually **bypass**? |
+| `induce_refusal_threshold` | add the direction → does it **induce** refusal on harmless prompts? |
+| `kl_threshold = 0.1` | ablating it must leave harmless behaviour **unchanged** (KL vs baseline) |
+| `prune_layer_percentage = 0.20` | discard directions from the last 20% of layers |
+
+**Ours is purely correlational.** `conf/measurements.yaml` licenses on AUROC
+against a permutation null, then reads at `reading_percentile: 50.0`. Nothing in
+this repo ablates, steers, or checks that an intervention preserves unrelated
+behaviour.
+
+**⚠️ The consequence, and it is the sharpest thing this read produced: their
+selection would have rejected our length direction automatically.** We found the
+length confound (§5, `pilot_rebaseline.md` §5) the expensive way — a re-licensing
+run, then a separate null model, now mandatory for both papers. A direction that
+separates harmful from benign *by character length* cannot pass their filter: it
+will not bypass refusal when ablated, and ablating it is unlikely to leave
+harmless behaviour within KL 0.1. **A causal criterion is not a nicer validity
+check than a correlational one — it is a different kind, and it screens confounds
+a permutation test structurally cannot see.** Permutation licensing answers "is
+this separation real?"; it never answers "is this separation *the thing*?"
+
+**Three consequences.**
+
+1. **I5/I6 stop being the last instruments and become the licensing layer.** §6.3
+   lists causal evidence as a gap to close eventually; this read says the causal
+   test belongs *upstream*, gating which direction is used at all.
+2. **The estimator question is now live.** We fit a discriminative probe; they
+   take a difference in means. Diff-in-means is the weaker classifier and that is
+   the point — a fitted probe can exploit any separating feature, including
+   length, while a mean difference is at least constrained to the direction the
+   two populations differ along. Worth measuring both on our cached activations,
+   which is offline and free.
+3. **It answers I1's open source-position question by precedent.** §3.1 of the
+   build plan left "which position to patch" open; their answer is to **sweep the
+   whole post-instruction token span and select**, rather than fix positions in
+   advance. Our spine's two fixed positions (`instruction_final`, `last`) are a
+   design choice we made before knowing a sweep-and-select precedent existed.
+
+**Contribution check for AS-5 — measurement #3 is NOT a reimplementation.** Three
+genuine differences: estimator (fitted probe vs difference in means), selection
+(permutation licensing vs causal filtering), and **input distribution** — they
+ask whether a single direction mediates refusal on *readable* harmful prompts,
+while AS-5 asks whether the harmfulness representation forms at all when the
+prompt is ciphertext. The delta is real. What is *not* defensible is presenting
+our licensing as state of the art: theirs is stronger and it is two years old.
+Both papers must cite them, and AS-5 must say plainly which criterion it used and
+why.
+
 ### 6.4 The roster, the sequencing, and the literature map
 
 **Superseded and moved.** The ranked instrument roster that stood here — with each
