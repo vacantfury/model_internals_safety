@@ -227,11 +227,20 @@ the spine is how a shared runner becomes a framework.
 1. ~~Adopt the contract in §3.1~~ — **done 2026-08-06.**
 2. ~~Make the three new instruments emit `Reading`s~~ — **done 2026-08-06**,
    with `gate_per_prompt` joining them to the per-prompt axes both papers use.
-3. Extract the spine (§3.3) into `pipeline.py`, one script at a time, tests
-   green between. **Next.**
-4. Fold the run-record results half into `provenance.py` (§4 answer 4) as part
-   of step 3, since the spine is its first caller.
-5. Then and only then, I4 — so it lands wired instead of as a seventh orphan.
+3. ~~Extract the spine (§3.3) into `pipeline.py`~~ — **done 2026-08-06.**
+   `add_common_arguments` · `load_contrast_sets` · `resolve_run_paths` ·
+   `run_families` · `select_known`. Both scripts refactored one at a time, tests
+   green between; 625+508 lines became 563+476 against a 184-line spine, and
+   both `--dry-run` paths verified end to end.
+4. ~~Fold the run-record results half into `provenance.py`~~ — **done
+   2026-08-06.** `write_run_record(directory, record, readings=())` adds
+   `readings`, `withheld` and `n_reportable`, with the split **computed** from
+   `reportable_only`/`withheld_summary` rather than curated. Both scripts are on
+   the seam already; passing no readings writes neither section, so a run whose
+   instruments do not yet emit `Reading`s is not forced to fake them.
+5. **Next — wire the four original measurements to emit `Reading`s**, which is
+   what turns the seam from available into load-bearing. Only then I4, so it
+   lands wired instead of as a seventh orphan.
 
 ~~§3.2's package split~~ struck; replaced by `tests/test_package_structure.py`.
 

@@ -62,10 +62,6 @@ The dry-run path loads no model and needs no keys.
 from __future__ import annotations
 
 import argparse
-import json
-import os
-import time
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
@@ -76,7 +72,7 @@ from internals_safety.config import (
     load_measurements_config,
     load_pilot_config,
 )
-from internals_safety.data import Prompt, digest, prompt_set
+from internals_safety.data import Prompt, digest
 from internals_safety.encodings.base import Encoder
 from internals_safety.encodings.registry import load_ladder
 from internals_safety.guards.prompts import prepare_guard_prompts
@@ -97,8 +93,18 @@ from internals_safety.models.capture import (
     resolve_layers,
 )
 from internals_safety.models.loader import LoadedModel, load_model, resolve_device
-from internals_safety.paths import OUTPUTS_DIR, run_dir
-from internals_safety.provenance import capture_provenance, guard_working_tree, write_results
+from internals_safety.pipeline import (
+    add_common_arguments,
+    load_contrast_sets,
+    resolve_run_paths,
+    run_families,
+    select_known,
+)
+from internals_safety.provenance import (
+    capture_provenance,
+    guard_working_tree,
+    write_run_record,
+)
 
 PHASE = "as6_phase1"
 
@@ -351,13 +357,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     pilot = load_pilot_config()
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--guard", required=True, help="conf/guards/<name>.yaml")
-    parser.add_argument("--families", nargs="+", default=None, help="default: every rung")
-    parser.add_argument("--n-prompts", type=int, default=pilot.n_prompts)
-    parser.add_argument("--run-name", default=None)
-    parser.add_argument("--dry-run", action="store_true", help="print the plan and exit")
-    parser.add_argument("--allow-dirty", action="store_true")
-    parser.add_argument("--allow-cpu", action="store_true")
-    parser.add_argument("--refresh-activations", action="store_true", help="ignore the capture cache")
+    add_common_arguments(parser, default_n_prompts=pilot.n_prompts)
     parser.add_argument(
         "--strata-bins",
         type=int,
@@ -366,7 +366,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         "Re-running with 5 / 10 / 20 is the stability check the config names as this "
         "knob's tuning path; with the capture cache warm it costs no forward passes.",
     )
-    parser.add_argument("--outputs-dir", default=None)
     args = parser.parse_args(argv)
 
     config = load_guard_config(args.guard)
@@ -380,10 +379,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             }
         )
     ladder = load_ladder()
-    families = list(args.families) if args.families else list(ladder)
-    unknown = [family for family in families if family not in ladder]
-    if unknown:
-        raise SystemExit(f"unknown rungs {unknown}; configured: {sorted(ladder)}")
+    families = select_known(args.families, ladder, label="rungs")
 
     device = resolve_device(config.device, allow_cpu_in_job=args.allow_cpu)
     print(describe_plan(config, families, args.n_prompts, str(device)))
@@ -392,18 +388,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     guard_working_tree(device, allow_dirty=args.allow_dirty)
 
-    harmful = prompt_set(pilot.harmful_set, limit=args.n_prompts)
-    harmless = prompt_set(pilot.harmless_set, limit=args.n_prompts)
-    if len(harmful) != len(harmless):
-        raise SystemExit(
-            f"contrast sets differ in size ({len(harmful)} vs {len(harmless)}); the probe's "
-            "classes must be matched"
-        )
+    harmful, harmless = load_contrast_sets(pilot.harmful_set, pilot.harmless_set, args.n_prompts)
 
-    outputs = Path(args.outputs_dir) if args.outputs_dir else OUTPUTS_DIR
-    run_name = args.run_name or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    directory = run_dir(PHASE, config.name, run_name, runs_dir=outputs / "runs")
-    directory.mkdir(parents=True, exist_ok=True)
+    directory, activations_dir, run_name = resolve_run_paths(
+        PHASE, config.name, args.run_name, args.outputs_dir
+    )
 
     print(f"\nloading {config.hf_id} ...", flush=True)
     loaded = load_model(config)
@@ -412,7 +401,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     # too: the probe must be fitted on the same distribution it is read on, minus
     # the encoding. Fitting on bare plaintext would confound "decoded the payload"
     # with "is inside a classification template".
-    activations_dir = outputs / "activations"
     plain_harmful_batch, _, _ = capture_guard(
         loaded, [p.text for p in harmful], "plain-harmful", activations_dir,
         refresh=args.refresh_activations,
@@ -429,57 +417,41 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"verdict format: {plain_health}", flush=True)
 
     raw_path = directory / "cells.jsonl"
-    partial_path = directory / "summaries.partial.jsonl"
-    summaries = []
-    started = time.perf_counter()
-    # Per-rung checkpoint with fsync, for the reason the pilot learned at the 8 h
-    # wall: a rung that finished must survive a job that did not.
-    with raw_path.open("w", encoding="utf-8") as handle, partial_path.open(
-        "w", encoding="utf-8"
-    ) as partial_handle:
-        for family in families:
-            print(f"\n=== {family}", flush=True)
-            family_started = time.perf_counter()
-            result = run_family(
-                loaded,
-                ladder[family],
-                harmful,
-                harmless,
-                plain_harmful_batch,
-                plain_harmless_batch,
-                measurements,
-                activations_dir,
-                refresh=args.refresh_activations,
-            )
-            for cell in result["cells"]:
-                handle.write(json.dumps(cell, ensure_ascii=False) + "\n")
-            handle.flush()
-            os.fsync(handle.fileno())
 
-            summary = result["summary"]
-            summary["elapsed_seconds"] = round(time.perf_counter() - family_started, 1)
-            summaries.append(summary)
-            partial_handle.write(json.dumps(summary, ensure_ascii=False) + "\n")
-            partial_handle.flush()
-            os.fsync(partial_handle.fileno())
+    def report(result: dict) -> None:
+        summary = result["summary"]
+        decode, null = summary["decode"], summary["length_null"]
+        print(
+            f"    decode auroc {decode['observed_max_transfer_auroc']:.3f} "
+            f"p={decode['p_value']:.4f} licensed={decode['licensed']} | "
+            f"length null {null['encoded_auroc']:.3f} margin {null['margin']:+.3f} "
+            f"beats={null['beats_length_null']}",
+            flush=True,
+        )
+        print(
+            f"    block {summary['block_rate']:.2f} | "
+            f"decoded-not-blocked {summary['decoded_not_blocked_rate']} | "
+            f"blocked-without-decoding {summary['blocked_without_decoding_rate']} | "
+            f"unmeasured {summary['n_unmeasured']}/{summary['n']}",
+            flush=True,
+        )
 
-            decode, null = summary["decode"], summary["length_null"]
-            print(
-                f"    decode auroc {decode['observed_max_transfer_auroc']:.3f} "
-                f"p={decode['p_value']:.4f} licensed={decode['licensed']} | "
-                f"length null {null['encoded_auroc']:.3f} margin {null['margin']:+.3f} "
-                f"beats={null['beats_length_null']}",
-                flush=True,
-            )
-            print(
-                f"    block {summary['block_rate']:.2f} | "
-                f"decoded-not-blocked {summary['decoded_not_blocked_rate']} | "
-                f"blocked-without-decoding {summary['blocked_without_decoding_rate']} | "
-                f"unmeasured {summary['n_unmeasured']}/{summary['n']}",
-                flush=True,
-            )
-            print(f"    ({summary['elapsed_seconds'] / 60:.1f} min)", flush=True)
-    elapsed_seconds = time.perf_counter() - started
+    summaries, elapsed_seconds = run_families(
+        families,
+        directory,
+        lambda family: run_family(
+            loaded,
+            ladder[family],
+            harmful,
+            harmless,
+            plain_harmful_batch,
+            plain_harmless_batch,
+            measurements,
+            activations_dir,
+            refresh=args.refresh_activations,
+        ),
+        report=report,
+    )
 
     record = capture_provenance(
         config={
@@ -499,7 +471,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "cells_path": str(raw_path),
         },
     )
-    path = write_results(directory, record)
+    path = write_run_record(directory, record)
     print(f"\nwrote {path}")
     return 0
 

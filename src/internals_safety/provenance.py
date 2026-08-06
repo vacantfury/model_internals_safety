@@ -25,10 +25,12 @@ import json
 import platform
 import subprocess
 import sys
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
+from internals_safety.measurements.contract import Reading, reportable_only, withheld_summary
 from internals_safety.paths import PROJECT_ROOT
 
 # Devices whose runs produce numbers the paper might report. Anything else is a
@@ -127,3 +129,41 @@ def write_results(directory: Path, record: dict[str, Any]) -> Path:
     path = directory / "results.json"
     path.write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
     return path
+
+
+def write_run_record(
+    directory: Path, record: dict[str, Any], readings: Sequence[Reading] = ()
+) -> Path:
+    """`write_results` plus the typed-reading half of the schema.
+
+    **Why this exists** (`pipeline_architecture.md` §4, answer 4). The provenance
+    half of the run record has been schematised since this module was written;
+    the RESULTS half never was — each script hand-built its own summary dict, and
+    the two had already drifted. This is the seam that stops that: the
+    reportable/withheld split is **computed** from the readings rather than
+    curated by whoever wrote the script.
+
+    The record gains two sections:
+
+    - `readings` — every `Reading`, with its evidence, whether or not it is
+      reportable. Nothing is dropped at write time.
+    - `withheld` — instrument -> the reasons it failed, from
+      `why_not_reportable()`.
+
+    **`withheld` is the load-bearing one.** A run that reports three numbers and
+    silently discards nine reads as "not significant" is indistinguishable from
+    one that measured three things, and a withheld cell with no stated reason is
+    how an instrument defect hides as a null result. Recording the complement is
+    what makes a null honest.
+
+    Passing no readings is allowed and writes neither section — a run whose
+    instruments do not yet emit `Reading`s is not forced to fake them.
+    """
+    if readings:
+        record = {
+            **record,
+            "readings": [asdict(reading) for reading in readings],
+            "withheld": withheld_summary(readings),
+            "n_reportable": len(reportable_only(readings)),
+        }
+    return write_results(directory, record)
