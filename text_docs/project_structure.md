@@ -126,6 +126,16 @@ Two notes on the layout. `measurements/` deliberately mirrors the four-measureme
 
 **Do not copy:** all of `image/`, `artprompt`, `best_of_n`, `symbol_injection`, `code_attack`, `deep_inception`, `semantic_camo`, `decode_evasion`, `ecso_evade`, `variance_channel`, `quantum_mechanics` (sibling-specific attack research); all of `experiment/`, `defense/`, `analysis/`; the `conf/experiment/**` preset tree.
 
+**Copied 2026-08-06:** `data/xstest_{safe,unsafe}_prompts.jsonl` — 250 safe +
+200 unsafe, converted from `llm_guardrail_security/other_repos/xstest/xstest_prompts.csv`
+(Röttger et al., **NAACL 2024**, ACL Anthology 2024.naacl-long.301, **CC-BY-4.0**).
+The sibling had already cloned it, so no download was needed and the family
+convention held: copied, never imported. The XSTest `type` is preserved as the
+prompt's `category` because **the pairing IS the control** — `homonyms` pairs with
+`contrast_homonyms` and the pair shares its alarming vocabulary. `data/` is
+gitignored, so nothing is redistributed and the CC-BY attribution lives in
+`measurements/lexical_decorrelation.py`.
+
 **New data needed:** PolyRefuse (or Aziz et al.'s extension) for the language rung; AdvBench + MaliciousInstruct + Alpaca for contrast-set construction per Arditi's recipe; XSTest, EVOREFUSE-TEST, MORBench for the over-refusal battery.
 
 Copying is per the CLAUDE.md scope rule — **copied, never imported**; the oikos charter bars research-bet → research-bet dependencies. Each copied file keeps its provenance comment and gains a one-line header naming the source repo and commit.

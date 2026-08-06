@@ -33,6 +33,7 @@ PURE_MODULES = (
     "guard_regimes",
     "length_null",
     "black_box_baseline",
+    "lexical_decorrelation",
     "contract",
     "causal_license",
 )
@@ -97,6 +98,11 @@ DECLARED_ORPHANS = {
     "models.interventions",
     # Predates the contract; H4 overlap metric, used from the docs not the spine.
     "probes.overlap",
+    # The XSTest control. Pure scoring, fully tested — but wiring it needs the
+    # probe READ on XSTest activations, which means capturing a third prompt set
+    # per rung. That changes what a run costs, so it goes behind --instruments
+    # with its own dry-run line rather than in by default (TODO 41).
+    "measurements.lexical_decorrelation",
 }
 
 # I1 (`measurements.decode_lens` + `models.patching`) and I3
