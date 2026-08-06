@@ -66,37 +66,80 @@ steerable-but-not-decodable (2) · **2512.01222 Fang & Marks (4)** · 2605.02958
 2606.28153 · 2606.08044 · 2608.03201 · 2608.03838 · 2604.26130 · 2603.19426 ·
 2511.16288 · 2603.10771 · 2604.18519 · 2604.05090.
 
-#### What the re-verification changed, stated plainly
+#### Third-source resolution (2026-08-06) — and the status labels change again
 
-- **Three papers were under-rated by the first correction and are actually (A):**
-  2505.23556 (EMNLP), 2409.14507 (NeurIPS), 2411.04986 (ICLR). The over-harsh
-  pass was itself a labelling error, in the opposite direction.
-- **⚠️ The primary method import for I1 — Fang & Marks 2512.01222 — is tier (C),
-  4 citations, and its claimed NeurIPS-2025-workshop status is NOT reflected in
-  either database.** The whole logit-lens instrument rests on an unrefereed
-  preprint. That does not make the method wrong (logit lens itself is tier B at
-  542 citations via the tuned lens, and the mechanism is supported by tier-(A)
-  semantic-hub work), but the specific "lens recovers ROT-13 CoT" result is
-  unreplicated. **I1's validation gate is therefore doing real work, not
-  ceremony** — we are replicating an unrefereed result, on our own rungs, and
-  should say so in the paper.
-- **2605.00269 stays (C) at 0 citations**, so §3.2's conditional trajectory
-  promotion stands exactly as written.
-- **The two databases disagree, and neither is authoritative.** Semantic Scholar
-  mis-mapped Belinkov to "International Conference on Computational Logic" and
-  recorded amnesic probing as arXiv-only at 25 cites, where OpenAlex correctly
-  gives *Computational Linguistics* and *TACL* at 121. Cross-checking is not
-  belt-and-braces; it is required. Filed as a new handbook point.
+Run through the house `resolve_status.py` (dual-resolve, settled by science
+`1a4094a`) plus DBLP as third source. **9 of 14 load-bearing citations came back
+needing third-source resolution**, so the tier labels committed earlier that day
+were not safe. Settled by DBLP:
 
-Read status: **2507.11878 read in full**; everything else at abstract +
-retrieved-summary depth; **no PDFs read.** Deep reads are filed per instrument in
-§3 as gates on that instrument, not on this plan.
+| paper | third source (DBLP) | tier |
+|---|---|---|
+| 2507.11878 harmfulness/refusal separately | **NeurIPS (2025)** | **A**, settled |
+| 2102.12452 probing classifiers | ***Comput. Linguistics*** (2022) | **A**, settled |
+| 2006.00995 amnesic probing | ***TACL*** (2021) | **A**, settled |
+| 2303.08112 tuned lens | CoRR only — genuinely never published | **B**, settled |
+| 2410.20526 Llama Scope | CoRR only — genuinely never published | **B**, settled |
+| 2502.11367 · 2505.24428 · 2502.03032 · 2509.18127 | DBLP rate-limited | **UNRESOLVED** |
 
-*Retrieval provenance: pass 1 (2026-08-05) alphaXiv + web search, arXiv-only —
-defective, root cause was skipping the installed skills. Pass 2 (2026-08-06) via
-the `literature-review` front door: Semantic Scholar exact-ID batch resolution +
-OpenAlex cross-check + a published-venue-filtered topical sweep over Semantic
-Scholar and DBLP.*
+**The load-bearing lesson, measured twice in our own data.** For 2006.00995 both
+Semantic Scholar and OpenAlex reported *preprint-only*; DBLP shows **TACL**. For
+2303.08112 and 2410.20526 both reported preprint-only and DBLP **confirms** it.
+So "both databases agree it is a preprint" is sometimes right and sometimes
+wrong, and **nothing distinguishes the two cases without a third source** — which
+is precisely the rule science settled independently. Our data is a second
+instance of their measured false-agreement case, not a repeat of the same one.
+
+**⚠️ OpenAlex is near-useless for recent ML venues, measured:** it reported
+*preprint-only* for 2507.11878 (NeurIPS), 2502.11367 (EMNLP), 2505.24428 (EMNLP),
+2502.03032 (ICML) and 2509.18127 (ACL) — every one of which Semantic Scholar
+placed at a named venue and DBLP confirms where reachable. Consequence for the
+house rule: the productive pair for CS work is **Semantic Scholar + DBLP**, with
+OpenAlex as a third opinion rather than half the primary check. Filed back to
+science as evidence against their just-settled pairing.
+
+#### What the passes changed, cumulatively
+
+- **Three papers the over-harsh pass filed as (B)/(C) are (A):** 2505.23556
+  (EMNLP), 2409.14507 (NeurIPS), 2411.04986 (ICLR).
+- **⚠️ The primary method import for I1 — Fang & Marks 2512.01222 — is tier (C)**,
+  4 citations, preprint-only on both databases, and its claimed NeurIPS-2025
+  *workshop* status is reflected in neither. The logit-lens instrument therefore
+  rests on an unrefereed, unreplicated result. The method itself is not in doubt
+  (the lens is tier (B) at 542 citations, and the mechanism has tier-(A) support
+  from semantic-hub at ICLR and latent-English at ACL) — but the specific
+  "lens recovers ROT-13 chain-of-thought" claim is unreplicated. **I1's
+  validation gate is load-bearing, not ceremony**, and the paper must say we are
+  replicating an unrefereed result on our own rungs.
+- **2605.00269 remains preprint-only on both databases at 0 citations**, and was
+  not third-source checked. Under the rule that is **unresolved-leaning-(C)**,
+  not settled (C) — but either way it may not drive a decision, so §3.2's
+  conditional trajectory promotion stands unchanged.
+
+#### Coverage: the topical sweep is INCOMPLETE, and that is stated, not hidden
+
+The published-venue topical sweep over Semantic Scholar and DBLP was **stopped
+before completion** (owner call, 2026-08-06) after a first attempt returned
+almost nothing — which was a **design error, not a finding**: it post-filtered a
+20-item relevance window to published venues in a preprint-dominated subfield, so
+the filter removed nearly everything by construction. A v2 with a 100-item window
+and published-fraction reporting was killed while still running.
+
+**Therefore the coverage question — how much peer-reviewed work the arXiv-only
+pass missed — is OPEN, and no claim of comprehensiveness may be made.** What the
+truncated pass did surface, all previously absent from this plan and all SAE-side:
+
+| paper | venue (S2; OpenAlex disagrees, DBLP unreachable) | note |
+|---|---|---|
+| 2502.11367 | EMNLP 2025, 21c | SAE features for classification + transfer |
+| 2505.24428 | EMNLP 2025, 14c | **model unlearning via SAE subspace projection** — directly relevant to this repo's training-time half |
+| 2502.03032 | ICML 2025, 10c | feature flow across layers for steering |
+| 2503.11232 | BlackboxNLP 2025, 10c | interpretable feature intervention (privacy) |
+| 2509.18127 | ACL 2025, 4c | Safe-SAIL, fine-grained safety landscape via SAEs |
+
+Six hits from a biased 20-item window is enough to show the gap is **real** and
+nowhere near enough to size it. Completing this sweep is filed as TODO work, and
+until it is done the literature map in §8 is explicitly partial.
 
 ---
 
