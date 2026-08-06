@@ -241,6 +241,24 @@ class ProbeConfig(StrictModel):
     # 5 is the standard default and buys the smallest fold that still leaves a
     # usable test share per fold.
     cv_folds: int = 5
+    # Length null model (2026-08-05) — see measurements/length_null.py for why it
+    # exists. How far a probe's AUROC must clear the character-length baseline on
+    # the SAME prompts before its separation is attributed to decoded content.
+    #
+    # Basis, from measured data rather than taste: on the phase-0 pilot the two
+    # rungs with genuine decode signal clear the baseline by 0.19 and 0.29
+    # (reverse_words 0.844, zero_width 0.945 against a length null of ~0.654),
+    # while every confounded rung clears it by about 0.005. Any cut in roughly
+    # (0.02, 0.18) separates those two populations identically; 0.05 sits near the
+    # low end of that range, so it is conservative in the direction that matters —
+    # it admits a weak-but-real signal rather than excluding one.
+    #
+    # NOT yet a licensing gate: the margin is REPORTED beside licensing while the
+    # rule itself is settled (TODO item 17b). Tuning path: the same re-licensing
+    # sweep that found the confound, re-run per rung as the ladder grows, plus the
+    # guard-side rungs once AS-6 has them — a second corpus is the real test of
+    # whether one cut generalises.
+    length_null_min_margin: float = 0.05
     # Percentile of the *same-condition negative* score distribution a positive
     # example must beat to read positive. An operating point, not an estimate:
     # at 50 the benign control's own positive rate is 50% by construction, and

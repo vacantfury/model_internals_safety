@@ -354,3 +354,90 @@ def test_guard_config_filename_must_match_its_name_field(tmp_path):
 def test_a_guard_config_is_usable_wherever_a_model_config_is():
     """The capture spine takes ModelConfig; guards must not need a parallel path."""
     assert isinstance(load_guard_config("wildguard"), ModelConfig)
+
+
+# --- verdict readout from logits -------------------------------------------
+
+
+@pytest.fixture
+def tiny_guard(guard_tokenizer):
+    torch.manual_seed(0)
+    config = literal_guard()
+    architecture = LlamaConfig(
+        vocab_size=guard_tokenizer.vocab_size,
+        hidden_size=32,
+        intermediate_size=64,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        max_position_embeddings=1024,
+        pad_token_id=guard_tokenizer.pad_token_id,
+    )
+    return attach(LlamaForCausalLM(architecture), guard_tokenizer, config)
+
+
+def test_read_verdicts_returns_one_reading_per_payload(tiny_guard):
+    from internals_safety.guards import read_verdicts
+
+    payloads = [PAYLOAD, "hi", "explain gradient descent please"]
+    readings, tokens = read_verdicts(tiny_guard, payloads, batch_size=2)
+
+    assert len(readings) == len(payloads)
+    assert tokens.safe_piece == "no" and tokens.unsafe_piece == "yes"
+    for reading in readings:
+        assert 0.0 <= reading.p_unsafe <= 1.0
+        assert 0.0 <= reading.p_safe <= 1.0
+        assert reading.label_mass == pytest.approx(reading.p_unsafe + reading.p_safe)
+        assert reading.unsafe == (reading.p_unsafe > reading.p_safe)
+
+
+def test_verdicts_are_invariant_to_batch_size(tiny_guard):
+    """Left padding must make the readout padding-invariant, exactly as for capture.
+
+    If it were not, P(unsafe) would depend on which prompts a batch happened to
+    contain — a number that changes with batch composition is not a measurement.
+    """
+    from internals_safety.guards import read_verdicts
+
+    payloads = [PAYLOAD, "hi", "explain gradient descent in one short paragraph"]
+    singly, _ = read_verdicts(tiny_guard, payloads, batch_size=1)
+    together, _ = read_verdicts(tiny_guard, payloads, batch_size=len(payloads))
+
+    for one, many in zip(singly, together):
+        assert one.p_unsafe == pytest.approx(many.p_unsafe, abs=1e-5)
+        assert one.p_safe == pytest.approx(many.p_safe, abs=1e-5)
+
+
+def test_read_verdicts_refuses_a_plain_model_config(tiny_model):
+    from internals_safety.guards import read_verdicts
+
+    with pytest.raises(TypeError, match="needs a GuardConfig"):
+        read_verdicts(tiny_model, [PAYLOAD])
+
+
+def test_format_health_surfaces_a_misplaced_verdict_prefix():
+    """The signature of `verdict_prefix` being wrong, as a reportable summary.
+
+    Little probability on either label plus a consistent non-label argmax means
+    the readout is one position too early. That invalidates a run rather than
+    being a finding, so it belongs in the results record.
+    """
+    from internals_safety.guards import VerdictReading, verdict_format_health
+
+    healthy = [VerdictReading(p_unsafe=0.7, p_safe=0.25, top_token="yes", top_prob=0.7)] * 10
+    broken = [VerdictReading(p_unsafe=0.001, p_safe=0.002, top_token="ĊĊ", top_prob=0.95)] * 10
+
+    good = verdict_format_health(healthy)
+    bad = verdict_format_health(broken)
+
+    assert good["mean_label_mass"] == pytest.approx(0.95)
+    assert good["most_common_top_token"] == "yes"
+    assert bad["mean_label_mass"] < 0.01
+    assert bad["most_common_top_token"] == "ĊĊ"
+    assert bad["most_common_top_token_share"] == 1.0
+
+
+def test_format_health_on_no_readings_is_not_a_crash():
+    from internals_safety.guards import verdict_format_health
+
+    assert verdict_format_health([]) == {"n": 0}
