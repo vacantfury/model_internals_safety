@@ -328,3 +328,18 @@ guard_verdict:
   # disagreeing at 4 is evidence this can go lower; one disagreement is evidence
   # it must go higher and that the per-prompt read is unsafe.
   id_stability_samples: 4
+
+
+# I6's patching attribution — measurements/attribution.py.
+attribution:
+  # Standard deviations above the grid's own mean effect for a cell to count as
+  # carrying it. Zhang & Nanda's own rule (arXiv 2309.16042, ICLR 2023): "a head
+  # is detected if its patching effect is 2 standard deviation away from the
+  # mean effect."
+  #
+  # Spread-relative, not absolute: the effect scale depends on the contrast and
+  # the model, so a fixed cut would mean different things per run.
+  # Tuning path: the deranged-source control produces a null grid on every run,
+  # so this can be checked against the control's own spread — a bar the control
+  # grid also clears is too low on that contrast.
+  detection_sd: 2.0

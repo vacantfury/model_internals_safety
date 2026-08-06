@@ -114,6 +114,12 @@ from internals_safety.measurements.causal import (
     unmeasured_reading,
     viable_directions,
 )
+from internals_safety.measurements.attribution import (
+    forward_passes as attribution_forward_passes,
+    measure_attribution,
+    reading as attribution_reading,
+    unmeasured_reading as attribution_unmeasured,
+)
 from internals_safety.measurements.causal_license import (
     RandomDirectionNull,
     matched_norm_null,
@@ -155,6 +161,7 @@ OPTIONAL_INSTRUMENTS = (
     "entropy_dynamics",
     "causal_license",
     "reply_inversion",
+    "attribution",
 )
 
 # FAIL-SAFE DEFAULT — the live value is `causal_license.max_sweep_layers` in
@@ -304,6 +311,31 @@ class Plan:
             return 0
         return inversion_forward_passes(self.n_random_directions) * self.n_prompts
 
+    @property
+    def attribution_cells(self) -> int:
+        """(layer, position) cells I6's attribution patches, one at a time.
+
+        The WHOLE captured grid, not the causal gate's pruned sweep: the gate is
+        choosing a direction to intervene with and can afford to skip late
+        layers, while this is asking WHERE the effect lives and a pruned answer
+        to that question is a pre-decided one.
+        """
+        if "attribution" not in self.instruments:
+            return 0
+        return self.layers_for_estimate * self.n_capture_positions
+
+    @property
+    def attribution_forward_passes(self) -> int:
+        """Passes I6's attribution adds — two baselines plus two per cell.
+
+        Two per cell, not one: every cell also runs its deranged-source control,
+        and the rule this repo learned the hard way is that a control the
+        estimate cannot see is a cost nobody approved.
+        """
+        if "attribution" not in self.instruments:
+            return 0
+        return attribution_forward_passes(self.attribution_cells) * self.n_prompts
+
     def describe(self, measurements: MeasurementsConfig) -> str:
         generated_tokens = (
             len(self.families)
@@ -324,6 +356,9 @@ class Plan:
                 f"  lens readouts       {self.lens_readouts} (I3 entropy dynamics)",
                 f"  inversion passes    {self.inversion_forward_passes} "
                 "(I5 reply inversion, model-level)",
+                f"  attribution passes  {self.attribution_forward_passes} "
+                f"({self.attribution_cells} cells x 2 passes each incl. the deranged "
+                "control + 2 baselines, model-level)",
                 f"  causal fwd passes   {self.causal_forward_passes} "
                 f"({self.causal_candidates} candidate directions x 3 passes + 2 baselines, "
                 "model-level not per-family)",
@@ -459,6 +494,43 @@ def run_causal_gate(
         null_p_value=None if null is None else null.p_value,
         n_degenerate=n_degenerate,
     )
+
+
+def run_attribution(
+    loaded,
+    plain_harmful_batch,
+    harmful_prompts: Sequence[str],
+    harmless_prompts: Sequence[str],
+    model_config: ModelConfig,
+    measurements: MeasurementsConfig,
+) -> Reading:
+    """I6's attribution half — WHICH cells carry the refusal decision.
+
+    Model-level, for the same reason as the causal gate and I5: the contrast is
+    the plain harmful/harmless pair and does not depend on a rung. The clean
+    states are the plain-harmful capture that already exists, so this adds no
+    capture passes — only the patched runs, which `--dry-run` prices.
+
+    The counterfactual token set is the compliance openings. Refusal openings are
+    per-model config already (`refusal_openings`); compliance openings are their
+    counterpart and are read from the same place, because a logit DIFFERENCE
+    needs both halves and a hardcoded "Sure" would be a magic string with a
+    tokenizer dependency — the failure `resolve_refusal_tokens` already exists to
+    prevent.
+    """
+    refusal_ids = resolve_refusal_tokens(loaded, model_config.refusal_openings)
+    compliance_ids = resolve_refusal_tokens(loaded, model_config.compliance_openings)
+    attribution = measure_attribution(
+        loaded,
+        plain_harmful_batch,
+        corrupt_prompts=list(harmless_prompts),
+        clean_prompts=list(harmful_prompts),
+        answer_ids=refusal_ids,
+        counter_ids=compliance_ids,
+        detection_sd=measurements.attribution.detection_sd,
+        batch_size=model_config.capture_batch_size,
+    )
+    return attribution_reading(attribution, measurements)
 
 
 def run_reply_inversion(
@@ -1061,6 +1133,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 plain_harmful_batch,
                 plain_harmless_batch,
                 [prompt.text for prompt in harmful],
+                model_config,
+                measurements,
+            )
+        )
+    if "attribution" in instruments:
+        causal_readings.append(
+            run_attribution(
+                loaded,
+                plain_harmful_batch,
+                [prompt.text for prompt in harmful],
+                [prompt.text for prompt in harmless],
                 model_config,
                 measurements,
             )

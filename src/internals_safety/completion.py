@@ -75,9 +75,13 @@ ROSTER: tuple[Item, ...] = (
     Item(
         "I6",
         "causal toolkit",
-        ("models.interventions", "measurements.causal", "measurements.causal_license"),
-        incomplete="ablation, addition and the licensing gate are wired; "
-        "patching-based attribution is not written",
+        (
+            "models.interventions",
+            "models.patching",
+            "measurements.causal",
+            "measurements.causal_license",
+            "measurements.attribution",
+        ),
     ),
 )
 

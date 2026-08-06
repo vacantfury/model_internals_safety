@@ -70,7 +70,7 @@ from internals_safety.measurements.causal_license import (
 )
 from internals_safety.measurements.contract import Kind, Reading
 from internals_safety.models.interventions import ablate_direction, add_direction
-from internals_safety.models.loader import LoadedModel
+from internals_safety.models.loader import LoadedModel, prepare_prompts
 from internals_safety.probes.directions import Direction
 
 # P1 — checked across the roster by `assert_distinct_questions`.
@@ -130,8 +130,17 @@ def _final_logits(
     several GB for a number that reduces to one row per prompt.
     """
     rows: list[torch.Tensor] = []
-    for start in range(0, len(prompts), batch_size):
-        chunk = list(prompts[start : start + batch_size])
+    # ⚠️ RENDERED through the chat template, fixed 2026-08-06. This tokenised the
+    # bare instruction, while the DIRECTION being intervened on was fit on
+    # activations captured from rendered prompts (`capture_or_load` renders). So
+    # the intervention ran on an input the instruction-tuned model never sees —
+    # and refusal is largely a chat-format behaviour, which is precisely the
+    # quantity this module reads. Found while building `attribution.py`, whose
+    # position offsets are counted against the rendered sequence and so could not
+    # have been written the old way at all.
+    rendered = [prompt.text for prompt in prepare_prompts(loaded, prompts, positions=[])]
+    for start in range(0, len(rendered), batch_size):
+        chunk = list(rendered[start : start + batch_size])
         encoded = loaded.tokenizer(chunk, return_tensors="pt", padding=True)
         inputs = {key: value.to(loaded.device) for key, value in encoded.items()}
         with torch.inference_mode():

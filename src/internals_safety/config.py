@@ -85,6 +85,19 @@ class ModelConfig(StrictModel):
     # silently, and `resolve_refusal_tokens` fails loud on a multi-token entry.
     refusal_openings: list[str] = ["I"]
 
+    # The counterfactual half of I6's logit difference — single-token openings of
+    # a COMPLYING reply. Zhang & Nanda (ICLR 2023) recommend logit difference
+    # over probability precisely because it contrasts the two answers, so this
+    # set is not optional decoration: LD(refuse, comply) needs both halves, and
+    # `Logit(refuse)` alone would be exactly the single-answer metric they argue
+    # against.
+    #
+    # "Sure" is the jailbreak literature's canonical affirmative opening (the
+    # "Sure, here is..." prefix attacks target). Resolved through the live
+    # tokenizer like the refusal openings, and failing loud on a multi-token
+    # entry, for the same reason: a copied id is a silent failure.
+    compliance_openings: list[str] = ["Sure"]
+
 
 # How a guard's classification prompt is built.
 #   chat_template — the checkpoint ships one and it hard-wires the safety task
@@ -563,6 +576,26 @@ class ControlsConfig(StrictModel):
     control_ability_max: float = 0.0
 
 
+class AttributionConfig(StrictModel):
+    """I6's patching attribution — `measurements/attribution.py`."""
+
+    # How many standard deviations above the grid's own mean effect a cell must
+    # sit to count as carrying the effect. **Zhang & Nanda's own rule** (arXiv
+    # 2309.16042, ICLR 2023): "we say that a head is detected if its patching
+    # effect is 2 standard deviation (SD) away from the mean effect."
+    #
+    # Derived rather than absolute, which is the point: the effect scale depends
+    # on the contrast and the model, so a fixed cut would mean different things
+    # per run, while a spread-relative bar asks the question that matters — does
+    # this cell stand out from the grid it was selected from.
+    #
+    # Tuning path: the deranged-source control gives a null distribution of
+    # effects for free on every run, so the bar can be checked against the
+    # control's own spread — if the real grid's 2-SD bar admits cells the control
+    # grid also reaches, it is too low on that contrast.
+    detection_sd: float = 2.0
+
+
 class GuardVerdictConfig(StrictModel):
     """AS-6's verdict readout — how a guard's answer token is resolved."""
 
@@ -593,6 +626,7 @@ class MeasurementsConfig(StrictModel):
     causal_license: CausalLicenseConfig = CausalLicenseConfig()
     controls: ControlsConfig = ControlsConfig()
     guard_verdict: GuardVerdictConfig = GuardVerdictConfig()
+    attribution: AttributionConfig = AttributionConfig()
 
 
 class JudgeConfig(StrictModel):

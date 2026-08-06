@@ -26,3 +26,9 @@ capture:
 refusal_openings:
   - "I"
   - "As"
+
+# The complying counterpart, for I6's logit difference. Verified single-token
+# against this checkpoint's tokenizer by tests/test_real_model.py.
+compliance_openings:
+  - "Sure"
+  - "Here"

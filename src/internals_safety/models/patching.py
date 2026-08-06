@@ -29,7 +29,7 @@ silently patching it would be wrong.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Iterator, Sequence
 
 import torch
 
@@ -37,15 +37,29 @@ from internals_safety.config import Site
 from internals_safety.models.loader import LoadedModel
 
 
-def _replace_at(hidden: torch.Tensor, position: int, vectors: torch.Tensor) -> torch.Tensor:
-    """Write `vectors` [B, D] into `hidden` [B, T, D] at one position.
+def _replace_at(
+    hidden: torch.Tensor, position: int | Sequence[int], vectors: torch.Tensor
+) -> torch.Tensor:
+    """Write `vectors` [B, D] into `hidden` [B, T, D] at one position per row.
 
     `position` is a NEGATIVE offset from the end, matching `PreparedPrompt`'s
     convention throughout the capture layer — under left padding that counts
     back from each row's true last token regardless of pad width.
+
+    **A sequence gives one offset per row**, which `instruction_final` requires:
+    `last` is -1 for every prompt, but the final token of the user message sits
+    at a different offset in each. A scalar-only version would have restricted
+    attribution to `last` — and `last` is the position this repo's own layer
+    diagnostic says carries BEHAVIOUR, while `instruction_final` carries the
+    recovered content, so half the map would have been unreachable.
     """
-    if position >= 0:
-        raise ValueError(f"position must be a negative offset from the end, got {position}")
+    offsets = [position] * hidden.shape[0] if isinstance(position, int) else list(position)
+    if len(offsets) != hidden.shape[0]:
+        raise ValueError(
+            f"batch mismatch: hidden has {hidden.shape[0]} rows, {len(offsets)} positions"
+        )
+    if any(offset >= 0 for offset in offsets):
+        raise ValueError(f"positions must be negative offsets from the end, got {offsets[:8]}")
     if hidden.shape[0] != vectors.shape[0]:
         raise ValueError(
             f"batch mismatch: hidden has {hidden.shape[0]} rows, vectors {vectors.shape[0]}"
@@ -54,12 +68,18 @@ def _replace_at(hidden: torch.Tensor, position: int, vectors: torch.Tensor) -> t
         raise ValueError(
             f"d_model mismatch: hidden is {hidden.shape[-1]}, vectors {vectors.shape[-1]}"
         )
-    index = hidden.shape[1] + position
-    if index < 0:
-        raise ValueError(f"position {position} falls before the start of a {hidden.shape[1]}-token sequence")
+    indices = [hidden.shape[1] + offset for offset in offsets]
+    if any(index < 0 for index in indices):
+        raise ValueError(
+            f"a position falls before the start of a {hidden.shape[1]}-token sequence: "
+            f"offsets {[o for o, i in zip(offsets, indices) if i < 0][:8]}"
+        )
 
     patched = hidden.clone()
-    patched[:, index, :] = vectors.to(device=hidden.device, dtype=hidden.dtype)
+    rows = torch.arange(hidden.shape[0], device=hidden.device)
+    patched[rows, torch.tensor(indices, device=hidden.device), :] = vectors.to(
+        device=hidden.device, dtype=hidden.dtype
+    )
     return patched
 
 
@@ -67,14 +87,15 @@ def _replace_at(hidden: torch.Tensor, position: int, vectors: torch.Tensor) -> t
 def patch_residual(
     loaded: LoadedModel,
     layer: int,
-    position: int,
+    position: int | Sequence[int],
     vectors: torch.Tensor,
     site: Site = "resid_pre",
 ) -> Iterator[None]:
     """Overwrite the residual stream at (`layer`, `position`) with `vectors`.
 
     `vectors` is [n_prompts, d_model] and must line up row-for-row with the
-    batch being run inside the context.
+    batch being run inside the context. `position` is one negative offset, or
+    one per row when the site is prompt-dependent (`instruction_final`).
     """
     if not 0 <= layer < loaded.n_layers:
         raise ValueError(f"layer {layer} outside [0, {loaded.n_layers - 1}]")

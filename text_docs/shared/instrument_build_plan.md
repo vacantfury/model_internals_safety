@@ -676,6 +676,57 @@ deep read is a gate on AS-5's related-work section**).
 Required for AS-5's Move C (repair); premature before I1–I4 say what to
 intervene on.
 
+**✅ BUILT 2026-08-06 — both halves.** `models/interventions.py` +
+`measurements/causal.py` + `causal_license.py` answer *does this direction cause
+refusal*; `measurements/attribution.py` answers *which cells carry it*. Wired
+model-level behind `--instruments attribution` and priced in `--dry-run`.
+
+**The method paper was read before the build, and it changed three things.**
+Zhang & Nanda, *Towards Best Practices of Activation Patching in Language
+Models*, **ICLR 2023** (arXiv 2309.16042, 294c) — one of the seven tier-(A)
+papers the arXiv-only sweep missed, read at the build step that needed it.
+
+1. **Corruption — satisfied by construction, not by virtue.** They recommend
+   symmetric token replacement over Gaussian noising, showing GN puts the model
+   off-distribution and localises *different* components on the same task. Our
+   clean and corrupted runs are two real prompt sets (plain-harmful,
+   plain-harmless), so no noise is ever added to an embedding here. But our
+   corruption is **stronger** than their STR — we swap the whole prompt, closer
+   to the `p_ABC` corruption of their §4.2.
+2. **Metric — logit difference, and their failure case is our regime.** They show
+   probability "must fail to detect negative model components if corruption
+   reduces the correct token probability to near zero" (measured: P fell to 5e-4
+   and probability missed both negative heads while logit difference found them).
+   Our corrupted run is a *benign* prompt, on which refusal mass sits at the
+   floor — so that is not a hypothetical for us. ⚠️ This DIVERGES from
+   `causal.py`, which reads refusal as a probability because its gate takes a
+   *fraction* of the refusal removed and a fraction of a log-odds is undefined.
+   **The two numbers are not comparable and must never appear side by side.**
+3. **Extent — single cell, never a sliding window.** They measure windows
+   producing 1.40–1.75x the peak of summed single-layer effects, from non-linear
+   joint effects. A window is not offered at all, because offering it would
+   invite reporting the larger number.
+
+**A structural guard the paper does not state.** Their detection rule is "2 SD
+away from the mean effect", which we adopt as `attribution.detection_sd`. But the
+largest z attainable in a sample of size n is `(n-1)/sqrt(n)` — a lone outlier
+inflates the very SD it is measured against — so **at k=2 no grid smaller than 6
+cells can detect anything, whatever the effects are** (n=4 caps at 1.5, n=5 at
+1.79). `bar_is_reachable` catches this and the reading returns UNMEASURED rather
+than "nothing detected", because an unreachable bar reporting a null is
+arithmetic dressed as a measurement. Real grids are 32x2, so it never binds in
+production — it binds in tests, which is where it was found.
+
+**What building it exposed elsewhere.** Attribution's position offsets are
+counted against the RENDERED sequence, so it could not be written the way the
+other write-side instruments were — and that surfaced a defect in them:
+`capture_or_load` renders every prompt through the chat template, but
+`causal.py` and `reply_inversion.py` tokenised the bare instruction. Both were
+steering directions fit in one distribution while running forward passes in
+another, on a behaviour (refusal) that is largely chat-format-dependent.
+`causal.py` is fixed; I5's fix carries a design question about where the
+inversion question belongs in a chat turn and is filed (TODO 53).
+
 **Method imports, established:** activation patching and its efficient variants —
 arXiv 2508.21258 (RelP, relevance patching for scalable circuit discovery);
 concept erasure for amnesic-style tests — arXiv 2006.00995 (amnesic probing),
