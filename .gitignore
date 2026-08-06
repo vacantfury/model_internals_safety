@@ -8,6 +8,12 @@ knowledge/
 # Reviewer/ARR text — never committed (owner policy)
 text_docs/reviews/
 
+# Third-party reference implementations, cloned for reading (family standard —
+# same as the guardrail sibling). Never vendored into src/: the oikos rule is
+# consume infrastructure as a pinned dependency, and third-party research code
+# is read here, cited, and reimplemented under our own controls.
+other_repos/
+
 # Experiment artifacts
 outputs/
 data/
