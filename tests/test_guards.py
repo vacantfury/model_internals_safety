@@ -337,9 +337,18 @@ def test_llama_guard_config_defers_to_the_shipped_chat_template():
 
     assert config.prompt_style == "chat_template"
     assert config.prompt_template is None
-    # Verdict is the first generated token — pending the empirical newline check.
-    assert config.verdict_prefix == ""
     assert (config.safe_token, config.unsafe_token) == ("safe", "unsafe")
+
+
+def test_llama_guard_reads_the_verdict_at_token_one_not_token_zero():
+    """Measured 2026-08-05 (job 8957221), and it is not a preference.
+
+    The template ends with no trailing newline, so the model emits `\\n\\n` first:
+    on 8/8 prompts the argmax first token was that pair, and the two labels held
+    2.5e-09 of the mass at position 0. An empty prefix there produced a plaintext
+    block rate of 0.00 for a guard that blocks harmful plaintext reliably.
+    """
+    assert load_guard_config("llama_guard_3_8b").verdict_prefix == "\n\n"
 
 
 def test_guard_config_filename_must_match_its_name_field(tmp_path):

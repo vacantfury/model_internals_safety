@@ -25,12 +25,19 @@ capture_batch_size: 8
 # (s0_reshape.md §6, phase 1 step 2).
 prompt_style: chat_template
 
-# UNSETTLED, and deliberately visible rather than assumed: it is not confirmed
-# whether this template emits a leading newline before the verdict token. If it
-# does, the first-token readout lands on the newline and every degradation number
-# built on it is wrong. One forward pass settles it (TODO item 13); the fix, if
-# needed, is this string and nothing else.
-verdict_prefix: ""
+# SETTLED EMPIRICALLY 2026-08-05, job 8957221, and the answer was the bad one.
+# The template ends at `<|start_header_id|>assistant<|end_header_id|>` with no
+# trailing newline, so the MODEL supplies the newline pair: on 8/8 harmful
+# plaintexts the argmax first token was `ĊĊ` with share 1.0, and `safe`/`unsafe`
+# held 2.5e-09 of the mass between them at that position. Reading there produced
+# a plaintext block rate of 0.00 for a guard that blocks harmful plaintext
+# reliably — a wrong number that looked like a finding.
+#
+# So the verdict is token 1, not token 0, and this teacher-forces the preamble.
+# Do NOT "simplify" this back to an empty string: the guard-side numbers silently
+# become noise, and only `verdict_format.mean_label_mass` in the run record shows
+# it. That field is the standing check — a healthy run has it near 1.0.
+verdict_prefix: "\n\n"
 unsafe_token: "unsafe"
 safe_token: "safe"
 

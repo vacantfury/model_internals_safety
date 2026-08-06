@@ -139,20 +139,22 @@ def test_llama_guard_verdict_tokens_match_the_published_ids(llama_guard_tokenize
 
 
 def test_llama_guard_verdict_ids_do_not_depend_on_the_forced_prefix(llama_guard_tokenizer):
-    """Which POSITION to read is open (TODO 13); WHICH TOKEN is not.
+    """The POSITION was wrong before job 8957221; the TOKENS never were.
 
-    Both candidate prefixes resolve to the same pair, so settling the newline
-    question cannot invalidate the ids — only where they are read.
+    Both prefixes resolve to the same pair, which is why settling the newline
+    question corrected where the probabilities were read without invalidating
+    which two tokens they belonged to.
     """
     config = load_guard_config("llama_guard_3_8b")
     rendered = render_guard_prompt(llama_guard_tokenizer, config, PAYLOAD)
 
-    without = resolve_verdict_tokens(llama_guard_tokenizer, config, rendered)
-    with_newline = resolve_verdict_tokens(
-        llama_guard_tokenizer, config.model_copy(update={"verdict_prefix": "\n\n"}), rendered
+    empty_prefix = resolve_verdict_tokens(
+        llama_guard_tokenizer, config.model_copy(update={"verdict_prefix": ""}), rendered
     )
+    settled = resolve_verdict_tokens(llama_guard_tokenizer, config, rendered)
 
-    assert (without.safe_id, without.unsafe_id) == (with_newline.safe_id, with_newline.unsafe_id)
+    assert config.verdict_prefix == "\n\n"
+    assert (empty_prefix.safe_id, empty_prefix.unsafe_id) == (settled.safe_id, settled.unsafe_id)
 
 
 def test_payload_final_lands_on_the_payload_inside_the_guard_template(llama_guard_tokenizer):
