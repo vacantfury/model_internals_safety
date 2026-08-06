@@ -96,6 +96,7 @@ from internals_safety.measurements.entropy_dynamics import (
 from internals_safety.measurements.ability import measure_ability
 from internals_safety.measurements.behavior import measure_behavior
 from internals_safety.measurements.deployment import measure_deployment, read_deployment_per_prompt
+from internals_safety.measurements.black_box_baseline import measure_black_box_baseline
 from internals_safety.measurements.length_null import measure_length_null
 from internals_safety.measurements.recognition import (
     HARMFULNESS_POSITION,
@@ -318,6 +319,19 @@ def run_family(
         [item.ciphertext for item in encoded_harmful],
         [item.ciphertext for item in encoded_harmless],
     )
+    # P4, the surface baseline. Mandatory per build plan §4 ("every instrument
+    # runs all of these") and complementary to the length null rather than a
+    # superset of it — TF-IDF l2-normalises, so it is blind to length by
+    # construction and the two catch different confounds (§4.2). Costs no GPU:
+    # it reads the same ciphertext strings the encoder just produced.
+    black_box = measure_black_box_baseline(
+        family,
+        [prompt.text for prompt in harmful],
+        [prompt.text for prompt in harmless],
+        [item.ciphertext for item in encoded_harmful],
+        [item.ciphertext for item in encoded_harmless],
+        seed=measurements.probes.seed,
+    )
     length_margin = length_null.margin(curve.observed_max_transfer_auroc)
     beats_length_null = length_null.beats_null(
         curve.observed_max_transfer_auroc, measurements.probes.length_null_min_margin
@@ -450,6 +464,20 @@ def run_family(
         # The margin is REPORTED beside the AUROC rather than silently gating,
         # because a rung that fails to beat the null is a finding about the
         # instrument, not a cell to drop.
+        # P4 beside P3, never instead of it: they read different surface
+        # properties and the length null was measured stricter on every rung.
+        "black_box_baseline": {
+            "family": black_box.family,
+            "plain_auroc": black_box.plain_auroc,
+            "encoded_auroc": black_box.encoded_auroc,
+            "surface_loss": black_box.surface_loss,
+            "hides_content_from_the_surface": black_box.hides_content_from_the_surface(),
+            "observed_max_transfer_auroc": curve.observed_max_transfer_auroc,
+            "margin": black_box.margin(curve.observed_max_transfer_auroc),
+            "beats_black_box_baseline": black_box.beats_baseline(
+                curve.observed_max_transfer_auroc, measurements.probes.length_null_min_margin
+            ),
+        },
         "length_null": {
             "family": length_null.family,
             "plain_auroc": length_null.plain_auroc,

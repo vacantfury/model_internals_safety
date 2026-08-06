@@ -32,6 +32,7 @@ PURE_MODULES = (
     "regimes",
     "guard_regimes",
     "length_null",
+    "black_box_baseline",
     "contract",
     "causal_license",
 )
