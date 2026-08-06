@@ -188,6 +188,34 @@ class TestRunFamily:
             assert deployment["harmless_rate"] is None
             assert deployment["gap"] is None
 
+    def test_the_summary_carries_the_length_null(self, family_result):
+        """The mandatory control for both papers, on the AS-5 side.
+
+        It shipped 2026-08-05 wired into the GUARD path only, so AS-6 had it and
+        AS-5 did not — for a confound that was MEASURED on the AS-5 side (raw
+        character length separates the JBB harmful corpus from the benign one at
+        AUROC 0.654, and the newly licensed rungs sat at 0.659).
+        """
+        null = family_result["summary"]["length_null"]
+        assert set(null) >= {
+            "plain_auroc", "encoded_auroc", "observed_max_transfer_auroc",
+            "margin", "min_margin", "beats_length_null",
+        }
+        # nan_ok: on the tiny fixture model a probe can fail to fit, and the
+        # margin is then NaN rather than 0.0 — the same fail-closed discipline
+        # as the deployment curve's p_value. A NaN margin must NOT beat the null.
+        assert null["margin"] == pytest.approx(
+            null["observed_max_transfer_auroc"] - null["encoded_auroc"], nan_ok=True
+        )
+        assert null["beats_length_null"] == (null["margin"] >= null["min_margin"])
+        if null["margin"] != null["margin"]:
+            assert not null["beats_length_null"]
+
+    def test_the_length_null_is_measured_on_the_texts_actually_sent(self, family_result, harmful):
+        """From the run's own strings, not a corpus name — otherwise the control
+        drifts away from the thing it is controlling."""
+        assert family_result["summary"]["length_null"]["n_positive"] == len(harmful)
+
     def test_the_summary_names_its_activation_caches(self, family_result):
         activations = family_result["summary"]["activations"]
         assert Path(activations["encoded_harmful"]).exists()

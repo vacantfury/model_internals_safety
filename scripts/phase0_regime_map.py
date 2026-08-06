@@ -89,6 +89,7 @@ from internals_safety.judges.refusal import RefusalJudge
 from internals_safety.measurements.ability import measure_ability
 from internals_safety.measurements.behavior import measure_behavior
 from internals_safety.measurements.deployment import measure_deployment, read_deployment_per_prompt
+from internals_safety.measurements.length_null import measure_length_null
 from internals_safety.measurements.recognition import (
     measure_recognition,
     read_recognition_per_prompt,
@@ -233,6 +234,22 @@ def run_family(
         encoded_harmless_batch,
         measurements.probes,
     )
+    # The length null for this rung, from the EXACT texts this run sent to the
+    # model rather than from a corpus name — the ciphertexts here must be the
+    # same strings that produced the activations the probe was fitted and read
+    # on, or the control drifts away from what it is controlling.
+    length_null = measure_length_null(
+        family,
+        [prompt.text for prompt in harmful],
+        [prompt.text for prompt in harmless],
+        [item.ciphertext for item in encoded_harmful],
+        [item.ciphertext for item in encoded_harmless],
+    )
+    length_margin = length_null.margin(curve.observed_max_transfer_auroc)
+    beats_length_null = length_null.beats_null(
+        curve.observed_max_transfer_auroc, measurements.probes.length_null_min_margin
+    )
+
     recognition_result = measure_recognition(
         encoded_harmful_batch, encoded_harmless_batch, measurements.probes
     )
@@ -346,9 +363,33 @@ def run_family(
             "meets_effect_size_bar": recognition.meets_effect_size_bar,
             "harmful_rate": recognition.harmful_rate,
         },
-        # §8 control 4: encodings inflate token counts, and a probe could exploit
-        # length alone. Recorded rather than corrected — the fix is a matched
-        # corpus, which is an S3 decision.
+        # §8 control 4, the LENGTH NULL. This used to record two mean character
+        # counts with a note saying the fix was "an S3 decision"; that note was
+        # stale from 2026-08-05, when the confound turned out to be real and not
+        # hypothetical — raw character length separates the JBB harmful corpus
+        # from the benign one at AUROC 0.654, every encoder is monotone in
+        # length so the separation survives into every rung, and the newly
+        # licensed rungs sat at mean deployment AUROC 0.659 against that 0.654.
+        #
+        # `measurements/length_null.py` has existed since that day and was wired
+        # into the GUARD path (`scripts/as6_guard_probe.py`) but not into this
+        # one, so AS-6 had the mandatory control and AS-5 did not. It does now.
+        # The margin is REPORTED beside the AUROC rather than silently gating,
+        # because a rung that fails to beat the null is a finding about the
+        # instrument, not a cell to drop.
+        "length_null": {
+            "family": length_null.family,
+            "plain_auroc": length_null.plain_auroc,
+            "encoded_auroc": length_null.encoded_auroc,
+            "mean_positive_chars": length_null.mean_positive_chars,
+            "mean_negative_chars": length_null.mean_negative_chars,
+            "n_positive": length_null.n_positive,
+            "n_negative": length_null.n_negative,
+            "observed_max_transfer_auroc": curve.observed_max_transfer_auroc,
+            "margin": length_margin,
+            "min_margin": measurements.probes.length_null_min_margin,
+            "beats_length_null": beats_length_null,
+        },
         "mean_ciphertext_chars": sum(len(item.ciphertext) for item in encoded_harmful) / n if n else 0.0,
         "mean_plaintext_chars": sum(len(item.plaintext) for item in encoded_harmful) / n if n else 0.0,
         "activations": {
