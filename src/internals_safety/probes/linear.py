@@ -420,6 +420,7 @@ def permutation_null_max_transfer_auroc(
     test_positive: ActivationBatch,
     test_negative: ActivationBatch,
     config: ProbeConfig,
+    strata: np.ndarray | None = None,
 ) -> np.ndarray:
     """Null distribution of the MAX TRANSFER AUROC over the (layer x position) grid.
 
@@ -491,10 +492,20 @@ def permutation_null_max_transfer_auroc(
         [np.ones(n_positive, dtype=int), np.zeros(n_negative, dtype=int)]
     )
 
+    if strata is not None and len(strata) != len(test_labels):
+        raise ValueError(
+            f"strata has {len(strata)} entries but there are {len(test_labels)} test "
+            "examples; they must be in the same order (positives then negatives)"
+        )
+
     rng = np.random.default_rng(config.seed)
     maxima = np.empty(config.n_permutations, dtype=float)
     for draw in range(config.n_permutations):
-        shuffled = rng.permutation(test_labels)
+        shuffled = (
+            rng.permutation(test_labels)
+            if strata is None
+            else _permute_within_strata(test_labels, strata, rng)
+        )
         best = -np.inf
         for scores in scores_per_cell:
             auroc = roc_auc_score(shuffled, scores)
@@ -502,6 +513,34 @@ def permutation_null_max_transfer_auroc(
                 best = max(best, auroc)
         maxima[draw] = best
     return maxima
+
+
+def _permute_within_strata(
+    labels: np.ndarray, strata: np.ndarray, rng: np.random.Generator
+) -> np.ndarray:
+    """Shuffle labels only among examples sharing a stratum.
+
+    This is what turns a plain permutation null into a LENGTH-MATCHED one. A free
+    permutation destroys every label-feature association, including the one
+    between class and character length — so a probe that separates purely on
+    length beats that null comfortably, which is exactly what happened on 20 of
+    38 (guard, rung) pairs in the AS-6 phase-1 run and on 12 of 15 rungs in AS-5's
+    re-licensing.
+
+    Permuting inside length strata preserves the class-length association across
+    strata while destroying it within. A length-only classifier therefore scores
+    about as well under the null as it does on the real labels, and cannot
+    license. Only separation that survives holding length fixed gets through.
+
+    Degenerate strata (all one class) contribute nothing to the shuffle, which is
+    correct: with length fixed and no class contrast there is nothing to exchange.
+    """
+    permuted = labels.copy()
+    for value in np.unique(strata):
+        index = np.flatnonzero(strata == value)
+        if index.size > 1:
+            permuted[index] = rng.permutation(labels[index])
+    return permuted
 
 
 def permutation_p_value(observed: float, null_maxima: np.ndarray) -> float:

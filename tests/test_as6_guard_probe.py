@@ -122,10 +122,15 @@ def measurements():
 
 
 @pytest.fixture(scope="module")
-def one_rung(sweep, tiny_guard_model, corpus, measurements):
+def one_rung(sweep, tiny_guard_model, corpus, measurements, tmp_path_factory):
     harmful, harmless = corpus
-    plain_harmful = sweep.capture_guard(tiny_guard_model, [p.text for p in harmful])
-    plain_harmless = sweep.capture_guard(tiny_guard_model, [p.text for p in harmless])
+    cache = tmp_path_factory.mktemp("activations")
+    plain_harmful, _, _ = sweep.capture_guard(
+        tiny_guard_model, [p.text for p in harmful], "plain-harmful", cache
+    )
+    plain_harmless, _, _ = sweep.capture_guard(
+        tiny_guard_model, [p.text for p in harmless], "plain-harmless", cache
+    )
     return sweep.run_family(
         tiny_guard_model,
         load_ladder()["rot13"],
@@ -134,7 +139,48 @@ def one_rung(sweep, tiny_guard_model, corpus, measurements):
         plain_harmful,
         plain_harmless,
         measurements,
+        cache,
     )
+
+
+def test_the_capture_cache_is_keyed_on_the_rendered_prompt(
+    sweep, tiny_guard_model, corpus, tmp_path
+):
+    """A config edit must invalidate cached tensors, not silently reuse them.
+
+    Serving activations captured under an OLD prompt format after a template or
+    verdict_prefix fix is the same class of defect this project has already paid
+    for twice — and it would be invisible, because the tensors load fine.
+    """
+    harmful, _ = corpus
+    payloads = [p.text for p in harmful]
+
+    _, first_path, was_cached = sweep.capture_guard(
+        tiny_guard_model, payloads, "plain-harmful", tmp_path
+    )
+    assert not was_cached
+    _, again_path, was_cached = sweep.capture_guard(
+        tiny_guard_model, payloads, "plain-harmful", tmp_path
+    )
+    assert was_cached and again_path == first_path
+
+    changed = tiny_guard_model.config.model_copy(
+        update={"prompt_template": "DIFFERENT: {prompt} ANSWER:"}
+    )
+    moved = sweep.capture_guard(
+        type(tiny_guard_model)(
+            config=changed,
+            model=tiny_guard_model.model,
+            tokenizer=tiny_guard_model.tokenizer,
+            layers=tiny_guard_model.layers,
+            device=tiny_guard_model.device,
+            dtype=tiny_guard_model.dtype,
+        ),
+        payloads,
+        "plain-harmful",
+        tmp_path,
+    )
+    assert moved[1] != first_path and moved[2] is False
 
 
 def test_every_prompt_gets_exactly_one_cell(one_rung, corpus):

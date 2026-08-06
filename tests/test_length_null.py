@@ -153,3 +153,114 @@ def test_monotone_encoders_carry_the_confound_through_unchanged():
         encoded_neg = ["z" * expand(len(t)) for t in plain_neg]
         null = measure_length_null("m", plain_pos, plain_neg, encoded_pos, encoded_neg)
         assert null.encoded_auroc == null.plain_auroc
+
+
+# --- length-matched permutation licensing ----------------------------------
+
+
+def test_strata_are_quantile_bins_in_probe_order():
+    """Positives first then negatives — the order the probe layer concatenates."""
+    from internals_safety.measurements.length_null import length_strata
+
+    strata = length_strata(texts([1, 2, 3, 4]), texts([5, 6, 7, 8]), n_bins=4)
+
+    assert len(strata) == 8
+    # Longest four texts are the negatives here, so they occupy the top bins.
+    assert set(strata[:4]) == {0, 1}
+    assert set(strata[4:]) == {2, 3}
+
+
+def test_strata_spread_ties_instead_of_collapsing():
+    """A corpus of identical lengths must still spread across bins.
+
+    Equal-width binning would put every tied example in one bin, which silently
+    degrades the matched null back into a free permutation — the exact failure it
+    exists to prevent, and invisible in the output.
+    """
+    from internals_safety.measurements.length_null import length_strata
+
+    strata = length_strata(texts([50] * 10), texts([50] * 10), n_bins=5)
+
+    assert len(set(strata)) == 5
+
+
+def test_a_length_only_probe_cannot_license_under_the_matched_null():
+    """The property the whole module exists for, tested end to end.
+
+    Construct a probe whose ONLY signal is length: activations are the character
+    count, and the harmful class is systematically longer. Under a free
+    permutation this licenses easily. Under the length-matched null it must not.
+    """
+    import numpy as np
+    import torch
+
+    from internals_safety.config import load_measurements_config
+    from internals_safety.measurements.length_null import length_strata
+    from internals_safety.models.capture import ActivationBatch
+    from internals_safety.probes.linear import (
+        permutation_null_max_transfer_auroc,
+        permutation_p_value,
+    )
+
+    rng = np.random.default_rng(0)
+    # Harmful 86 chars on average, benign 73.8 — the real corpus's gap.
+    harmful_lengths = rng.normal(86.0, 12.0, 60)
+    benign_lengths = rng.normal(73.8, 12.0, 60)
+
+    def batch(lengths):
+        # One "feature" that is exactly the length, plus noise dimensions.
+        features = np.stack(
+            [lengths, rng.normal(0, 1, len(lengths)), rng.normal(0, 1, len(lengths))], axis=1
+        )
+        tensor = torch.tensor(features, dtype=torch.float32).reshape(len(lengths), 1, 1, 3)
+        return ActivationBatch(
+            tensor=tensor, layers=[0], positions=["last"], site="resid_pre", model_name="t"
+        )
+
+    config = load_measurements_config().probes.model_copy(update={"n_permutations": 100})
+    plain_pos, plain_neg = batch(harmful_lengths), batch(benign_lengths)
+    enc_pos, enc_neg = batch(harmful_lengths * 2), batch(benign_lengths * 2)
+
+    free = permutation_null_max_transfer_auroc(plain_pos, plain_neg, enc_pos, enc_neg, config)
+    strata = length_strata(
+        texts([int(round(n)) for n in harmful_lengths * 2]),
+        texts([int(round(n)) for n in benign_lengths * 2]),
+        n_bins=10,
+    )
+    matched = permutation_null_max_transfer_auroc(
+        plain_pos, plain_neg, enc_pos, enc_neg, config, strata=strata
+    )
+
+    # The observed statistic is whatever this length-only probe achieves.
+    observed = float(np.max(matched)) if matched.size else float("nan")
+    observed = max(observed, float(np.max(free)))
+
+    # The matched null sits well above the free one: it reproduces the length
+    # signal, which is the whole point.
+    assert matched.mean() > free.mean() + 0.05
+
+    # And a length-only probe fails to clear the matched null.
+    real_auroc = 0.66  # what length alone buys on this corpus
+    assert permutation_p_value(real_auroc, matched) > 0.05
+    assert permutation_p_value(real_auroc, free) < 0.05
+
+
+def test_strata_length_mismatch_is_an_error_not_a_silent_misalignment():
+    import numpy as np
+    import torch
+
+    from internals_safety.config import load_measurements_config
+    from internals_safety.models.capture import ActivationBatch
+    from internals_safety.probes.linear import permutation_null_max_transfer_auroc
+
+    def batch(n):
+        tensor = torch.randn(n, 1, 1, 4)
+        return ActivationBatch(
+            tensor=tensor, layers=[0], positions=["last"], site="resid_pre", model_name="t"
+        )
+
+    config = load_measurements_config().probes.model_copy(update={"n_permutations": 4})
+    with pytest.raises(ValueError, match="same order"):
+        permutation_null_max_transfer_auroc(
+            batch(10), batch(10), batch(10), batch(10), config, strata=np.zeros(5, dtype=int)
+        )

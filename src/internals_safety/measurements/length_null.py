@@ -110,6 +110,41 @@ class LengthNull:
         return computed >= min_margin
 
 
+def length_strata(
+    positive_texts: Sequence[str],
+    negative_texts: Sequence[str],
+    n_bins: int,
+) -> "np.ndarray":
+    """Quantile bins of character length, for a length-MATCHED permutation null.
+
+    Order matches the concatenated test set the probe layer builds — positives
+    first, then negatives — because the null permutes labels in that order.
+
+    Quantile bins rather than equal-width: encoder outputs are long-tailed
+    (`binary` runs ~9x the plaintext), and equal-width bins would put almost every
+    example in one bin, which silently degrades the matched null back into a free
+    one. Ties are handled by ranking rather than by bin edges, so a corpus with
+    many identical lengths still spreads across bins instead of collapsing.
+
+    Honest about the knob: `n_bins` IS one, and it is milder than the margin
+    threshold it replaces — more bins means a stricter test, and the result should
+    be stable across a broad range rather than tuned. Report that stability rather
+    than asserting it (`conf/measurements.yaml` names the check).
+    """
+    import numpy as np
+
+    lengths = np.array(
+        [len(text) for text in positive_texts] + [len(text) for text in negative_texts],
+        dtype=float,
+    )
+    if lengths.size == 0:
+        return np.empty(0, dtype=int)
+    # Rank-based so that ties spread rather than piling into one edge.
+    order = np.argsort(np.argsort(lengths, kind="stable"), kind="stable")
+    bins = max(1, min(n_bins, lengths.size))
+    return (order * bins // lengths.size).astype(int)
+
+
 def measure_length_null(
     family: str,
     plain_positive: Sequence[str],

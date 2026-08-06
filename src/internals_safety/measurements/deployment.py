@@ -28,8 +28,12 @@ when reporting it.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING
 
 from internals_safety.config import ProbeConfig
+
+if TYPE_CHECKING:  # pragma: no cover
+    import numpy as np
 from internals_safety.models.capture import ActivationBatch
 from internals_safety.probes.linear import (
     permutation_null_max_transfer_auroc,
@@ -135,6 +139,7 @@ def measure_deployment(
     encoded_positive: ActivationBatch,
     encoded_negative: ActivationBatch,
     config: ProbeConfig,
+    strata: "np.ndarray | None" = None,
 ) -> DeploymentCurve:
     """Fit the content probe on plain text, read it on the attack condition.
 
@@ -170,8 +175,13 @@ def measure_deployment(
     if not results:
         # Nothing to license; `p_value` stays NaN and `deployed` fails closed.
         return curve
+    # `strata` (optional) makes this a LENGTH-MATCHED null: labels are permuted
+    # only among prompts of similar character length, so a probe separating on
+    # length alone cannot license. Default None keeps the free permutation, which
+    # is what AS-5's pilot script already uses — this parameter adds a stricter
+    # option rather than changing anyone's numbers underneath them.
     null_maxima = permutation_null_max_transfer_auroc(
-        plain_positive, plain_negative, encoded_positive, encoded_negative, config
+        plain_positive, plain_negative, encoded_positive, encoded_negative, config, strata=strata
     )
     return replace(
         curve,

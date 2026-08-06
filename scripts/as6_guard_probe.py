@@ -89,8 +89,13 @@ from internals_safety.measurements.guard_regimes import (
     assign_guard_cell,
     build_guard_cell_map,
 )
-from internals_safety.measurements.length_null import measure_length_null
-from internals_safety.models.capture import capture_activations
+from internals_safety.measurements.length_null import length_strata, measure_length_null
+from internals_safety.models.capture import (
+    ActivationBatch,
+    cache_path,
+    capture_activations,
+    resolve_layers,
+)
 from internals_safety.models.loader import LoadedModel, load_model, resolve_device
 from internals_safety.paths import OUTPUTS_DIR, run_dir
 from internals_safety.provenance import capture_provenance, guard_working_tree, write_results
@@ -101,20 +106,41 @@ PHASE = "as6_phase1"
 def capture_guard(
     loaded: LoadedModel,
     payloads: Sequence[str],
+    condition: str,
+    cache_dir: Path,
     batch_size: int | None = None,
-):
+    refresh: bool = False,
+) -> tuple[ActivationBatch, Path, bool]:
     """Capture activations for payloads rendered through the GUARD's prompt.
 
     Deliberately not `models.capture.capture_or_load`: that helper renders through
     `prepare_prompts`, i.e. the plain chat template, which fails closed on a guard
-    that ships none and would silently use the wrong prompt on one that does. The
-    caching layer is skipped with it — guard captures are cheap (no generation)
-    and a cache keyed on the payload alone would collide across guards.
+    that ships none (WildGuard) and would silently use the wrong prompt on one
+    that does. Everything else about it — the cache key, the return contract — is
+    reused rather than reinvented.
+
+    **The cache key is the RENDERED prompt, not the payload.** That is what makes
+    editing `conf/guards/*.yaml` invalidate stale tensors automatically: a changed
+    template, `verdict_prefix`, or `prepend_bos` produces different text and
+    therefore a different key. Keying on the payload would have silently served
+    activations captured under the OLD prompt format after a config fix — which is
+    exactly the class of defect this project has already paid for twice.
     """
     prompts = prepare_guard_prompts(loaded, payloads)
-    return capture_activations(
+    rendered = [prompt.text for prompt in prompts]
+    layers = resolve_layers(loaded, None)
+    positions = list(loaded.config.capture.positions)
+    site = loaded.config.capture.site
+    path = cache_path(loaded, condition, rendered, layers, positions, site, cache_dir)
+
+    if path.exists() and not refresh:
+        return ActivationBatch.load(path), path, True
+
+    batch = capture_activations(
         loaded, prompts, batch_size=batch_size or loaded.config.capture_batch_size
     )
+    batch.save(path)
+    return batch, path, False
 
 
 def run_family(
@@ -125,6 +151,8 @@ def run_family(
     plain_harmful_batch,
     plain_harmless_batch,
     measurements: MeasurementsConfig,
+    cache_dir: Path,
+    refresh: bool = False,
 ) -> dict:
     """Every phase-1 measurement for one rung."""
     config: GuardConfig = loaded.config
@@ -137,9 +165,24 @@ def run_family(
     harmful_payloads = [item.attack_prompt for item in encoded_harmful]
     harmless_payloads = [item.attack_prompt for item in encoded_harmless]
 
-    encoded_harmful_batch = capture_guard(loaded, harmful_payloads)
-    encoded_harmless_batch = capture_guard(loaded, harmless_payloads)
+    encoded_harmful_batch, harmful_cache, harmful_hit = capture_guard(
+        loaded, harmful_payloads, f"encoded-harmful-{family}", cache_dir, refresh=refresh
+    )
+    encoded_harmless_batch, harmless_cache, harmless_hit = capture_guard(
+        loaded, harmless_payloads, f"encoded-harmless-{family}", cache_dir, refresh=refresh
+    )
 
+    # LENGTH-MATCHED licensing (2026-08-05). Strata are built from the ciphertexts
+    # actually sent, in the order the probe layer concatenates them (harmful then
+    # harmless), so labels are permuted only among prompts of similar length. A
+    # probe separating on length alone therefore scores as well under the null as
+    # on the real labels and cannot license. Without this, 20 of 38 (guard, rung)
+    # pairs licensed at the length baseline in the first phase-1 run.
+    strata = length_strata(
+        [item.ciphertext for item in encoded_harmful],
+        [item.ciphertext for item in encoded_harmless],
+        measurements.probes.length_strata_bins,
+    )
     curve = measure_deployment(
         family,
         plain_harmful_batch,
@@ -147,6 +190,7 @@ def run_family(
         encoded_harmful_batch,
         encoded_harmless_batch,
         measurements.probes,
+        strata=strata,
     )
     decode = read_deployment_per_prompt(
         curve,
@@ -217,6 +261,12 @@ def run_family(
         # licensed by permutation but sitting AT the length baseline is the exact
         # pattern that produced a false 14-of-15 map on the AS-5 side.
         "length_null": {
+            # Licensing is now length-MATCHED (labels permuted within strata), so
+            # `decode.p_value` already accounts for length. The margin below stays
+            # reported as a MAGNITUDE, exactly as auroc_threshold did once
+            # permutation licensing replaced it.
+            "licensing": "length_matched_permutation",
+            "strata_bins": measurements.probes.length_strata_bins,
             "plain_auroc": null.plain_auroc,
             "encoded_auroc": null.encoded_auroc,
             "margin": margin,
@@ -235,6 +285,13 @@ def run_family(
             "verdict_prefix": config.verdict_prefix,
         },
         "mean_p_unsafe": sum(v.p_unsafe for v in verdicts) / len(verdicts) if verdicts else 0.0,
+        # Named so "re-run it" is a well-defined instruction: capture is the
+        # expensive step, and a reported number must say which tensors produced it.
+        "activations": {
+            "encoded_harmful": str(harmful_cache),
+            "encoded_harmless": str(harmless_cache),
+            "cache_hits": [harmful_hit, harmless_hit],
+        },
         "mean_ciphertext_chars": (
             sum(len(item.ciphertext) for item in encoded_harmful) / len(encoded_harmful)
             if encoded_harmful
@@ -281,6 +338,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="print the plan and exit")
     parser.add_argument("--allow-dirty", action="store_true")
     parser.add_argument("--allow-cpu", action="store_true")
+    parser.add_argument("--refresh-activations", action="store_true", help="ignore the capture cache")
     parser.add_argument("--outputs-dir", default=None)
     args = parser.parse_args(argv)
 
@@ -319,8 +377,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     # too: the probe must be fitted on the same distribution it is read on, minus
     # the encoding. Fitting on bare plaintext would confound "decoded the payload"
     # with "is inside a classification template".
-    plain_harmful_batch = capture_guard(loaded, [prompt.text for prompt in harmful])
-    plain_harmless_batch = capture_guard(loaded, [prompt.text for prompt in harmless])
+    activations_dir = outputs / "activations"
+    plain_harmful_batch, _, _ = capture_guard(
+        loaded, [p.text for p in harmful], "plain-harmful", activations_dir,
+        refresh=args.refresh_activations,
+    )
+    plain_harmless_batch, _, _ = capture_guard(
+        loaded, [p.text for p in harmless], "plain-harmless", activations_dir,
+        refresh=args.refresh_activations,
+    )
 
     plain_verdicts, _ = read_verdicts(loaded, [prompt.text for prompt in harmful])
     plain_block_rate = sum(v.unsafe for v in plain_verdicts) / len(plain_verdicts)
@@ -348,6 +413,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 plain_harmful_batch,
                 plain_harmless_batch,
                 measurements,
+                activations_dir,
+                refresh=args.refresh_activations,
             )
             for cell in result["cells"]:
                 handle.write(json.dumps(cell, ensure_ascii=False) + "\n")
