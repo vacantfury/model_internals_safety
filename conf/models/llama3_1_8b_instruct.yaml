@@ -15,3 +15,8 @@ capture:
   positions:
     - instruction_final
     - last
+
+# Refusal-opening tokens for the causal gate. Upstream's own Llama-3 table is
+# [40] = 'I' (other_repos/refusal_direction, llama3_model.py).
+refusal_openings:
+  - "I"

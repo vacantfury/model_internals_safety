@@ -68,6 +68,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Sequence
 
+import torch
+
 from internals_safety.config import (
     MeasurementsConfig,
     ModelConfig,
@@ -104,8 +106,23 @@ from internals_safety.measurements.recognition import (
     measure_recognition,
     read_recognition_per_prompt,
 )
+from internals_safety.measurements.causal import (
+    forward_passes as causal_forward_passes,
+    measure_causal_evidence,
+    reading as causal_reading,
+    resolve_refusal_tokens,
+    unmeasured_reading,
+    viable_directions,
+)
+from internals_safety.measurements.causal_license import (
+    RandomDirectionNull,
+    matched_norm_random_direction,
+    random_direction_null,
+)
+from internals_safety.measurements.contract import Reading
 from internals_safety.measurements.regimes import assign_regime, build_regime_map
 from internals_safety.models.capture import capture_or_load
+from internals_safety.probes.directions import Direction, difference_in_means
 from internals_safety.models.loader import LoadedModel, load_model, resolve_device
 from internals_safety.paths import ACTIVATIONS_DIR
 from internals_safety.pipeline import (
@@ -131,7 +148,17 @@ N_LAYERS_ASSUMED = 32
 
 # Optional instruments a run may declare. The four measurements and I2 always
 # run: they add no forward pass. These do.
-OPTIONAL_INSTRUMENTS = ("decode_lens", "entropy_dynamics")
+OPTIONAL_INSTRUMENTS = ("decode_lens", "entropy_dynamics", "causal_license")
+
+# Most layers the causal gate will sweep. Each candidate costs three passes over
+# both prompt sets, so this is a cost cap — and it is expressed as a CAP rather
+# than as a fixed stride, which is what it was first written as and which was
+# wrong: a stride of 4 sweeps 7 layers of a 32-layer model (intended) but exactly
+# ONE layer of a 3-layer model, and on a shallow model that one layer is layer 0,
+# whose `resid_pre` is the raw embedding. Measured 2026-08-06: the whole sweep
+# came back degenerate for that reason. A cap derives the stride from the depth
+# and holds the cost fixed at both ends.
+MAX_CAUSAL_LAYERS = 8
 
 
 @dataclass(frozen=True)
@@ -147,6 +174,12 @@ class Plan:
     # the approval gate is approving.
     instruments: tuple[str, ...] = ()
     capture_batch_size: int = 8
+    # Capture positions and the filter's layer prune, carried so the causal
+    # candidate count is computed from the run's real configuration rather than
+    # from a second copy of it.
+    n_capture_positions: int = 2
+    prune_layer_percentage: float = 0.20
+    n_random_directions: int = 0
 
     @property
     def prompt_forward_passes(self) -> int:
@@ -191,6 +224,37 @@ class Plan:
         batches = -(-self.n_prompts // self.capture_batch_size)
         return 2 * len(self.families) * N_LAYERS_ASSUMED * batches
 
+    @property
+    def causal_candidates(self) -> int:
+        """(layer, position) cells the causal gate would sweep.
+
+        Model-level, so it does NOT multiply by families — the direction is fit
+        on the plain contrast sets and is the same for every rung. That is the
+        whole reason it runs outside the family loop.
+        """
+        if "causal_license" not in self.instruments:
+            return 0
+        eligible = int(N_LAYERS_ASSUMED * (1.0 - self.prune_layer_percentage))
+        return min(eligible, MAX_CAUSAL_LAYERS) * self.n_capture_positions
+
+    @property
+    def causal_forward_passes(self) -> int:
+        """Passes over BOTH plain prompt sets the causal gate adds.
+
+        Priced from `causal.forward_passes` rather than restated, so the cost the
+        approval gate sees and the cost the code incurs cannot drift apart.
+
+        **Includes the random-direction null**, which is a second sweep of
+        `n_random_directions` candidates and was briefly left out of this number
+        while the code already ran it. A control the estimate cannot see is a
+        cost the approval gate never approved.
+        """
+        if "causal_license" not in self.instruments:
+            return 0
+        real = causal_forward_passes(self.causal_candidates)
+        null = causal_forward_passes(self.n_random_directions) if self.n_random_directions else 0
+        return (real + null) * self.n_prompts
+
     def describe(self, measurements: MeasurementsConfig) -> str:
         generated_tokens = (
             len(self.families)
@@ -209,6 +273,9 @@ class Plan:
                 f"instruments           {', '.join(self.instruments) or 'none beyond the four measurements + I2'}",
                 f"  extra fwd passes    {self.instrument_forward_passes} (I1 decode lens)",
                 f"  lens readouts       {self.lens_readouts} (I3 entropy dynamics)",
+                f"  causal fwd passes   {self.causal_forward_passes} "
+                f"({self.causal_candidates} candidate directions x 3 passes + 2 baselines, "
+                "model-level not per-family)",
                 "",
                 "No run launches from --dry-run. For the GPU count/type, $ and wall-clock the "
                 "approval gate needs (family rule, owner 2026-07-22), run:",
@@ -217,12 +284,136 @@ class Plan:
         )
 
 
+def causal_candidate_cells(batch, prune_layer_percentage: float) -> list[tuple[int, str]]:
+    """(layer, position) cells the gate sweeps, capped and pruned up front.
+
+    The filter discards the last `prune_layer_percentage` of layers anyway, so
+    sweeping them buys candidates that cannot survive. Pruning HERE as well as in
+    the filter is deliberate — the filter is the correctness boundary and this is
+    the cost boundary, and a caller reading only one of them still gets a correct
+    answer.
+
+    The stride is DERIVED from the depth so that at most `MAX_CAUSAL_LAYERS` are
+    swept, rather than fixed. A fixed stride is the same cost knob only when the
+    model has the depth it was chosen for; at 3 layers it selected layer 0 alone,
+    whose `resid_pre` is the raw embedding before any computation.
+    """
+    eligible = list(batch.layers[: int(len(batch.layers) * (1.0 - prune_layer_percentage))])
+    if not eligible:
+        return []
+    stride = max(1, -(-len(eligible) // MAX_CAUSAL_LAYERS))
+    return [
+        (layer, position)
+        for layer in eligible[::stride]
+        for position in batch.positions
+    ]
+
+
+def run_causal_gate(
+    loaded,
+    plain_harmful_batch,
+    plain_harmless_batch,
+    harmful_prompts: Sequence[str],
+    harmless_prompts: Sequence[str],
+    model_config: ModelConfig,
+    measurements: MeasurementsConfig,
+) -> Reading:
+    """The upstream causal gate — which direction may be used at all.
+
+    TODO 28, from reading Arditi et al. (NeurIPS 2024): our probe licensing is
+    correlational, and a permutation test structurally cannot distinguish a real
+    separation from the RIGHT separation. A direction separating harmful from
+    benign by character length passes it — and one did, on 12 of 15 rungs. It
+    fails this: removing "how long is this prompt" from the residual stream does
+    not make a model comply.
+
+    The random-direction null runs the identical intervention on matched-norm
+    random directions, because without it "steering worked" and "perturbing
+    anything by this much worked" are the same observation.
+    """
+    config = measurements.causal_license
+    cells = causal_candidate_cells(plain_harmful_batch, config.prune_layer_percentage)
+    swept = [
+        difference_in_means(plain_harmful_batch, plain_harmless_batch, layer, position)
+        for layer, position in cells
+    ]
+    # A cell where the two classes coincide yields a ZERO vector, which cannot be
+    # ablated. Dropping those here keeps the failure a coverage number rather
+    # than an exception raised inside a forward hook.
+    candidates = viable_directions(swept)
+    n_degenerate = len(swept) - len(candidates)
+    if not candidates:
+        return unmeasured_reading(
+            config,
+            f"all {len(swept)} candidate cells were degenerate — the contrast sets "
+            "do not separate anywhere in the swept range, so no direction exists "
+            "to intervene on",
+        )
+    refusal_ids = resolve_refusal_tokens(loaded, model_config.refusal_openings)
+
+    run = measure_causal_evidence(
+        loaded,
+        candidates,
+        harmful_prompts,
+        harmless_prompts,
+        refusal_ids,
+        coefficient=config.addition_coefficient,
+        batch_size=model_config.capture_batch_size,
+    )
+
+    # The negative control: the SAME intervention on matched-norm random
+    # directions at the best candidate's own cell, so the comparison holds the
+    # site fixed and moves only the direction.
+    null: RandomDirectionNull | None = None
+    if config.n_random_directions > 0 and run.evidence:
+        best = max(run.evidence, key=lambda evidence: evidence.bypass_score)
+        anchor = next(c for c in candidates if (c.layer, c.position) == (best.layer, best.position))
+        generator = torch.Generator(device="cpu").manual_seed(measurements.probes.seed)
+        # ONE call with every random direction, not one call each: they all sit
+        # at the anchor's cell, so a single call shares the two baselines instead
+        # of recomputing them 20 times — 40 redundant passes over both prompt
+        # sets, which the dry-run would then have to price for no information.
+        random_run = measure_causal_evidence(
+            loaded,
+            [
+                Direction(
+                    vector=matched_norm_random_direction(anchor.vector, generator),
+                    layer=anchor.layer,
+                    position=anchor.position,
+                    n_positive=anchor.n_positive,
+                    n_negative=anchor.n_negative,
+                    raw_norm=anchor.raw_norm,
+                )
+                for _ in range(config.n_random_directions)
+            ],
+            harmful_prompts,
+            harmless_prompts,
+            refusal_ids,
+            coefficient=config.addition_coefficient,
+            batch_size=model_config.capture_batch_size,
+        )
+        null = random_direction_null(
+            best, random_run.evidence, alpha=measurements.probes.alpha
+        )
+
+    return causal_reading(
+        run,
+        config,
+        n_layers=len(plain_harmful_batch.layers),
+        null_margin=None if null is None else null.margin,
+        null_p_value=None if null is None else null.p_value,
+        n_degenerate=n_degenerate,
+    )
+
+
 def build_plan(
     model_config: ModelConfig,
     families: Sequence[str],
     n_prompts: int,
     allow_cpu: bool = False,
     instruments: Sequence[str] = (),
+    prune_layer_percentage: float = 0.20,
+    n_random_directions: int = 0,
 ) -> Plan:
     return Plan(
         model=model_config.name,
@@ -231,6 +422,9 @@ def build_plan(
         n_prompts=n_prompts,
         instruments=tuple(instruments),
         capture_batch_size=model_config.capture_batch_size,
+        n_capture_positions=len(model_config.capture.positions),
+        prune_layer_percentage=prune_layer_percentage,
+        n_random_directions=n_random_directions,
     )
 
 
@@ -658,6 +852,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     plan = build_plan(
         model_config, families, args.n_prompts,
         allow_cpu=args.allow_cpu, instruments=instruments,
+        prune_layer_percentage=measurements.causal_license.prune_layer_percentage,
+        n_random_directions=measurements.causal_license.n_random_directions,
     )
     print(plan.describe(measurements))
     if args.dry_run:
@@ -693,6 +889,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         cache_dir=activations_dir,
         refresh=args.refresh_activations,
     )
+
+    # ---- the causal gate, MODEL-level ---------------------------------------
+    # Deliberately here rather than inside `run_family`: the direction is fit on
+    # the PLAIN contrast sets and is the same for every rung, so this asks which
+    # direction may be used at all — a gate on the downstream reads, not one of
+    # them. Running it per rung would repeat an identical computation and invite
+    # the reading that a rung has its own causally-licensed direction.
+    causal_readings: list = []
+    if "causal_license" in instruments:
+        causal_readings.append(
+            run_causal_gate(
+                loaded,
+                plain_harmful_batch,
+                plain_harmless_batch,
+                [prompt.text for prompt in harmful],
+                [prompt.text for prompt in harmless],
+                model_config,
+                measurements,
+            )
+        )
 
     raw_path = directory / "cells.jsonl"
     summaries, readings, elapsed_seconds = run_families(
@@ -766,7 +982,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             "metrics": {"families": summaries},
         },
     )
-    results_path = write_run_record(directory, record, readings)
+    # The causal gate's reading is model-level, so it joins the per-rung ones
+    # here rather than being produced inside the loop that made them.
+    results_path = write_run_record(directory, record, causal_readings + readings)
 
     # `binding_failure_rate` is None on a rung whose deployment probe never
     # licensed. Those rungs are UNMEASURED, not (B)-empty — reported separately

@@ -202,3 +202,17 @@ causal_license:
   # (tag_block, reverse_characters, ability 0.00 on both models) cannot carry
   # decoded harm, so their bypass fractions are this criterion's noise floor.
   min_bypass_fraction: 0.50
+
+  # Scale of the added direction in the sufficiency test. PLACEHOLDER, and a
+  # real knob: too small induces nothing on any direction, too large induces
+  # refusal on all of them, and either way the induce criterion stops binding.
+  # Tuning path (non-circular, same free control as the rest of this file):
+  # sweep it and keep the largest value at which a matched-norm RANDOM direction
+  # still fails to induce refusal.
+  addition_coefficient: 1.0
+
+  # Matched-norm random directions for the negative control. Each costs the same
+  # three forward passes as a real candidate, so this is a cost knob too. 20
+  # gives a smallest reportable p-value of 1/21 = 0.048 — the floor at which the
+  # control can license anything at all against alpha 0.05.
+  n_random_directions: 20

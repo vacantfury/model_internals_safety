@@ -60,6 +60,15 @@ class ModelConfig(StrictModel):
     capture_batch_size: int = 8
     capture: CaptureConfig = CaptureConfig()
 
+    # Single-token openings whose probability mass is read as "this model is
+    # about to refuse" — the causal gate's behaviour proxy (Arditi et al.,
+    # NeurIPS 2024). Per model because tokenizers differ: their own table is
+    # `LLAMA3_REFUSAL_TOKS = [40]  # 'I'` and `QWEN_REFUSAL_TOKS = [40, 2121]
+    # # 'I', 'As'`. Stored as STRINGS and resolved through the live tokenizer
+    # rather than copied as ids — an id copied across a checkpoint change fails
+    # silently, and `resolve_refusal_tokens` fails loud on a multi-token entry.
+    refusal_openings: list[str] = ["I"]
+
 
 # How a guard's classification prompt is built.
 #   chat_template — the checkpoint ships one and it hard-wires the safety task
@@ -417,6 +426,24 @@ class CausalLicenseConfig(StrictModel):
     # produce are this criterion's noise floor. Set it from that run; until
     # then no reported number may depend on it.
     min_bypass_fraction: float = 0.50
+
+    # Scale of the added direction in the sufficiency test. A real knob: too
+    # small induces nothing on ANY direction, too large induces refusal on all
+    # of them, and either way the induce criterion stops binding and the filter
+    # silently degrades to bypass-only.
+    #
+    # PLACEHOLDER. Tuning path, and it is the same free negative control used
+    # everywhere else here: sweep the coefficient and keep the largest value at
+    # which a MATCHED-NORM RANDOM direction still fails to induce refusal
+    # (`causal_license.random_direction_null`). That is non-circular — the
+    # criterion is the control's behaviour, never the real direction's.
+    addition_coefficient: float = 1.0
+
+    # Matched-norm random directions drawn for the negative control. Each costs
+    # the same three passes as a real candidate, so this is a real cost knob;
+    # 20 gives a smallest reportable p-value of 1/21 = 0.048, just under a 0.05
+    # alpha, which is the floor at which the control can license anything at all.
+    n_random_directions: int = 20
 
 
 class MeasurementsConfig(StrictModel):

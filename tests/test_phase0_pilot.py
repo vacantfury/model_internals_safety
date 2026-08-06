@@ -29,6 +29,7 @@ from internals_safety.config import (
     MeasurementsConfig,
     ProbeConfig,
     load_measurements_config,
+    load_model_config,
 )
 from internals_safety.data import Prompt
 from internals_safety.encodings.registry import load_ladder
@@ -556,3 +557,81 @@ class TestDeclaredInstrumentRoster:
                 "--model", "qwen2_5_0_5b_instruct", "--instruments", "logit_lens",
                 "--dry-run", "--allow-cpu",
             ])
+
+
+class TestTheCausalGateIsWired:
+    """The causal gate runs at MODEL level, not per rung — asserted end to end
+    because that is the structural claim, and a claim only a docstring makes is
+    one nothing checks.
+
+    Driven through the same tiny in-process model and stub judges as `TestMain`:
+    no download, no API call, no spend.
+    """
+
+    @pytest.fixture
+    def run(self, pilot, tiny_model, monkeypatch, tmp_path):
+        monkeypatch.setattr(pilot, "load_model", lambda config: tiny_model)
+        monkeypatch.setattr(
+            pilot,
+            "RefusalJudge",
+            lambda config: RefusalJudge(config, service=StubService(default=yes_verdict())),
+        )
+        monkeypatch.setattr(
+            pilot,
+            "HarmBenchJudge",
+            lambda config: HarmBenchJudge(config, service=StubService(default=no_verdict())),
+        )
+        exit_code = pilot.main([
+            "--model", "qwen2_5_0_5b_instruct",
+            "--families", "base64", "rot13",
+            "--n-prompts", "4",
+            "--run-name", "causal",
+            "--allow-dirty",
+            "--allow-cpu",
+            "--instruments", "causal_license",
+            "--outputs-dir", str(tmp_path),
+        ])
+        assert exit_code == 0
+        return tmp_path / "runs" / "phase0" / "qwen2_5_0_5b_instruct" / "causal"
+
+    def test_exactly_one_causal_reading_is_emitted_for_two_families(self, run):
+        """The structural point. A rung-level instrument would emit two."""
+        readings = json.loads((run / "results.json").read_text())["readings"]
+        causal = [r for r in readings if r["instrument"] == "causal_license"]
+        assert len(causal) == 1
+
+    def test_the_causal_reading_is_labelled_causal_and_never_merges_with_the_rest(self, run):
+        readings = json.loads((run / "results.json").read_text())["readings"]
+        causal = next(r for r in readings if r["instrument"] == "causal_license")
+        assert causal["kind"] == "causal"
+        assert all(r["kind"] == "correlational" for r in readings if r is not causal)
+
+    def test_the_random_direction_null_actually_ran(self, run):
+        """Without it, "steering worked" and "perturbing anything worked" are the
+        same observation — so its absence must be visible, not assumed."""
+        readings = json.loads((run / "results.json").read_text())["readings"]
+        causal = next(r for r in readings if r["instrument"] == "causal_license")
+        assert causal["detail"]["null_p_value"] is not None
+        assert causal["control_margin"] is not None
+        assert causal["selection_inside_null"] is True
+
+    def test_the_gate_is_off_by_default_so_it_cannot_reprice_a_run_silently(self, pilot):
+        config = load_model_config("qwen2_5_0_5b_instruct")
+        plan = pilot.build_plan(config, ["base64"], n_prompts=10)
+        assert plan.causal_forward_passes == 0
+        assert plan.causal_candidates == 0
+
+    def test_the_dry_run_prices_the_null_as_well_as_the_sweep(self, pilot):
+        """Regression, 2026-08-06: the null's 20 extra candidate runs were
+        briefly absent from the estimate while the code already ran them. A
+        control the estimate cannot see is a cost nobody approved."""
+        config = load_model_config("qwen2_5_0_5b_instruct")
+        plan = pilot.build_plan(
+            config, ["base64"], n_prompts=10,
+            instruments=["causal_license"], n_random_directions=20,
+        )
+        sweep_only = (2 + 3 * plan.causal_candidates) * plan.n_prompts
+        assert plan.causal_forward_passes > sweep_only
+        assert plan.causal_forward_passes == (
+            (2 + 3 * plan.causal_candidates) + (2 + 3 * 20)
+        ) * plan.n_prompts

@@ -948,6 +948,18 @@ per model; built serially, four runs.
 | 7 | **one** forward-pass-only run, both models, the sound rungs + controls | yes | ~$0 (no judge) | **approval gate** |
 | 8 | **I5** reply inversion; then **I6** causal, only if 1–7 hold up | yes | small | **approval gate** |
 
+**⚠️ Step 8's position is SUPERSEDED for the causal LICENSING half (2026-08-06,
+TODO 28).** Reading Arditi et al. showed the causal trio is not a validation step
+run after the fact — it is how the direction is *chosen*, so it belongs upstream
+of the correlational licensing rather than last. Our permutation test asks
+whether a separation is real and structurally cannot ask whether it is the RIGHT
+separation; a direction separating harmful from benign by character length passes
+it, and one did on 12 of 15 rungs. It fails ablation outright. The harness is
+therefore built and wired ahead of I4 (`measurements/causal.py`, plug-in point in
+`pipeline_architecture.md` §3.5). **The reply-inversion test (I5 proper) and the
+full patching toolkit (I6) keep their position at step 8** — they answer
+questions about mechanism, not about which direction is admissible.
+
 Steps 1–6 are entirely offline: no GPU, no spend, fully testable against cached
 activations and the existing 1,400-cell band run. **That is the whole point — the
 expensive step is seventh, not first.**

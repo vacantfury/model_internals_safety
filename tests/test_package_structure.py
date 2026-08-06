@@ -92,11 +92,6 @@ def test_the_contract_is_the_layer_s_sink():
 # recurring silently: a new orphan fails this test at the moment it is created,
 # rather than being noticed in an audit weeks later.
 DECLARED_ORPHANS = {
-    # I5/I6. Causal write operations; gated on the matched-norm random-direction
-    # control, which is not built. Wiring them before that control exists would
-    # let "steering worked" mean "perturbing anything worked".
-    "measurements.causal_license",
-    "models.interventions",
     # Predates the contract; H4 overlap metric, used from the docs not the spine.
     "probes.overlap",
     # The XSTest control. Pure scoring, fully tested — but wiring it needs the
@@ -106,6 +101,12 @@ DECLARED_ORPHANS = {
     "measurements.lexical_decorrelation",
 }
 
+# `measurements.causal_license` and `models.interventions` left this list on
+# 2026-08-06 when `measurements/causal.py` and `run_causal_gate` landed. Their
+# stated reason for being orphans — "gated on the matched-norm random-direction
+# control, which is not built" — was discharged: the control is built, drawn from
+# the same anchor cell, and priced in `--dry-run` alongside the real sweep.
+#
 # I1 (`measurements.decode_lens` + `models.patching`) and I3
 # (`measurements.entropy_dynamics` + `models.lens`) left this list on 2026-08-06
 # when `--instruments` landed. They are reachable but OFF by default, because

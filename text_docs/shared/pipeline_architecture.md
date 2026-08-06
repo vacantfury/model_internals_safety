@@ -222,6 +222,50 @@ flush+fsync, and the run-record write. It does NOT hold the instrument roster or
 the combination step: those legitimately differ per paper, and forcing them into
 the spine is how a shared runner becomes a framework.
 
+### 3.5 Where WRITE-side instruments plug in — settled 2026-08-06
+
+Every instrument built before I5/I6 *reads* activations we captured, so the
+question of where one plugs in never arose: it runs inside the family loop, once
+per rung. The causal instruments *write* to the model — ablate a direction, add a
+steering vector — and that turned out to be a different shape, which is why
+`models/interventions.py` and `measurements/causal_license.py` sat built and
+unreachable for a day while I1–I3 were wired in an afternoon.
+
+**The finding: causal licensing is a MODEL-level gate, not a rung-level
+instrument.** The direction is fit on PLAIN harmful vs PLAIN harmless, it is the
+same direction for every rung, and its answer *gates which direction the
+downstream reads may use at all* rather than being one of those reads (TODO 28,
+from Arditi et al., NeurIPS 2024). Wiring it behind `--instruments` inside
+`run_family`, by analogy with I1/I3, would have re-run an identical computation
+once per rung and invited the reading that a rung has its own causally-licensed
+direction.
+
+**So the plug-in point is `main()`, between the plain captures and
+`run_families`** — the one place in the script where model-level, rung-independent
+work already happens, because that is where the plain conditions are captured
+once and reused. Its `Reading` joins the per-rung ones at the run-record write.
+
+Three consequences worth keeping, each of which cost a fix to learn:
+
+- **The cost accounting must include the negative control.** The random-direction
+  null is a second sweep, and it was briefly absent from `--dry-run` while the
+  code already ran it. A control the estimate cannot see is a cost nobody
+  approved. Now priced from `causal.forward_passes` rather than restated, and
+  pinned by a test.
+- **A cost knob must be a CAP, not a stride.** `CAUSAL_LAYER_STRIDE = 4` sweeps
+  7 layers of a 32-layer model as intended, and exactly ONE layer of a 3-layer
+  model — layer 0, whose `resid_pre` is the raw embedding before any computation.
+  Measured: the entire sweep came back degenerate. `MAX_CAUSAL_LAYERS` derives
+  the stride from the depth and holds the cost fixed at both ends.
+- **A degenerate cell is a coverage number, not an exception.**
+  `difference_in_means` returns a zero vector where the classes coincide and says
+  so; `ablate_direction` refuses to project out a zero direction. The runner
+  filters them (`causal.viable_directions`), reports `n_degenerate`, and returns
+  `licensed=None` when nothing survives — because "every cell was degenerate" is
+  the instrument failing to read, not a measurement that harm is causally
+  unmediated. Only exact degeneracy is filtered: a merely weak direction is the
+  causal criteria's business, and a norm cut would be a second unfounded gate.
+
 ### 3.4 Sequence
 
 1. ~~Adopt the contract in §3.1~~ — **done 2026-08-06.**

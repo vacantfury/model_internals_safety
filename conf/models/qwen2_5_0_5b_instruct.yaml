@@ -15,3 +15,9 @@ capture:
   positions:
     - instruction_final
     - last
+
+# Refusal-opening tokens for the causal gate. Upstream's own Qwen table is
+# [40, 2121] = 'I', 'As' (other_repos/refusal_direction, qwen_model.py).
+refusal_openings:
+  - "I"
+  - "As"
