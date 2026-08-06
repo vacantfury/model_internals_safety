@@ -716,8 +716,69 @@ Every instrument runs all of these. Not optional, not per-instrument judgment.
 | **Black-box baseline** (P4) | an internals claim a surface classifier would have made | **BUILT AND MEASURED WEAK 2026-08-06** — see §4.2 |
 | **Matched-norm random direction** | steering "working" because you perturbed anything | **BUILT 2026-08-06** — `causal_license.matched_norm_random_direction` + `random_direction_null` |
 | **Control task / selectivity** (Hewitt-Liang style) | probe capacity memorising rather than reading | **BUILT AND MEASURED DEGENERATE 2026-08-06** — see §4.1 |
+| **Mismatched-plaintext derangement** (measurement #1) | a recovery scorer firing on incidental overlap and calling it a decode | **BUILT AND MEASURED SILENT 2026-08-06** — see §4.4 |
 
-The bottom two are build items, filed with the instruments that need them.
+### 4.4 Measurement #1's negative control, and the asymmetry it exposed
+
+`measurements/ability_control.py`. Ability scored a response against its OWN
+plaintext and nothing else, so a scorer firing on shared stopwords, an echoed
+fragment of the instruction, or boilerplate was indistinguishable from a decode.
+Two arms, holding the condition fixed and moving only the pairing: a **free
+derangement** (P2) and a **length-matched derangement** (P3), the latter drawing
+the mismatched reference from the real one's own length stratum so anything read
+from length alone is present in both arms and cancels.
+
+**Measured over all 5,358 cached cells — 54 conditions, both pilot runs plus the
+comprehension band, 0 empty responses:**
+
+| | result |
+|---|---|
+| free-derangement recovery rate | **0.000 on every condition** |
+| length-matched derangement rate | **0.000 on every condition** |
+| max mismatched similarity | 0.5645 (cut 0.75 — headroom **0.186**) |
+| max mismatched `content_overlap` | 0.6667 (order-blind cut 0.80) |
+| identity-check failures | **0 of 54** |
+
+⚠️ **The overlap ceiling sits ABOVE `content_overlap_threshold` (0.60).** That leg
+is therefore not what keeps the control silent — a mismatched pairing does reach
+veto-clearing overlap, and only its similarity being under 0.75 stops it scoring
+as a recovery. The binding protection is the **similarity cut**, and lowering it
+toward ~0.57 would open a false-positive route that does not exist today.
+
+**The bar is derived, not chosen: the rule of three.** The control's observed
+rate is exactly 0/n everywhere, and the one-sided 95% upper bound on a zero-count
+binomial is 3/n — so a reading must beat its control by more than the control's
+own uncertainty at that sample size (0.03 at n=100, 0.015 at n=200). Scaling with
+n is the point; a fixed bar would be too strict on the pilot's 100-prompt rungs
+and too lenient on the band's 200-prompt ones. **This is the fourth derived floor
+in this document** (deployment noise floor · black-box relative loss · XSTest
+vocabulary floor · this), and the pattern is now a rule: *a threshold on a
+quantity whose scale depends on the corpus is derived from that corpus, usually
+one cheap adversarial baseline away.*
+
+**⚠️ The finding that matters most: a specificity control cannot license an
+ability-0 reading, and the battery above never named the arm that can.** On
+`tag_block` or `reverse_characters` the value is 0.00 and the control is 0.00 —
+the measurement is by construction indistinguishable from the negative control,
+which is exactly what P2 asks about. A broken scorer and a model that genuinely
+cannot decode produce the same 0.00. Since the ability-0 rungs are the
+*calibration* for three other instruments (the deployment noise floor, I3's
+control, I1's control), that gap was load-bearing for the whole floor.
+
+The arm that closes it is **sensitivity, not specificity**: `identity_rate`, the
+fraction of a condition's prompts on which the scorer fires when the response IS
+the plaintext. Not the tautology it looks like — `normalize` NFKC-folds and
+strips zero-width characters, so a rung with an unusual character set could break
+the scorer where no other rung would reveal it. Measured **1.0 on all 54
+conditions**, so every ability-0 in this repo is a measurement rather than a
+scorer failure.
+
+**Consequence, stated rather than papered over:** `Reading` has no sensitivity
+axis, so ability-0 readings remain non-reportable under P2 with the reason named
+in the run record. Adding that axis is a deliberate contract change and is filed
+as such, not slipped in beside a control build.
+
+The remaining build items are filed with the instruments that need them.
 
 ### 4.2 The black-box baseline is built, and it is WEAK on this corpus
 

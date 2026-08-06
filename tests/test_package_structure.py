@@ -34,6 +34,7 @@ PURE_MODULES = (
     "length_null",
     "black_box_baseline",
     "lexical_decorrelation",
+    "ability_control",
     "contract",
     "causal_license",
 )

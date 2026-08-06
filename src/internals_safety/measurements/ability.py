@@ -22,6 +22,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from internals_safety.config import AbilityConfig
+from internals_safety.measurements.ability_control import AbilityControl, zero_count_margin
 from internals_safety.measurements.contract import Kind, Reading
 from internals_safety.encodings.base import EncodedPrompt
 from internals_safety.encodings.recovery import RecoveryScore, score_recovery
@@ -117,6 +118,7 @@ KIND: Kind = "correlational"
 def reading(
     summary: FamilyAbility,
     *,
+    control: AbilityControl | None = None,
     control_reading: float | None = None,
     control_margin: float | None = None,
     length_null_margin: float | None = None,
@@ -124,26 +126,33 @@ def reading(
 ) -> Reading:
     """Measurement #1's condition-level verdict.
 
-    **⚠️ This measurement has NO negative control, and the contract is how that
-    became visible rather than a matter of remembering.** Every other instrument
-    on the roster has one — deployment reads the format-decorrelation 2x2,
-    decode_lens scores against a deranged plaintext, trajectory and entropy read
-    against the ability-0 floor. Measurement #1 scores a response against its own
-    plaintext and nothing else, so a scorer firing on incidental overlap (shared
-    stopwords, echoed fragments of the instruction, boilerplate) is
-    indistinguishable from a decode.
+    **The negative control this measurement lacked is now built** —
+    `ability_control.measure_ability_control`, offline over cached text. Pass it
+    as `control` and the three contract axes are filled from it: the free
+    derangement supplies P2, the length-matched derangement supplies P3, and the
+    sensitivity arm rides in `detail`. The explicit `control_reading` /
+    `control_margin` / `length_null_margin` arguments remain for callers that
+    compute their own; `control` wins where both are given.
 
-    The control that would close it is cheap and offline: score each response
-    against a MISMATCHED plaintext from the same condition, exactly as
-    `decode_lens.derange` does, and require the real-plaintext score to beat it.
-    Filed rather than built here, because building it inside a wiring change
-    would hide the finding.
-
-    Until then `control_reading` defaults to None and every ability reading is
-    non-reportable, naming "no negative control was run (P2)" as the reason.
-    That is the correct state, not a bug: the numbers stay usable as run output
-    and are barred from a paper table until the control exists.
+    **Two things a caller must not misread.** The control's bar is the derived
+    rule-of-three bound for this condition's n, not a chosen constant — see
+    `ability_control.zero_count_margin`. And an ability-0 rung will NOT become
+    reportable: its value equals its negative control by construction, so P2
+    cannot license it, and the evidence that supports it is the sensitivity arm
+    (`identity_rate`) instead. That is a real gap in the contract, named rather
+    than papered over.
     """
+    if control is not None:
+        control_reading = control.mismatched_rate
+        control_margin = zero_count_margin(control.n)
+        length_null_margin = control.length_margin
+        detail = {
+            "control_identity_rate": control.identity_rate,
+            "control_scorer_is_functional": control.scorer_is_functional,
+            "control_n_length_matched": control.n_length_matched,
+            "control_length_mismatched_rate": control.length_mismatched_rate,
+            **(detail or {}),
+        }
     return Reading(
         instrument="ability",
         kind=KIND,

@@ -313,18 +313,41 @@ class TestMain:
             assert reading["operating_point"]
             assert reading["licensed"] in (True, False, None)
 
-    def test_the_two_measurements_without_a_negative_control_are_withheld(self, run):
-        """TODO 37/38, asserted end to end rather than only at the unit level.
+    def test_behaviour_is_still_withheld_for_want_of_a_negative_control(self, run):
+        """TODO 38, asserted end to end rather than only at the unit level.
 
-        Ability scores a response against its own plaintext and nothing else;
-        the judges never run on the benign-encoded arm. Both must be withheld
-        with a stated reason until those controls exist — if this test ever goes
-        green by accident, a control was added or the bar was lowered.
+        The judges never run on the benign-encoded arm, so nothing distinguishes
+        "the attack succeeded" from "this judge says yes to anything wearing this
+        encoding". If this test ever goes green by accident, a control was added
+        or the bar was lowered.
         """
         withheld = json.loads((run / "results.json").read_text())["withheld"]
-        for instrument in ("ability", "behavior"):
-            assert instrument in withheld
-            assert any("no negative control" in why for why in withheld[instrument])
+        assert "behavior" in withheld
+        assert any("no negative control" in why for why in withheld["behavior"])
+
+    def test_ability_now_carries_its_control_and_is_withheld_on_the_MEASURED_axis(self, run):
+        """TODO 37 closed — and the reason ability is still withheld has changed.
+
+        It is no longer "no negative control was run": the mismatched-plaintext
+        control runs on every family. It is now the measured comparison, because
+        the tiny in-process model decodes nothing, so the value sits AT its
+        negative-control floor. That is the asymmetry `ability_control` documents
+        — a specificity control cannot license an ability-0 reading — and it must
+        show up in the run record rather than only in a docstring.
+        """
+        record = json.loads((run / "results.json").read_text())
+        withheld = record["withheld"]
+        assert "ability" in withheld
+        assert not any("no negative control" in why for why in withheld["ability"])
+        assert any("on the negative control" in why for why in withheld["ability"])
+
+        ability = next(r for r in record["readings"] if r["instrument"] == "ability")
+        assert ability["control_reading"] == 0.0
+        # The sensitivity arm rides in detail and says the scorer is not broken
+        # on this family's character set — the only evidence that supports an
+        # ability-0 claim at all.
+        assert ability["detail"]["control_identity_rate"] == 1.0
+        assert ability["detail"]["control_scorer_is_functional"] is True
 
     def test_the_record_names_every_activation_cache_it_read(self, run):
         paths = json.loads((run / "results.json").read_text())["activations_path"]

@@ -43,6 +43,7 @@ from internals_safety.measurements.contract import Kind, Reading
 from internals_safety.models.capture import ActivationBatch
 from internals_safety.models.loader import LoadedModel
 from internals_safety.models.patching import patch_residual
+from internals_safety.pairing import derange
 
 
 # P1 — the question this instrument answers and no other on the roster does.
@@ -120,22 +121,6 @@ def content_token_ids(
         for variant in (word, f" {word}"):
             ids.update(loaded.tokenizer.encode(variant, add_special_tokens=False))
     return ids
-
-
-def derange(items: Sequence) -> list:
-    """Rotate by one, so no element keeps its own index.
-
-    This is the negative control's pairing: every prompt is scored against a
-    plaintext that is not its own, drawn from the SAME condition so the encoding,
-    the attack template and the length distribution all stay fixed and only the
-    pairing moves. A rotation rather than a random permutation because a random
-    one can fix a point, and a fixed point silently scores a row against itself —
-    which would inflate the control and shrink the margin toward zero, i.e. fail
-    in the direction that hides a real result.
-    """
-    if len(items) < 2:
-        raise ValueError("a derangement needs at least two items")
-    return list(items[1:]) + list(items[:1])
 
 
 def _mass_on(probabilities: torch.Tensor, token_ids: Sequence[int]) -> float:

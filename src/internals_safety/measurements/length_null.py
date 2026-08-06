@@ -45,6 +45,8 @@ from typing import Sequence
 
 from sklearn.metrics import roc_auc_score
 
+from internals_safety.pairing import quantile_strata
+
 
 def length_auroc(positive_texts: Sequence[str], negative_texts: Sequence[str]) -> float:
     """AUROC of raw character length separating the two classes.
@@ -120,11 +122,10 @@ def length_strata(
     Order matches the concatenated test set the probe layer builds — positives
     first, then negatives — because the null permutes labels in that order.
 
-    Quantile bins rather than equal-width: encoder outputs are long-tailed
-    (`binary` runs ~9x the plaintext), and equal-width bins would put almost every
-    example in one bin, which silently degrades the matched null back into a free
-    one. Ties are handled by ranking rather than by bin edges, so a corpus with
-    many identical lengths still spreads across bins instead of collapsing.
+    The binning rule itself lives in `internals_safety.pairing.quantile_strata`,
+    shared with the stratified derangement that makes `ability_control` matched.
+    One home, because two callers binning length by different rules is how a
+    "length-matched" claim becomes two different claims wearing one name.
 
     Honest about the knob: `n_bins` IS one, and it is milder than the margin
     threshold it replaces — more bins means a stricter test, and the result should
@@ -133,16 +134,11 @@ def length_strata(
     """
     import numpy as np
 
-    lengths = np.array(
-        [len(text) for text in positive_texts] + [len(text) for text in negative_texts],
-        dtype=float,
-    )
-    if lengths.size == 0:
+    lengths = [float(len(text)) for text in positive_texts]
+    lengths += [float(len(text)) for text in negative_texts]
+    if not lengths:
         return np.empty(0, dtype=int)
-    # Rank-based so that ties spread rather than piling into one edge.
-    order = np.argsort(np.argsort(lengths, kind="stable"), kind="stable")
-    bins = max(1, min(n_bins, lengths.size))
-    return (order * bins // lengths.size).astype(int)
+    return np.array(quantile_strata(lengths, n_bins), dtype=int)
 
 
 def measure_length_null(

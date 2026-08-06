@@ -94,6 +94,7 @@ from internals_safety.measurements.entropy_dynamics import (
     separation,
 )
 from internals_safety.measurements.ability import measure_ability
+from internals_safety.measurements.ability_control import measure_ability_control
 from internals_safety.measurements.behavior import measure_behavior
 from internals_safety.measurements.deployment import measure_deployment, read_deployment_per_prompt
 from internals_safety.measurements.black_box_baseline import measure_black_box_baseline
@@ -508,13 +509,23 @@ def run_family(
     # are not on the same scale.
     ability_summary = ability_module.summarize_by_family(ability_records, measurements.ability)[0]
     behavior_summary = behavior_module.summarize_by_family(behavior_records)[0]
+    # Measurement #1's negative control: score every response against a
+    # mismatched plaintext from this same condition, free and length-matched.
+    # Offline over text already in hand — no forward pass, no judge call — which
+    # is why it runs unconditionally rather than behind `--instruments`.
+    ability_control = measure_ability_control(
+        family=family,
+        plaintexts=[record.plaintext for record in ability_records],
+        responses=[record.response for record in ability_records],
+        ciphertexts=[record.ciphertext for record in ability_records],
+        config=measurements.ability,
+    )
     readings = [
-        # No control passed: measurement #1 has none (TODO 37), so this reads
-        # non-reportable and names the reason. Deliberate — see the module.
-        ability_module.reading(
-            ability_summary,
-            length_null_margin=length_null.margin(ability_summary.recovery_rate),
-        ),
+        # P3 comes from the control's length-matched arm, NOT from the shared
+        # `length_null` object: that one compares a rate against a character-length
+        # AUROC, which is not the same scale. Passing it here would satisfy P3
+        # with a number that never examined this measurement.
+        ability_module.reading(ability_summary, control=ability_control),
         # Likewise measurement #4 (TODO 38): the judges never run on the
         # benign-encoded arm, so there is no ASR control to pass.
         behavior_module.reading(
