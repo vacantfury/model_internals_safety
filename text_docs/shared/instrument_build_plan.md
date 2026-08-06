@@ -386,6 +386,55 @@ anyway. Deep read of 2604.02608 is a gate on I1's write-up, not on its build.*
 5. Peaks at intermediate-late layers, matching the L18–L22 `instruction_final`
    cluster the transferred probe already selects (`instrument_layer.md` §3.1).
 
+#### Settled by reading the Patchscopes source, 2026-08-06
+
+*Read: `other_repos/interpretability/patchscopes/code/patchscopes_utils.py` (1157
+lines) + the paper's notebooks. This subsection is the spec input; it replaces
+guesses, and the items below are facts about the reference implementation, not
+design preferences.*
+
+- **The decoding target prompt is a few-shot repetition scaffold**, verbatim from
+  the paper's own notebook: `"cat -> cat\n1135 -> 1135\nhello -> hello\n?"`, with
+  the source hidden state patched into the final `?` position. This is the
+  "token identity" Patchscope, and it is directly the instrument AS-5 needs —
+  patch a residual state from the *encoded*-prompt forward pass and read whether
+  the *plaintext* comes out. **This design does not carry over from the logit
+  lens and could not have been guessed**; it is why the read gated the spec.
+- **There are TWO readouts, and the cheap one is what our cost model assumed.**
+  `inspect(..., generation_mode=True)` generates up to `max_gen_len` tokens —
+  human-readable, expensive. `evaluate_patch_next_token_prediction` does a
+  **single forward pass on the target prompt** and returns
+  `softmax(logits[0, position_prediction])` — one distribution, from which the
+  expected-plaintext-token probability reads directly. Item 6's stored quantity
+  (~640K floats, no per-token residual cache) is unchanged and correct.
+- **The real cost delta is forward-pass count, not storage.** The lens needs one
+  source pass per prompt and then a cheap per-layer unembedding. Patchscopes
+  needs a *separate target pass per (prompt, layer_source)*, because the patch
+  config differs per layer. Order estimate, 7 rungs × 200 prompts × 32 layers =
+  **44,800 rows per model**; `inspect_batch` batches at 256 with **`layer_source`
+  allowed to differ within a batch**, so that is ~175 batches, each one source
+  pass over full-length encoded prompts plus one short target pass. Tractable —
+  the same order as the band run, not a new cost class.
+- **One gap to write ourselves:** the batched path (`inspect_batch`) uses
+  `generate`; the scalar next-token readout is single-example only. So we write a
+  batched scalar variant on top of their `set_hs_patch_hooks_llama_batch`, which
+  already accepts the per-row config list. Modest work.
+- **§5's tooling decision is confirmed, not reopened.** `set_hs_patch_hooks_llama`
+  is plain HuggingFace forward hooks on `model.model.layers[i]` — the same
+  mechanism as our `models/capture.py`. Patchscopes is an *algorithm we
+  implement inside our own spine*, not a framework we adopt. It also carries
+  `skip_final_ln`, auto-enabled when `layer_source == layer_target == n_layers-1`
+  — the final-layer-norm handling §5 said to read LogitLens4LLMs for is answered
+  here.
+- **Single model, not two.** `inspect` takes one `mt`; cross-model patching is a
+  separate function (`evaluate_patch_next_token_prediction_x_model`). No second
+  model is needed for our use.
+- **Still open after the read:** the source *position* to patch from. Our spine
+  captures two positions (`instruction_final`, `last`); Patchscopes patches a
+  single token position, and for a multi-token plaintext there is no single
+  "the content" position. Whether to sweep positions or patch the encoded
+  region token-by-token is the one design question the source does not answer.
+
 **Cost:** steps 1–3 offline, $0. Step 4 is one forward-pass-only run, no
 generation, no judge calls.
 
