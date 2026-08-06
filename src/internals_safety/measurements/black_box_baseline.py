@@ -49,7 +49,7 @@ from sklearn.pipeline import make_pipeline
 # (base64, hex, zero_width), so a word tokenizer would see one long token and the
 # baseline would be a strawman on exactly the rungs that matter most.
 # FAIL-SAFE DEFAULT — live value is `controls.black_box_ngram_{min,max}`.
-NGRAM_RANGE = (2, 5)
+NGRAM_RANGE = (2, 5)  # config: measurements.controls.black_box_ngram_min,measurements.controls.black_box_ngram_max
 # ⚠️ TF-IDF l2-normalises by default, so this baseline is BLIND TO LENGTH by
 # construction — a doubled document has the same normalised vector. That is why
 # it must be reported ALONGSIDE the length null rather than as a superset of it:
@@ -62,9 +62,11 @@ NGRAM_RANGE = (2, 5)
 # n-gram counts on ~200 texts exceed the sample size by orders of magnitude and
 # cross-validation would be measuring a nearest-neighbour lookup.
 # FAIL-SAFE DEFAULT — live value is `controls.black_box_max_features`.
-MAX_FEATURES = 5000
+MAX_FEATURES = 5000  # config: measurements.controls.black_box_max_features
 
 
+# config(seed): measurements.probes.seed
+# config(folds): measurements.probes.cv_folds
 def surface_auroc(
     positive_texts: Sequence[str],
     negative_texts: Sequence[str],
@@ -189,6 +191,7 @@ class BlackBoxBaseline:
         return loss >= min_loss
 
 
+# config(seed): measurements.probes.seed
 def measure_black_box_baseline(
     family: str,
     plain_positive: Sequence[str],

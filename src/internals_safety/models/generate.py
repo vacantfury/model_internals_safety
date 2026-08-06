@@ -20,6 +20,7 @@ def generate(
     loaded: LoadedModel,
     user_messages: Sequence[str],
     max_new_tokens: int,
+    # plumbing(batch_size): throughput only — greedy decoding is batch-invariant
     batch_size: int = 8,
     do_sample: bool = False,
     temperature: float | None = None,

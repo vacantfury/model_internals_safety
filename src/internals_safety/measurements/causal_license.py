@@ -216,7 +216,7 @@ class RandomDirectionNull:
     observed: float
     # One score per random direction, from the identical intervention.
     null_values: tuple[float, ...]
-    alpha: float = 0.05
+    alpha: float = 0.05  # config: measurements.probes.alpha
 
     @property
     def p_value(self) -> float:
@@ -245,6 +245,7 @@ class RandomDirectionNull:
         return self.observed - sum(self.null_values) / len(self.null_values)
 
 
+# config(alpha): measurements.probes.alpha
 def random_direction_null(
     observed: CausalEvidence,
     controls: Sequence[CausalEvidence],
@@ -263,6 +264,7 @@ def random_direction_null(
     )
 
 
+# config(alpha): measurements.probes.alpha
 def matched_norm_null(
     observed: float, controls: Sequence[float], alpha: float = 0.05
 ) -> RandomDirectionNull:

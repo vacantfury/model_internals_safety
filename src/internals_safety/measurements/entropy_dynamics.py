@@ -106,6 +106,7 @@ def measure_entropy_dynamics(
     loaded: LoadedModel,
     batch: ActivationBatch,
     position: str,
+    # plumbing(batch_size): throughput only — every read is per-prompt
     batch_size: int = 8,
 ) -> EntropyProfile:
     """Lens entropy at every captured layer, for one position.

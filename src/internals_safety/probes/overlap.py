@@ -55,6 +55,9 @@ def decision_threshold(
     return float(candidates[int(np.argmax(true_positive - false_positive))])
 
 
+# definitional(n_bins): the histogram resolution the overlapping coefficient is
+# estimated at — it defines the estimator, not a cut on its output. Tuning path:
+# sweep it on cached score distributions and take the range where OVL is flat.
 def overlap_coefficient(
     first: torch.Tensor | np.ndarray, second: torch.Tensor | np.ndarray, n_bins: int = 50
 ) -> float:
@@ -116,6 +119,7 @@ def summarize_projections(
     )
 
 
+# definitional(n_bins): as `overlap_coefficient` — same estimator, same tuning path.
 def pairwise_overlap(
     scores_by_family: dict[str, torch.Tensor | np.ndarray], n_bins: int = 50
 ) -> dict[tuple[str, str], float]:

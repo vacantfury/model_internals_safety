@@ -53,7 +53,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 # because it is arithmetic, not a domain object.
 Range = tuple[float, float]
 
-SECONDS_PER_HOUR = 3600.0
+SECONDS_PER_HOUR = 3600.0  # constant: seconds per hour
 
 
 class HardwareProfile(StrictModel):
@@ -121,7 +121,7 @@ class TokenCensus:
     judge_calls: int
     judge_input_chars: int
     # Longest single rendered prompt, for the truncation check below.
-    max_prompt_tokens: int = 0
+    max_prompt_tokens: int = 0  # plumbing: accumulator start; the real value is measured
     # Per-rung mean attack-prompt length, for the report's inflation column.
     per_family_mean_prompt_tokens: dict[str, float] = field(default_factory=dict)
 
@@ -176,6 +176,7 @@ def estimate(
     judge_config: JudgeCostConfig,
     judge_input_price: float,
     judge_output_price: float,
+    # config(gpus): cost.scheduler.gpus_per_job
     gpus: int = 1,
 ) -> Estimate:
     """Turn a census into GPU-hours, dollars and a wall-clock verdict.
@@ -303,6 +304,7 @@ def census_phase0(
     )
 
 
+# plumbing(places): decimal places in a printed range — presentation only
 def format_range(value: Range, unit: str = "", places: int = 1) -> str:
     low, high = value
     suffix = f" {unit}" if unit else ""

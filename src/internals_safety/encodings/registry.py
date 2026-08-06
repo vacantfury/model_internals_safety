@@ -127,6 +127,7 @@ class CanonicalizationReport:
 
 
 def canonicalization_report(
+    # plumbing(n_examples): how many sample rows the report prints
     ladder: dict[str, Encoder], prompts: list[str], n_examples: int = 3
 ) -> list[CanonicalizationReport]:
     reports = []

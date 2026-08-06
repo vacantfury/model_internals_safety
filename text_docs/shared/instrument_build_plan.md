@@ -973,6 +973,62 @@ worse than no check.**
 
 ---
 
+## 5.2 Every number declares why it is not in YAML
+
+`tests/test_config_discipline.py`, built 2026-08-06 on a **science ruling** made
+after the owner caught the YAML-config law being violated across a whole build
+session. The ruling's finding is the part worth carrying: the research workflow's
+S7 already *cited* the law, and the law was violated anyway — so enforcement is a
+**test, not more prose**, and this repo builds the family's reference
+implementation for other research bets to copy.
+
+**What it enforces.** An AST pass over the package and `scripts/` finds every
+numeric literal that is a module-level constant, a class-body/dataclass field
+default, or a function-signature default. Each must carry one of five markers in
+the comment block above it or trailing on its line:
+
+| marker | claim | machine-checked? |
+|---|---|---|
+| `# config: <key>` | a fail-safe mirroring YAML | **yes — the key is resolved and the values compared** |
+| `# derived: <from what>` | the live value is computed at every real call site | no |
+| `# constant: <why>` | a fact about the world, a spec, a unit, a maths definition | no |
+| `# definitional: <what>` | our choice, defining the measure rather than tuning it | **yes — must also name a tuning path** |
+| `# plumbing: <why>` | cannot change any reported number | no |
+
+**Two design points, each paid for.** *(1)* A **structured comment, not a naming
+prefix** — a prefix cannot carry WHICH key a mirror mirrors, and resolving that
+key is the only thing that would have caught `DEFAULT_LENGTH_BINS`, a silent
+second copy of `probes.length_strata_bins`. *(2)* **Class-body defaults are in
+scope**, because a dataclass field default IS a signature default and `Plan`
+carries four of them straight into the cost estimate the approval gate reads;
+leaving them out would have shipped the checker with a hole the same shape as the
+defect it exists to catch. Pydantic config models are exempt — their field
+defaults ARE the schema.
+
+**The convention was settled against the real population, not in the abstract.**
+The ruling named three markers; the sweep found 34 sites, and `derived` and
+`plumbing` were forced by sites that fit none of the three, while `unit` folded
+into `constant` because nothing turned on the distinction. Running the pass
+*first* and letting the population decide is the method to repeat when another
+repo copies this file.
+
+**What it moved.** One genuine unconfigured tunable surfaced and was given a home
+rather than annotated around: `_ID_STABILITY_SAMPLES` →
+`measurements.guard_verdict.id_stability_samples`, a cost-vs-coverage knob with
+no definitional argument. Three sites in `encodings/recovery.py` stayed in code
+as `definitional`, and that is the one exemption worth understanding: the module
+is deliberately designed so `content_overlap` and its siblings stay computable
+from a stored response **with no config in hand**, so moving those numbers to
+YAML would break a reproducibility property to satisfy a checker.
+
+**The checker is itself tested** (`TestTheCheckerItself`), because a checker that
+silently passes is worse than none — and two of those tests are regressions from
+building it: the marker walk stopped at the first ordinary argument line, so
+every signature annotation was inert, and the tuning-path check read only the
+marker's own line, which would have forced real arguments onto one line.
+
+---
+
 ## 6. Build sequence, and the scheduling fact that fixes it
 
 **The scheduling fact: I1–I4 all read the same forward pass.** No generation, no

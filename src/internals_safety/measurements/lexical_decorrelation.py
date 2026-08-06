@@ -80,7 +80,7 @@ CONTRAST_PREFIX = "contrast_"
 # number if the corpus changes — it is a property of JBB x XSTest, not a
 # constant of nature. Reproduce with the snippet in build plan §4.3.
 # FAIL-SAFE DEFAULT — live value is `controls.vocabulary_reader_floor`.
-VOCABULARY_READER_FLOOR = 0.619
+VOCABULARY_READER_FLOOR = 0.619  # config: measurements.controls.vocabulary_reader_floor
 
 
 def pair_key(xstest_type: str) -> str:

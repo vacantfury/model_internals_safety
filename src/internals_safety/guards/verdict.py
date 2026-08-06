@@ -43,6 +43,7 @@ from internals_safety.models.loader import LoadedModel, PreparedPrompt, tokenize
 # comparison if it is the same token — but re-resolving every prompt would
 # tokenise each long ciphertext context four extra times for a check that has
 # never varied within a rung. A spread sample catches a real drift.
+# config: measurements.guard_verdict.id_stability_samples
 _ID_STABILITY_SAMPLES = 4
 
 

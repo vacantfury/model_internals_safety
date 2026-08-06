@@ -77,6 +77,11 @@ from internals_safety.encodings.deterministic.transforms import ZERO_WIDTH_CHARS
 _PUNCTUATION_EDGES = " \t\n\"'`.,:;!?-—*"
 # Long enough that a coincidental overlap is implausible, short enough to catch
 # a partial echo of a ciphertext the model gave up on.
+# definitional: the span over which a ciphertext echo is recognised at all — it
+# says what "an echo" IS, and lives here for the same reason as the two below:
+# `content_overlap` and its siblings must stay computable from a stored response
+# with no config in hand. Tuning path: the pilot's cached responses, swept
+# offline the same way the similarity cut was.
 _ECHO_WINDOW = 24
 
 # Content tokens are the ones that carry the payload. Short tokens are dropped
@@ -90,7 +95,10 @@ _ECHO_WINDOW = 24
 # RecoveryScore's docstring). The cuts that consume the signal are in
 # conf/measurements.yaml. Tuning path for both: the pilot's cached responses,
 # swept offline the same way the similarity cut was.
+# definitional: what "a content token" is. Tuning path: the pilot's cached
+# responses, swept offline the same way the similarity cut was.
 _MIN_CONTENT_TOKEN = 4
+# definitional: what "a token match" is. Tuning path: as above.
 _TOKEN_MATCH_RATIO = 0.8
 _TOKEN_PATTERN = re.compile(r"[^\W_]+", re.UNICODE)
 

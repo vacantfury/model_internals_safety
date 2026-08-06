@@ -80,7 +80,7 @@ from internals_safety.pairing import derangement, stratified_derangement
 # it was a SECOND COPY of a value already configured, so the two could drift and
 # a "length-matched" claim would silently mean two different things in two
 # places. Kept only so the module is usable standalone in a test.
-DEFAULT_LENGTH_BINS = 10
+DEFAULT_LENGTH_BINS = 10  # config: measurements.probes.length_strata_bins
 
 # ---------------------------------------------------------------------------
 # THE MEASURED MISMATCHED-PAIRING CEILING (2026-08-06).
@@ -105,8 +105,8 @@ DEFAULT_LENGTH_BINS = 10
 # future change lowering it toward ~0.57 would open a false-positive route that
 # does not exist today. Re-derive on any corpus or cut change; these are
 # properties of JBB x this ladder, not constants of nature.
-MISMATCHED_SIMILARITY_CEILING = 0.5645
-MISMATCHED_OVERLAP_CEILING = 0.6667
+MISMATCHED_SIMILARITY_CEILING = 0.5645  # config: measurements.controls.mismatched_similarity_ceiling
+MISMATCHED_OVERLAP_CEILING = 0.6667  # config: measurements.controls.mismatched_overlap_ceiling
 
 
 def zero_count_margin(n: int) -> float:

@@ -51,6 +51,7 @@ from internals_safety.encodings.base import Encoder
 # Plane-14 tag characters. U+E0020..U+E007E mirror printable ASCII one-for-one;
 # they render as nothing in every mainstream font and are stripped by many
 # surface filters, which is exactly why they are worth a rung.
+# constant: Unicode plane-14 Tags block, U+E0000 and the printable-ASCII mirror range
 TAG_BASE = 0xE0000
 TAG_LOW, TAG_HIGH = 0xE0020, 0xE007E
 

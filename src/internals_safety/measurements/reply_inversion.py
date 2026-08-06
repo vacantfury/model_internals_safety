@@ -223,6 +223,7 @@ def measure_reply_inversion(
     refusal: Direction,
     coefficient: float,
     layer: int | None = None,
+    # plumbing(batch_size): throughput only — every read is per-prompt
     batch_size: int = 8,
 ) -> InversionResult:
     """Baseline, harmfulness-steered and refusal-steered judgments.
@@ -306,6 +307,7 @@ def measure_inversion_null(
     n_directions: int,
     generator: torch.Generator | None = None,
     layer: int | None = None,
+    # plumbing(batch_size): throughput only — every read is per-prompt
     batch_size: int = 8,
 ) -> list[float]:
     """|judgment shift| under matched-norm RANDOM directions at the same site.
@@ -362,6 +364,7 @@ def null_separations(shifts: Sequence[float], refusal_shift: float) -> list[floa
     return [abs(shift) - abs(refusal_shift) for shift in shifts]
 
 
+# plumbing(n_random_directions): the null is off unless a caller asks for it
 def forward_passes(n_random_directions: int = 0) -> int:
     """Passes over the prompt set.
 

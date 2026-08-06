@@ -171,6 +171,7 @@ def measure_causal_evidence(
     harmless_prompts: Sequence[str],
     refusal_token_ids: Sequence[int],
     coefficient: float,
+    # plumbing(batch_size): throughput only — the logits read are per-prompt
     batch_size: int = 8,
 ) -> CausalRun:
     """Run ablation and addition for each candidate direction.
@@ -264,6 +265,7 @@ def reading(
     null_margin: float | None = None,
     null_p_value: float | None = None,
     length_null_margin: float | None = None,
+    # plumbing(n_degenerate): count of dropped candidates; zero means none were
     n_degenerate: int = 0,
 ) -> Reading:
     """The causal gate's condition-level verdict.

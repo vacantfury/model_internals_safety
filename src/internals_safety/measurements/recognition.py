@@ -54,7 +54,7 @@ class RecognitionResult:
     # on this data and this many layers, produces a max AUROC at least as large
     # as the observed one. `alpha` is the level it is compared against.
     p_value: float = float("nan")
-    alpha: float = 0.05
+    alpha: float = 0.05  # config: measurements.probes.alpha
 
     def at_position(self, position: str) -> list[ProbeResult]:
         return [result for result in self.curves if result.position == position]

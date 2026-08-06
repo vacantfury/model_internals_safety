@@ -268,11 +268,11 @@ class RegimeMap:
     n: int
     # Cells whose harmfulness probe was unlicensed. Reported so an unreadable
     # rung is visibly unreadable rather than silently reading as "no harm".
-    recognition_unmeasured: int = 0
+    recognition_unmeasured: int = 0  # plumbing: counter start
     # Cells whose DEPLOYMENT probe was unlicensed — these carry regime (U).
     # Reported for the same reason and, since deployment decides every other
     # label, this is the count that says whether a rung's map means anything.
-    deployment_unmeasured: int = 0
+    deployment_unmeasured: int = 0  # plumbing: counter start
 
     @property
     def deployment_unmeasured_rate(self) -> float:

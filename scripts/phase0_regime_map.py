@@ -160,7 +160,7 @@ OPTIONAL_INSTRUMENTS = (
 # FAIL-SAFE DEFAULT — the live value is `causal_license.max_sweep_layers` in
 # conf/measurements.yaml, and every real call passes it. Kept so `Plan` is
 # constructible in a test without a config in hand.
-MAX_CAUSAL_LAYERS = 8
+MAX_CAUSAL_LAYERS = 8  # config: measurements.causal_license.max_sweep_layers
 
 
 @dataclass(frozen=True)
@@ -175,12 +175,16 @@ class Plan:
     # default matters: I1 and I3 add GPU work, so turning them on changes what
     # the approval gate is approving.
     instruments: tuple[str, ...] = ()
+    # plumbing: throughput only; the live value comes from the model config
     capture_batch_size: int = 8
     # Capture positions and the filter's layer prune, carried so the causal
     # candidate count is computed from the run's real configuration rather than
     # from a second copy of it.
+    # derived: len(model.capture.positions) at every real call site
     n_capture_positions: int = 2
+    # config: measurements.causal_license.prune_layer_percentage
     prune_layer_percentage: float = 0.20
+    # plumbing: the causal null is off unless a run asks for it
     n_random_directions: int = 0
     max_sweep_layers: int = MAX_CAUSAL_LAYERS
     # Transformer blocks of the target, from `ModelConfig.n_layers` — read off
@@ -543,6 +547,8 @@ def run_reply_inversion(
     )
 
 
+# config(prune_layer_percentage): measurements.causal_license.prune_layer_percentage
+# plumbing(n_random_directions): the causal null is off unless a run asks for it
 def build_plan(
     model_config: ModelConfig,
     families: Sequence[str],

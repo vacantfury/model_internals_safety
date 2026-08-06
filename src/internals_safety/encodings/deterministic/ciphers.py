@@ -24,7 +24,7 @@ import string
 
 from internals_safety.encodings.base import Encoder
 
-_ALPHABET_SIZE = 26
+_ALPHABET_SIZE = 26  # constant: letters in the Latin alphabet
 
 
 def _shift_letters(text: str, shift: int) -> str:
@@ -48,6 +48,8 @@ class CaesarEncoder(Encoder):
     rather than by intuition.
     """
 
+    # constant(shift): the classical Caesar cipher is a shift of 3; every rung on
+    # the ladder sets its own in conf/encodings.yaml
     def __init__(self, family: str, attack_template: str, restate_template: str, shift: int = 3):
         super().__init__(family, attack_template, restate_template, shift=int(shift))
         self.shift = int(shift) % _ALPHABET_SIZE

@@ -72,7 +72,7 @@ class DeploymentCurve:
     # NaN until the permutation null has been drawn; `deployed` fails CLOSED on
     # NaN, so a curve that was never tested can never license.
     p_value: float = float("nan")
-    alpha: float = 0.05
+    alpha: float = 0.05  # config: measurements.probes.alpha
 
     @property
     def observed_max_transfer_auroc(self) -> float:

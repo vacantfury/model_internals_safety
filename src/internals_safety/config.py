@@ -563,6 +563,28 @@ class ControlsConfig(StrictModel):
     control_ability_max: float = 0.0
 
 
+class GuardVerdictConfig(StrictModel):
+    """AS-6's verdict readout — how a guard's answer token is resolved."""
+
+    # How many prompts past the first to re-resolve the verdict token ids on.
+    # The ids must be identical across a run — comparing P(unsafe) between two
+    # prompts is only a comparison if it is the same token — but re-resolving on
+    # every prompt would tokenise each long ciphertext context again for a check
+    # that has never varied within a rung. A spread sample catches real drift at
+    # a fraction of the cost.
+    #
+    # A genuine cost-vs-coverage knob, which is why it is here rather than
+    # carrying a `definitional` marker in `guards/verdict.py`: raising it buys
+    # confidence that ids are stable, lowering it buys tokenisation time, and
+    # nothing about the measurement DEFINES the number.
+    #
+    # Tuning path: the sweep already records whether the resolved ids agreed, so
+    # a run that never once disagreed at 4 samples is evidence the check can go
+    # lower; a single disagreement is evidence it must go higher and that the
+    # per-prompt read is unsafe.
+    id_stability_samples: int = 4
+
+
 class MeasurementsConfig(StrictModel):
     ability: AbilityConfig = AbilityConfig()
     probes: ProbeConfig = ProbeConfig()
@@ -570,6 +592,7 @@ class MeasurementsConfig(StrictModel):
     decode_lens: DecodeLensConfig = DecodeLensConfig()
     causal_license: CausalLicenseConfig = CausalLicenseConfig()
     controls: ControlsConfig = ControlsConfig()
+    guard_verdict: GuardVerdictConfig = GuardVerdictConfig()
 
 
 class JudgeConfig(StrictModel):
