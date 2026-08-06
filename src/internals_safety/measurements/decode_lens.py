@@ -39,9 +39,21 @@ from typing import Sequence
 import torch
 
 from internals_safety.config import DecodeLensConfig, Site
+from internals_safety.measurements.contract import Kind, Reading
 from internals_safety.models.capture import ActivationBatch
 from internals_safety.models.loader import LoadedModel
 from internals_safety.models.patching import patch_residual
+
+
+# P1 — the question this instrument answers and no other on the roster does.
+# Module-level so `assert_distinct_questions` can check the roster rather than
+# trusting three docstrings to stay distinct.
+QUESTION = "did the model recover the plaintext tokens from the encoded prompt, in situ"
+KIND: Kind = "correlational"
+OPERATING_POINT = (
+    "mean probability mass on the prompt's own plaintext content tokens, minus "
+    "the same mass on a same-condition mismatched plaintext (rotated pairing)"
+)
 
 
 @dataclass(frozen=True)
@@ -54,6 +66,11 @@ class LensReading:
     matched: float
     # The same quantity against a mismatched plaintext — the negative control.
     mismatched: float
+    # True when this prompt's plaintext yielded NO content tokens, so both scores
+    # are 0.0 by construction. That is unmeasurable, not un-decoded, and without
+    # the flag it reads as a confident zero margin — the same silent-False shape
+    # as the deployment defect, one instrument over.
+    vacuous: bool = False
 
     @property
     def margin(self) -> float:
@@ -182,6 +199,9 @@ def read_layer(
                     layer=layer,
                     matched=_mass_on(probabilities[row], sorted(matched_ids[index])),
                     mismatched=_mass_on(probabilities[row], sorted(control_ids[index])),
+                    # Both scores are 0.0 with nothing to score against, which is
+                    # unmeasurable rather than a measured absence of decoding.
+                    vacuous=not matched_ids[index] or not control_ids[index],
                 )
             )
     return readings
@@ -216,3 +236,73 @@ def decode_rate(curves: Sequence[LensCurve], min_margin: float) -> float:
     if not curves:
         raise ValueError("no curves to summarise")
     return sum(curve.best.decodes(min_margin) for curve in curves) / len(curves)
+
+
+def reading(
+    curves: Sequence[LensCurve],
+    config: DecodeLensConfig,
+    *,
+    layer: int | None = None,
+    length_null_margin: float | None = None,
+    selection_inside_null: bool = False,
+    detail: dict | None = None,
+) -> Reading:
+    """This instrument's condition-level verdict, with its evidence attached.
+
+    P2 comes free here and that is the instrument's main advantage over a probe:
+    the mismatched pairing is a built-in negative control, so `control_reading`
+    is a measured quantity rather than something a caller must remember to run.
+
+    P3 and P7 do NOT come free, so they are keyword arguments with fail-closed
+    defaults. `length_null_margin=None` means the null was not computed and the
+    reading is not reportable — an uncomputed control must never read as a
+    cleared one. `selection_inside_null` defaults False because `layer=None`
+    takes each prompt's argmax over the layer grid, which is an uncorrected
+    multiple comparison until the null says otherwise.
+
+    `licensed` is tri-state on a real unmeasurable case: if every prompt's
+    plaintext yielded no content tokens, both scores are 0.0 by construction and
+    a zero margin means "nothing to score", not "nothing was decoded".
+    """
+    if not curves:
+        raise ValueError("no curves to summarise")
+
+    cells = [
+        curve.best if layer is None else _at_layer(curve, layer) for curve in curves
+    ]
+    vacuous = [cell for cell in cells if cell.vacuous]
+    scored = [cell for cell in cells if not cell.vacuous]
+
+    if not scored:
+        licensed: bool | None = None
+        matched = mismatched = 0.0
+    else:
+        matched = sum(cell.matched for cell in scored) / len(scored)
+        mismatched = sum(cell.mismatched for cell in scored) / len(scored)
+        licensed = (matched - mismatched) >= config.min_control_margin
+
+    return Reading(
+        instrument="decode_lens",
+        kind=KIND,
+        value=matched,
+        operating_point=OPERATING_POINT,
+        licensed=licensed,
+        control_reading=mismatched,
+        control_margin=config.min_control_margin,
+        length_null_margin=length_null_margin,
+        selection_inside_null=selection_inside_null,
+        detail={
+            "n_prompts": len(curves),
+            "n_vacuous": len(vacuous),
+            "layer": layer,
+            "peak_layers": sorted({curve.peak_layer for curve in curves}) if layer is None else [layer],
+            **(detail or {}),
+        },
+    )
+
+
+def _at_layer(curve: LensCurve, layer: int) -> LensReading:
+    for cell in curve.readings:
+        if cell.layer == layer:
+            return cell
+    raise ValueError(f"layer {layer} not in curve; have {[c.layer for c in curve.readings]}")

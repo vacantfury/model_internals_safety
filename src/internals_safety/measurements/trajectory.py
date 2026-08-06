@@ -47,11 +47,16 @@ from dataclasses import dataclass
 
 import torch
 
+from internals_safety.measurements.contract import Kind, Reading
 from internals_safety.models.capture import ActivationBatch
 
 # Every feature block this module can emit, in a fixed order so that a feature
 # matrix's columns mean the same thing across runs and models.
 FEATURE_BLOCKS = ("norms", "step_norms", "step_cosines")
+
+# P1 — checked across the roster by `assert_distinct_questions`, not by docstring.
+QUESTION = "does the evolution of the representation across layers carry evidence no single layer carries"
+KIND: Kind = "correlational"
 
 
 @dataclass(frozen=True)
@@ -158,3 +163,45 @@ def feature_names(traj: Trajectory, blocks: tuple[str, ...] = FEATURE_BLOCKS) ->
         else:
             raise ValueError(f"unknown feature block {name!r}")
     return names
+
+
+def reading(
+    *,
+    auroc: float,
+    licensed: bool | None,
+    control_auroc: float | None,
+    control_margin: float | None,
+    length_null_margin: float | None = None,
+    selection_inside_null: bool = False,
+    blocks: tuple[str, ...] = FEATURE_BLOCKS,
+    detail: dict | None = None,
+) -> Reading:
+    """This instrument's condition-level verdict.
+
+    **Every argument that carries evidence is REQUIRED, without a default.** The
+    features here are label-free but the *verdict* is not: it comes from a probe
+    fitted on `feature_matrix`, so licensing (the permutation test) and the
+    negative control (the ability-0 rungs, where nothing was decoded and any
+    separation is the instrument's own surface-feature floor) are computed
+    outside this module. A default would let a caller omit them silently, and
+    every instrument defect this repo has shipped was an omission that looked
+    like a measurement.
+
+    `licensed=None` is the honest value when the probe could not be fitted or
+    the permutation test could not run on this condition.
+    """
+    return Reading(
+        instrument="trajectory",
+        kind=KIND,
+        value=auroc,
+        operating_point=(
+            f"transfer AUROC of a probe fitted on trajectory features {list(blocks)} "
+            "at one captured position, read against the ability-0 negative-control floor"
+        ),
+        licensed=licensed,
+        control_reading=control_auroc,
+        control_margin=control_margin,
+        length_null_margin=length_null_margin,
+        selection_inside_null=selection_inside_null,
+        detail={"blocks": list(blocks), **(detail or {})},
+    )

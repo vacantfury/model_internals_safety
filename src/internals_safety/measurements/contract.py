@@ -172,6 +172,28 @@ def assert_distinct_questions(instruments: Sequence[Instrument]) -> None:
         seen[question] = instrument.name
 
 
+def gate_per_prompt(reading: Reading, per_prompt: Sequence[bool]) -> list[bool | None]:
+    """Gate a per-prompt axis on its condition-level `Reading`.
+
+    **The granularity join, and the place the repo's worst defect lived.** A
+    `Reading` is a verdict about one instrument on one *condition* (a rung, a
+    guard); the axes that regime assignment consumes are per *prompt*. Composing
+    them is not optional bookkeeping: if the instrument could not read the rung
+    at all, then no per-prompt boolean from it means anything, and passing the
+    raw booleans through is precisely how "this instrument could not read this"
+    became "the model did not decode" — the silent `False` that made the cipher
+    band's uniform (R) an artefact rather than a measurement.
+
+    Returns `None` for every prompt when the reading is not reportable, so the
+    tri-state is produced by the contract rather than re-remembered by each
+    script. Both papers need this: AS-5's deployment axis and AS-6's decode axis
+    are the same join over the same failure.
+    """
+    if not reading.reportable:
+        return [None] * len(per_prompt)
+    return list(per_prompt)
+
+
 def reportable_only(readings: Sequence[Reading]) -> list[Reading]:
     """The subset a paper may quote. The complement is a finding, not waste."""
     return [reading for reading in readings if reading.reportable]

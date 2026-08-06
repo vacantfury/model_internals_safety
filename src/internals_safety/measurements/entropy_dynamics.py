@@ -38,9 +38,19 @@ from dataclasses import dataclass
 
 import torch
 
+from internals_safety.measurements.contract import Kind, Reading
 from internals_safety.models.capture import ActivationBatch
 from internals_safety.models.lens import unembed
 from internals_safety.models.loader import LoadedModel
+
+# P1 — checked across the roster by `assert_distinct_questions`.
+QUESTION = "does the model's layer-wise uncertainty profile mark this input, with nothing fitted on our labels"
+KIND: Kind = "correlational"
+
+# The statistics an `EntropyProfile` reduces to. Named here so a reading's
+# operating point cannot describe one statistic while the value came from
+# another.
+STATISTICS = ("minimum", "resolution_layer", "total_drop")
 
 
 def entropy(logits: torch.Tensor) -> torch.Tensor:
@@ -121,4 +131,43 @@ def measure_entropy_dynamics(
         position=position,
         layers=list(batch.layers),
         entropies=torch.stack(per_layer, dim=1),
+    )
+
+
+def reading(
+    *,
+    statistic: str,
+    auroc: float,
+    licensed: bool | None,
+    control_auroc: float | None,
+    control_margin: float | None,
+    length_null_margin: float | None = None,
+    selection_inside_null: bool = False,
+    detail: dict | None = None,
+) -> Reading:
+    """This instrument's condition-level verdict.
+
+    Same shape as I2's, and required for the same reason: **label-free is not
+    control-free.** Nothing here is fitted on our labels, which closes the route
+    that broke the supervised probe — but the separation statistic is still read
+    against a corpus whose harmful half is longer than its benign half, so the
+    length null applies unchanged. `length_null_margin=None` therefore withholds
+    the reading rather than passing it.
+    """
+    if statistic not in STATISTICS:
+        raise ValueError(f"unknown statistic {statistic!r}; have {list(STATISTICS)}")
+    return Reading(
+        instrument="entropy_dynamics",
+        kind=KIND,
+        value=auroc,
+        operating_point=(
+            f"AUROC of the per-prompt lens-entropy {statistic} at one captured "
+            "position, read against the ability-0 negative-control floor"
+        ),
+        licensed=licensed,
+        control_reading=control_auroc,
+        control_margin=control_margin,
+        length_null_margin=length_null_margin,
+        selection_inside_null=selection_inside_null,
+        detail={"statistic": statistic, **(detail or {})},
     )

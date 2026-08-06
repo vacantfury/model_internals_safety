@@ -15,8 +15,11 @@ different kind of document.
 Written 2026-08-06 on the owner's instruction, after six instrument modules
 landed in one day with **zero pipeline integration** — *"maybe we need first
 construct a structure design doc and carefully design the whole thing, and then
-check the current pipeline and then build."* Nothing in §3 is adopted until this
-doc is reviewed.
+check the current pipeline and then build."*
+
+**Reviewed and settled 2026-08-06.** §3.1 adopted, §3.2 struck, §3.3's form
+fixed, and all four §4 questions answered — see §4 for the reasoning, which is
+kept rather than deleted so the decisions are not silently reopened.
 
 ---
 
@@ -50,6 +53,24 @@ Thirteen modules, 2358 lines, and they are not the same kind of object:
 
 `regimes.py` is the largest module in the layer, and it is *combination logic*
 sitting in a package named for the things it combines. That is the smell.
+
+**⚠️ Corrected 2026-08-06 — the coupling this section originally asserted does
+not exist.** The first draft said the three kinds were entangled and that "a
+licensing rule change requires reading a measurement module". Measured with the
+import graph rather than by impression:
+
+    regimes.py         collections, dataclasses, enum      <- zero internal
+    guard_regimes.py   collections, dataclasses, enum, typing
+    length_null.py     dataclasses, typing, sklearn
+    contract.py        dataclasses, typing
+    causal_license.py  config, torch                       <- config only
+
+**Not one of them imports a measurement module.** They are already pure
+functions of plain floats and bools; the only thing they share with the
+instruments is a directory name. The conflation is real as *naming*, and it is
+nothing as *coupling* — which is what §3.2 turns on, and why that proposal was
+struck rather than scheduled. The general lesson is the same one the coverage
+sweep taught a week earlier: measure the thing before designing against it.
 
 ### 1.3 Problem B — the orchestration spine is duplicated, not extracted
 
@@ -114,7 +135,7 @@ Stated first, because an architecture doc's main risk is scope.
 
 ## 3. Proposed structure
 
-### 3.1 The instrument contract (prototyped, 18 tests, NOT adopted)
+### 3.1 The instrument contract — ADOPTED 2026-08-06
 
 `measurements/contract.py` — a `Protocol` plus a `Reading` dataclass turning
 P1–P7 into fields:
@@ -135,19 +156,42 @@ run record can carry a table of what was withheld beside the table of what was
 measured. A withheld cell with no stated reason is how an instrument defect
 hides as a null result.
 
-*Status: written and tested; wired to nothing. Adoption is this doc's decision.*
+Two pieces carry the weight beyond the fields themselves:
 
-### 3.2 Split `measurements/` by kind
+- **`gate_per_prompt(reading, per_prompt)` — the granularity join.** A `Reading`
+  is a verdict about one instrument on one *condition*; the axes regime
+  assignment consumes are per *prompt*. When the reading is not reportable every
+  prompt returns `None`. This is where the repo's worst defect lived, and it is
+  now one function instead of a rule each script must remember.
+- **`QUESTION` / `KIND` as module constants** on each instrument, so P1 is
+  checked across the real roster by `assert_distinct_questions` rather than
+  asserted in three docstrings that can drift apart.
 
-    measurements/     the four regime measurements + the new instruments
-    licensing/        length_null, causal_license, contract  (controls and gates)
-    combination/      regimes, guard_regimes                 (cells and maps)
+*Status: adopted 2026-08-06 on the owner's word. The three built instruments
+emit `Reading`s; `guard_regimes` consumes the gated axis. 441 tests green.*
 
-Rationale: §1.2's three kinds have different consumers and different change
-rates. A licensing rule change must not require reading a measurement module,
-and today it does. **Cost: an import sweep across ~15 files and both scripts.
-This is the only proposal here that touches working code, and it is the one
-most safely deferred** — the contract delivers most of the benefit without it.
+### 3.2 ~~Split `measurements/` by kind~~ — STRUCK 2026-08-06
+
+The proposal was to split into `measurements/licensing/combination/`. **Struck,
+because its stated rationale was measured false** (§1.2): the licensing and
+combination modules already import no measurement sibling, so the decoupling the
+split would buy already exists. What remained was an import sweep across six
+scripts in exchange for a directory name.
+
+What the split *would* genuinely have encoded is the invariant — that those
+modules stay pure functions of plain values, and that instruments stay leaves.
+**A directory cannot check that; a test can.** So the invariant is now
+`tests/test_package_structure.py`, which asserts three directions:
+
+    regimes | guard_regimes | length_null | contract | causal_license
+        -> import no measurement sibling at all
+    decode_lens | trajectory | entropy_dynamics
+        -> import at most `contract`
+    nothing in the layer
+        -> imports an instrument (instruments are leaves, so the roster stays swappable)
+
+Zero churn, and unlike the package boundary it fails loudly the first time
+someone violates it.
 
 ### 3.3 Extract the shared spine
 
@@ -162,25 +206,67 @@ shared. This is what makes build-plan §6's scheduling fact real: **I1–I4 all
 read the same forward pass**, which is one run if one runner drives them and
 four runs if each script wires its own.
 
+**Form, settled 2026-08-06: a file of plain functions at
+`src/internals_safety/pipeline.py`.** The module-vs-function framing was a false
+choice — the risk it was pointing at is a `Pipeline` class with lifecycle and a
+config-driven runner, and that is avoided by declining to write the class, not
+by declining to write the file.
+
+**The selection criterion, which is the load-bearing part: the spine holds
+anything whose absence in ONE script would be a defect.** That is not a
+generality argument, it is the length-null incident stated as a rule — the
+control reached AS-6 on 2026-08-05 and AS-5 on 2026-08-06, and a shared function
+is what makes that gap unrepresentable. By that criterion the spine holds
+plan/select/encode, capture-or-load, the mandatory controls, the per-family
+flush+fsync, and the run-record write. It does NOT hold the instrument roster or
+the combination step: those legitimately differ per paper, and forcing them into
+the spine is how a shared runner becomes a framework.
+
 ### 3.4 Sequence
 
-1. Adopt (or reject) the contract in §3.1 — no code changes beyond it.
-2. Make the three new instruments emit `Reading`s. Offline, mechanical.
-3. Extract the spine (§3.3), one script at a time, tests green between.
-4. Then and only then, I4 — so it lands wired instead of as a seventh orphan.
-5. §3.2's package split last, or never, judged on whether §3.1 already fixed it.
+1. ~~Adopt the contract in §3.1~~ — **done 2026-08-06.**
+2. ~~Make the three new instruments emit `Reading`s~~ — **done 2026-08-06**,
+   with `gate_per_prompt` joining them to the per-prompt axes both papers use.
+3. Extract the spine (§3.3) into `pipeline.py`, one script at a time, tests
+   green between. **Next.**
+4. Fold the run-record results half into `provenance.py` (§4 answer 4) as part
+   of step 3, since the spine is its first caller.
+5. Then and only then, I4 — so it lands wired instead of as a seventh orphan.
+
+~~§3.2's package split~~ struck; replaced by `tests/test_package_structure.py`.
 
 ---
 
-## 4. Open questions this doc does not settle
+## 4. The four open questions, settled 2026-08-06
 
-1. **Does `regimes.py` belong under a combination package, or is placement
-   churn not worth it?** §3.2 argues yes; the counter-argument is that the split
-   costs an import sweep and buys tidiness rather than correctness.
-2. **Should the spine be a module or a function both scripts call?** A module
-   invites a framework; a function might not carry enough.
-3. **Does AS-6 want the same `Reading` type?** Deployment is its central
-   quantity and its licensing may need fields AS-5 does not — decide when the
-   guard-side instruments are built, not now.
-4. **Where does the run record's schema live** once readings are typed? Today
-   `provenance.py` owns it and each script hand-builds its summary dict.
+Recorded rather than deleted: a settled question with its reasoning visible is
+what stops it being reopened by the next session.
+
+1. **Does `regimes.py` belong under a combination package?** **No.** The split's
+   premise was measured false (§1.2) — the decoupling already exists, so the
+   sweep would buy a directory name. The invariant it implied is now a test
+   (§3.2).
+2. **Should the spine be a module or a function?** **A file of plain functions**,
+   `pipeline.py`. The dichotomy was false; the real rule is the selection
+   criterion in §3.3.
+3. **Does AS-6 want the same `Reading` type?** **Yes, and settled now rather
+   than deferred** — reversing this doc's first recommendation. The argument is
+   the one that founded `instrument_layer.md`: a property of the *measurement*
+   that lives on one side gets re-derived on the other, and two `Reading` types
+   would encode the length-null divergence in the type system permanently. The
+   clinching evidence was already in the code — `guard_regimes.assign_guard_cell`
+   takes `decoded: bool | None` with a docstring saying an unlicensed probe means
+   "this instrument could not read this rung", which is `Reading.licensed`
+   hand-rolled. AS-6 was already using the contract's central idea informally.
+   The stated worry (AS-6's licensing may want fields AS-5 does not) is what
+   `detail` absorbs; a structural field is one addition to a frozen dataclass
+   with a default, whereas reconciling two diverged types later is not cheap.
+4. **Where does the run record's schema live?** **Nowhere new.** `provenance.py`
+   keeps it, and its canonical schema stays the `reproducible-run-logging`
+   skill. The actual gap is the *results* half: both scripts hand-build a summary
+   dict (`phase0_regime_map.py:320`, `as6_guard_probe.py:252`) and those have
+   already drifted. Fix is one function — `write_run_record(directory,
+   provenance, readings, summary)` — where the reportable/withheld split is
+   *computed* from `reportable_only` + `withheld_summary` instead of curated by
+   hand. Deferred to step 3, because founding a schema home before the spine
+   exists is a home for one caller.
