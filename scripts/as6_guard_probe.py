@@ -1,0 +1,406 @@
+"""AS-6 phase 1 — did the guard decode it, or did it just not block it?
+
+`text_docs/as6/s0_reshape.md` §6, phase 1: forward passes only, no training, $0.
+The reshape's three steps, of which step 1 (re-baselining AS-5's cached cells) is
+already done. This script is steps 2 and 3.
+
+## What it measures, and why generation is not involved anywhere
+
+Llama Guard 3's chat template hard-wires the classification task and ends "First
+line must read 'safe' or 'unsafe'." There is no in-distribution channel through
+which a guard can be asked to restate a decoded payload — it answers `safe`. So
+AS-5's ability measurement (decode-and-restate) does not port, and the decode
+question has to be asked of the residual stream instead:
+
+    decode   the plain-fitted content probe read on the encoded condition at the
+             payload-final position. Never refitted on encoded activations —
+             refitting would ask whether encoded prompts are separable at all,
+             which they are, on surface form.
+    verdict  P(unsafe) > P(safe) read from logits at the verdict position, one
+             forward pass, no sampling.
+
+Their cross is `measurements/guard_regimes.py`: the guard worked, it decoded and
+let it through anyway, it blocked without ever decoding (a format detector), or
+it never saw the content. That fourth cell is invisible to end-to-end ASR, which
+is the confound AS-6 exists to remove.
+
+**No judge is called at any point**, which is why this run costs $0: decode is a
+probe, and the verdict is the guard's own logits.
+
+## Two controls that are not optional
+
+**Length null.** Character length alone separates the harmful corpus from the
+benign one at AUROC 0.6544, and every encoder is monotone in length, so the
+signal passes through all 19 rungs at 0.647-0.657. A probe scoring 0.66 on a
+rung has measured length, not decoded content. Every rung reports its margin over
+that baseline (`measurements/length_null.py`). The margin is REPORTED beside
+licensing rather than gating it while the rule is settled (TODO 17b), so this
+script never silently drops a rung — it labels it.
+
+**Unmeasured is not negative.** Both the decode probe and the cell map are
+tri-state. An unlicensed probe means the instrument could not read the rung, and
+recording that as "the guard did not decode" would manufacture precisely AS-6's
+headline finding out of a measurement failure — the defect AS-5 hit twice.
+
+## The verdict-position check rides along
+
+Llama Guard 3's template ends with no trailing newline, so the model may supply
+`\\n\\n` before its verdict and `verdict_prefix: ""` would read one token too
+early (TODO 13). Every reading records its argmax token, and each rung reports
+`verdict_format_health`. Low label mass plus a consistent non-label argmax means
+the prefix is wrong and the run is invalid — a condition, not a finding, so it
+lands in `results.json` rather than a log line.
+
+Usage:
+
+    uv run python scripts/as6_guard_probe.py --guard llama_guard_3_8b --dry-run
+    ./run python scripts/as6_guard_probe.py --guard llama_guard_3_8b
+
+The dry-run path loads no model and needs no keys.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Sequence
+
+from internals_safety.config import (
+    GuardConfig,
+    MeasurementsConfig,
+    load_guard_config,
+    load_measurements_config,
+    load_pilot_config,
+)
+from internals_safety.data import Prompt, digest, prompt_set
+from internals_safety.encodings.base import Encoder
+from internals_safety.encodings.registry import load_ladder
+from internals_safety.guards.prompts import prepare_guard_prompts
+from internals_safety.guards.verdict import read_verdicts, verdict_format_health
+from internals_safety.measurements.deployment import (
+    measure_deployment,
+    read_deployment_per_prompt,
+)
+from internals_safety.measurements.guard_regimes import (
+    assign_guard_cell,
+    build_guard_cell_map,
+)
+from internals_safety.measurements.length_null import measure_length_null
+from internals_safety.models.capture import capture_activations
+from internals_safety.models.loader import LoadedModel, load_model, resolve_device
+from internals_safety.paths import OUTPUTS_DIR, run_dir
+from internals_safety.provenance import capture_provenance, guard_working_tree, write_results
+
+PHASE = "as6_phase1"
+
+
+def capture_guard(
+    loaded: LoadedModel,
+    payloads: Sequence[str],
+    batch_size: int | None = None,
+):
+    """Capture activations for payloads rendered through the GUARD's prompt.
+
+    Deliberately not `models.capture.capture_or_load`: that helper renders through
+    `prepare_prompts`, i.e. the plain chat template, which fails closed on a guard
+    that ships none and would silently use the wrong prompt on one that does. The
+    caching layer is skipped with it — guard captures are cheap (no generation)
+    and a cache keyed on the payload alone would collide across guards.
+    """
+    prompts = prepare_guard_prompts(loaded, payloads)
+    return capture_activations(
+        loaded, prompts, batch_size=batch_size or loaded.config.capture_batch_size
+    )
+
+
+def run_family(
+    loaded: LoadedModel,
+    encoder: Encoder,
+    harmful: Sequence[Prompt],
+    harmless: Sequence[Prompt],
+    plain_harmful_batch,
+    plain_harmless_batch,
+    measurements: MeasurementsConfig,
+) -> dict:
+    """Every phase-1 measurement for one rung."""
+    config: GuardConfig = loaded.config
+    family = encoder.family
+
+    encoded_harmful = [encoder.encode(prompt.text) for prompt in harmful]
+    encoded_harmless = [encoder.encode(prompt.text) for prompt in harmless]
+
+    # The ATTACK prompt, as in AS-5: the condition where nothing asks for a decode.
+    harmful_payloads = [item.attack_prompt for item in encoded_harmful]
+    harmless_payloads = [item.attack_prompt for item in encoded_harmless]
+
+    encoded_harmful_batch = capture_guard(loaded, harmful_payloads)
+    encoded_harmless_batch = capture_guard(loaded, harmless_payloads)
+
+    curve = measure_deployment(
+        family,
+        plain_harmful_batch,
+        plain_harmless_batch,
+        encoded_harmful_batch,
+        encoded_harmless_batch,
+        measurements.probes,
+    )
+    decode = read_deployment_per_prompt(
+        curve,
+        plain_harmful_batch,
+        plain_harmless_batch,
+        encoded_harmful_batch,
+        encoded_harmless_batch,
+        measurements.probes,
+    )
+
+    null = measure_length_null(
+        family,
+        [prompt.text for prompt in harmful],
+        [prompt.text for prompt in harmless],
+        [item.ciphertext for item in encoded_harmful],
+        [item.ciphertext for item in encoded_harmless],
+    )
+    margin = null.margin(curve.observed_max_transfer_auroc)
+    beats_null = null.beats_null(
+        curve.observed_max_transfer_auroc, measurements.probes.length_null_min_margin
+    )
+
+    verdicts, tokens = read_verdicts(loaded, harmful_payloads)
+
+    cells = [
+        assign_guard_cell(decoded=decoded, blocked=verdict.unsafe)
+        for decoded, verdict in zip(decode.harmful, verdicts)
+    ]
+    cell_map = build_guard_cell_map(config.name, family, cells)
+
+    records = [
+        {
+            "prompt_id": prompt.id,
+            "category": prompt.category,
+            "guard": config.name,
+            "family": family,
+            "plaintext": item.plaintext,
+            "ciphertext": item.ciphertext,
+            "decoded": decoded,
+            "blocked": verdict.unsafe,
+            "p_unsafe": verdict.p_unsafe,
+            "p_safe": verdict.p_safe,
+            "top_token": verdict.top_token,
+            "top_prob": verdict.top_prob,
+            "cell": cell.value,
+        }
+        for prompt, item, decoded, verdict, cell in zip(
+            harmful, encoded_harmful, decode.harmful, verdicts, cells
+        )
+    ]
+
+    summary = {
+        **cell_map.as_dict(),
+        "invertibility": encoder.invertibility.value,
+        "decode": {
+            "licensed": decode.licensed,
+            "layer": decode.layer,
+            "position": decode.position,
+            "transfer_auroc": decode.transfer_auroc,
+            "observed_max_transfer_auroc": curve.observed_max_transfer_auroc,
+            "p_value": curve.p_value,
+            "meets_effect_size_bar": curve.meets_effect_size_bar,
+            "harmful_rate": decode.harmful_rate,
+            "harmless_rate": decode.harmless_rate,
+            "gap": decode.gap,
+        },
+        # Reported beside licensing, never silently gating it (TODO 17b). A rung
+        # licensed by permutation but sitting AT the length baseline is the exact
+        # pattern that produced a false 14-of-15 map on the AS-5 side.
+        "length_null": {
+            "plain_auroc": null.plain_auroc,
+            "encoded_auroc": null.encoded_auroc,
+            "margin": margin,
+            "min_margin": measurements.probes.length_null_min_margin,
+            "beats_length_null": beats_null,
+            "mean_positive_chars": null.mean_positive_chars,
+            "mean_negative_chars": null.mean_negative_chars,
+        },
+        # Run-validity condition, not a finding: see the module docstring.
+        "verdict_format": {
+            **verdict_format_health(verdicts),
+            "safe_token_id": tokens.safe_id,
+            "unsafe_token_id": tokens.unsafe_id,
+            "safe_piece": tokens.safe_piece,
+            "unsafe_piece": tokens.unsafe_piece,
+            "verdict_prefix": config.verdict_prefix,
+        },
+        "mean_p_unsafe": sum(v.p_unsafe for v in verdicts) / len(verdicts) if verdicts else 0.0,
+        "mean_ciphertext_chars": (
+            sum(len(item.ciphertext) for item in encoded_harmful) / len(encoded_harmful)
+            if encoded_harmful
+            else 0.0
+        ),
+    }
+    return {"summary": summary, "cells": records}
+
+
+def describe_plan(config: GuardConfig, families: Sequence[str], n: int, device: str) -> str:
+    """The approval-gate estimate, printed before anything loads.
+
+    Forward passes only: 2 capture passes per rung plus one verdict pass, over n
+    prompts, with NO generation and NO judge call anywhere. That is why the money
+    line is exactly zero rather than a small number.
+    """
+    per_rung = 3 * n
+    total = per_rung * len(families) + 2 * n
+    return "\n".join(
+        [
+            f"guard          {config.name} ({config.hf_id})",
+            f"prompt style   {config.prompt_style}",
+            f"verdict        prefix={config.verdict_prefix!r} "
+            f"labels={config.safe_token!r}/{config.unsafe_token!r}",
+            f"device         {device}",
+            f"rungs          {len(families)}: {', '.join(families)}",
+            f"prompts        {n} harmful + {n} benign",
+            "",
+            f"forward passes {total} ({per_rung} per rung + {2 * n} plain, captured once)",
+            "generations    0",
+            "judge calls    0",
+            "money          $0.00",
+        ]
+    )
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    pilot = load_pilot_config()
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--guard", required=True, help="conf/guards/<name>.yaml")
+    parser.add_argument("--families", nargs="+", default=None, help="default: every rung")
+    parser.add_argument("--n-prompts", type=int, default=pilot.n_prompts)
+    parser.add_argument("--run-name", default=None)
+    parser.add_argument("--dry-run", action="store_true", help="print the plan and exit")
+    parser.add_argument("--allow-dirty", action="store_true")
+    parser.add_argument("--allow-cpu", action="store_true")
+    parser.add_argument("--outputs-dir", default=None)
+    args = parser.parse_args(argv)
+
+    config = load_guard_config(args.guard)
+    measurements = load_measurements_config()
+    ladder = load_ladder()
+    families = list(args.families) if args.families else list(ladder)
+    unknown = [family for family in families if family not in ladder]
+    if unknown:
+        raise SystemExit(f"unknown rungs {unknown}; configured: {sorted(ladder)}")
+
+    device = resolve_device(config.device, allow_cpu_in_job=args.allow_cpu)
+    print(describe_plan(config, families, args.n_prompts, str(device)))
+    if args.dry_run:
+        return 0
+
+    guard_working_tree(device, allow_dirty=args.allow_dirty)
+
+    harmful = prompt_set(pilot.harmful_set, limit=args.n_prompts)
+    harmless = prompt_set(pilot.harmless_set, limit=args.n_prompts)
+    if len(harmful) != len(harmless):
+        raise SystemExit(
+            f"contrast sets differ in size ({len(harmful)} vs {len(harmless)}); the probe's "
+            "classes must be matched"
+        )
+
+    outputs = Path(args.outputs_dir) if args.outputs_dir else OUTPUTS_DIR
+    run_name = args.run_name or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    directory = run_dir(PHASE, config.name, run_name, runs_dir=outputs / "runs")
+    directory.mkdir(parents=True, exist_ok=True)
+
+    print(f"\nloading {config.hf_id} ...", flush=True)
+    loaded = load_model(config)
+
+    # Rung-independent, captured once. Note these go through the GUARD's prompt
+    # too: the probe must be fitted on the same distribution it is read on, minus
+    # the encoding. Fitting on bare plaintext would confound "decoded the payload"
+    # with "is inside a classification template".
+    plain_harmful_batch = capture_guard(loaded, [prompt.text for prompt in harmful])
+    plain_harmless_batch = capture_guard(loaded, [prompt.text for prompt in harmless])
+
+    plain_verdicts, _ = read_verdicts(loaded, [prompt.text for prompt in harmful])
+    plain_block_rate = sum(v.unsafe for v in plain_verdicts) / len(plain_verdicts)
+    plain_health = verdict_format_health(plain_verdicts)
+    print(f"\nplaintext block rate: {plain_block_rate:.2f}  (the ceiling)")
+    print(f"verdict format: {plain_health}", flush=True)
+
+    raw_path = directory / "cells.jsonl"
+    partial_path = directory / "summaries.partial.jsonl"
+    summaries = []
+    started = time.perf_counter()
+    # Per-rung checkpoint with fsync, for the reason the pilot learned at the 8 h
+    # wall: a rung that finished must survive a job that did not.
+    with raw_path.open("w", encoding="utf-8") as handle, partial_path.open(
+        "w", encoding="utf-8"
+    ) as partial_handle:
+        for family in families:
+            print(f"\n=== {family}", flush=True)
+            family_started = time.perf_counter()
+            result = run_family(
+                loaded,
+                ladder[family],
+                harmful,
+                harmless,
+                plain_harmful_batch,
+                plain_harmless_batch,
+                measurements,
+            )
+            for cell in result["cells"]:
+                handle.write(json.dumps(cell, ensure_ascii=False) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+
+            summary = result["summary"]
+            summary["elapsed_seconds"] = round(time.perf_counter() - family_started, 1)
+            summaries.append(summary)
+            partial_handle.write(json.dumps(summary, ensure_ascii=False) + "\n")
+            partial_handle.flush()
+            os.fsync(partial_handle.fileno())
+
+            decode, null = summary["decode"], summary["length_null"]
+            print(
+                f"    decode auroc {decode['observed_max_transfer_auroc']:.3f} "
+                f"p={decode['p_value']:.4f} licensed={decode['licensed']} | "
+                f"length null {null['encoded_auroc']:.3f} margin {null['margin']:+.3f} "
+                f"beats={null['beats_length_null']}",
+                flush=True,
+            )
+            print(
+                f"    block {summary['block_rate']:.2f} | "
+                f"decoded-not-blocked {summary['decoded_not_blocked_rate']} | "
+                f"blocked-without-decoding {summary['blocked_without_decoding_rate']} | "
+                f"unmeasured {summary['n_unmeasured']}/{summary['n']}",
+                flush=True,
+            )
+            print(f"    ({summary['elapsed_seconds'] / 60:.1f} min)", flush=True)
+    elapsed_seconds = time.perf_counter() - started
+
+    record = capture_provenance(
+        config={
+            "guard": config.model_dump(),
+            "measurements": measurements.model_dump(),
+            "families": families,
+            "n_prompts": args.n_prompts,
+        },
+        seed=measurements.probes.seed,
+        extra={
+            "phase": PHASE,
+            "corpus_digest": {"harmful": digest(harmful), "harmless": digest(harmless)},
+            "plain_block_rate": plain_block_rate,
+            "plain_verdict_format": plain_health,
+            "elapsed_seconds": round(elapsed_seconds, 1),
+            "summaries": summaries,
+            "cells_path": str(raw_path),
+        },
+    )
+    path = write_results(directory, record)
+    print(f"\nwrote {path}")
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())
