@@ -16,6 +16,11 @@ device: auto
 trust_remote_code: false
 system_prompt: null
 capture_batch_size: 8
+# Transformer blocks, read from the checkpoint's own config.json
+# (`num_hidden_layers` = 32). A fact about the model, not a tunable — the
+# pre-run cost estimate prices layer-proportional instruments before any
+# weights load, and `attach` asserts this against the real model.
+n_layers: 32
 
 # The shipped chat template hard-wires the classification task and ends
 # "First line must read 'safe' or 'unsafe'." That is WHY the AS-5 ability

@@ -175,13 +175,42 @@ def attach(
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    return LoadedModel(
+    loaded = LoadedModel(
         config=config,
         model=model,
         tokenizer=tokenizer,
         layers=find_layer_modules(model),
         device=device,
         dtype=dtype,
+    )
+    verify_declared_layers(loaded)
+    return loaded
+
+
+def verify_declared_layers(loaded: LoadedModel) -> None:
+    """Reconcile `config.n_layers` against the model that actually loaded.
+
+    The declared count exists so the pre-run cost estimate can price
+    layer-proportional instruments without touching weights — which means it is
+    a copy of a fact living somewhere else, and copies drift. So the moment the
+    real model is in hand, they are compared.
+
+    Fails LOUD rather than trusting either side: a mismatch means the estimate
+    the approval gate saw priced a different model than the one about to run,
+    and which of the two is wrong is not something this function can decide.
+
+    Silent when nothing is declared — that is the honest "not checked" state,
+    and the estimator reports the gap itself rather than substituting a number.
+    """
+    declared = loaded.config.n_layers
+    if declared is None or declared == loaded.n_layers:
+        return
+    raise ValueError(
+        f"{loaded.config.name}: config declares n_layers={declared} but the loaded "
+        f"checkpoint ({loaded.config.hf_id}) has {loaded.n_layers}. The pre-run cost "
+        f"estimate used the declared value, so it priced a different model than this "
+        f"one. Fix the config from the checkpoint's config.json `num_hidden_layers`, "
+        f"then re-cost — do not proceed on the estimate already approved."
     )
 
 

@@ -93,6 +93,19 @@ probes:
   # construction; the pilot reports both rates per rung and this is set from the
   # benign false-positive rate the paper is willing to carry.
   reading_percentile: 50.0
+  # Operating points the two offline re-read scripts sweep — ONE home, because
+  # it had two that had already diverged: sweep_operating_point.py hard-coded
+  # (50, 75, 90, 95, 99), recalibrate_deployment.py defaulted to "50,75,90,95".
+  # Same knob, two values, no way to notice.
+  #
+  # Reaches 99.5 now, which neither copy did. Circuit Breakers tunes its
+  # detection threshold to a <1% benign false-positive rate, so 99 / 99.5 are
+  # the established operating points and stopping at 95 never swept them
+  # (TODO item 34).
+  #
+  # Acceptance criterion is settled and is NOT the counts these produce: hard
+  # incoherence must fall monotonically as the read tightens.
+  reading_percentile_sweep: [50.0, 75.0, 90.0, 95.0, 99.0, 99.5]
 
 
 # MEASURED against the real Llama-3.1-8B zero_width activations (2026-08-05,
@@ -277,3 +290,25 @@ controls:
   # the two is where a reading is neither passed nor clearly failed, and belongs
   # in the record as withheld-and-ambiguous rather than rounded either way.
   lexical_min_margin: 0.10
+
+  # What counts as an ability-0 negative-control rung — the most load-bearing
+  # number in this file, because those rungs ARE the calibration for three
+  # instruments (the deployment noise floor 0.656/0.671, I1's control, I3's).
+  # A rung wrongly admitted here contaminates the floor everything else is
+  # judged against.
+  #
+  # ZERO, not a tolerance. The basis for calling these rungs a control is that
+  # whatever the probe reads there is BY CONSTRUCTION not decoded content, and
+  # that does not survive one decoded cell. Measured over every cached run:
+  # every genuine control rung is exactly 0.00. The retired
+  # `CONTROL_ABILITY_MAX = 0.02` never admitted anything a zero cut would not
+  # have — except `unicode_escape` at 0.01 on Llama in the pilot, which is one
+  # of the two rungs that model demonstrably CAN read (53/100 cells post-fix).
+  # A tolerance bought nothing and would have calibrated the floor on decoded
+  # content.
+  #
+  # Tuning path: a genuinely-inert rung landing at 1/n on some future corpus is
+  # first a question for the SENSITIVITY arm (`AbilityControl.identity_rate`) —
+  # is that cell a scorer false positive? Widening this is the last resort and
+  # needs the restatements read by hand.
+  control_ability_max: 0.0

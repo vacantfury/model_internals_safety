@@ -52,9 +52,18 @@ from internals_safety.measurements.regimes import Regime, assign_regime, build_r
 from internals_safety.models.capture import ActivationBatch
 from internals_safety.probes.linear import probe_transfer_detail, reading_threshold
 
-# Rungs whose ability is ~0 are the negative control. Named by measurement, not
-# by hand: any rung whose measured ability rate is at or below this is one.
-CONTROL_ABILITY_MAX = 0.02
+def control_ability_max(config) -> float:
+    """The cut defining an ability-0 negative-control rung.
+
+    Read from `controls.control_ability_max` (0.0) rather than the module
+    constant `CONTROL_ABILITY_MAX = 0.02` that stood here until 2026-08-06. That
+    constant was both unconfigured and, on this repo's own data, wrong in a way
+    that mattered: every genuine control rung scores exactly 0.00, and the only
+    thing a 0.02 tolerance would have admitted is `unicode_escape` at 0.01 on
+    Llama — one of the two rungs that model demonstrably CAN read. It would have
+    calibrated the noise floor on decoded content.
+    """
+    return config.control_ability_max
 
 
 def load_run(run_dir: Path) -> tuple[dict, list[dict], list[dict]]:
@@ -109,13 +118,18 @@ def rescore(results: dict, summaries: list[dict], config) -> dict[str, dict]:
     return out
 
 
-def control_floor(scored: dict[str, dict]) -> tuple[float, list[str]]:
+def control_floor(scored: dict[str, dict], max_ability: float) -> tuple[float, list[str]]:
     """The surface-feature noise floor: max transfer AUROC over can't-decode rungs.
 
     MAX, not mean: the floor has to bound what surface features alone achieved,
     and a rung that read higher on nothing is the binding constraint.
+
+    An empty control set returns NaN, which propagates to "no rung passes" —
+    fail-closed, and the right direction: with no floor there is nothing to
+    judge a reading against, and inventing one would be the whole defect this
+    script exists to fix.
     """
-    controls = [f for f, s in scored.items() if s["ability_rate"] <= CONTROL_ABILITY_MAX]
+    controls = [f for f, s in scored.items() if s["ability_rate"] <= max_ability]
     if not controls:
         return float("nan"), []
     return max(scored[f]["transfer_auroc"] for f in controls), sorted(controls)
@@ -125,13 +139,23 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", required=True, type=Path, action="append",
                         help="a completed run dir; repeat for several models")
-    parser.add_argument("--percentiles", default="50,75,90,95",
-                        help="reading percentiles of the benign distribution to sweep")
+    # Default is the CONFIGURED sweep grid, not a second copy of it. Until
+    # 2026-08-06 this read "50,75,90,95" while sweep_operating_point.py hard-coded
+    # (50, 75, 90, 95, 99) — one knob, two values, drifting in silence.
+    parser.add_argument("--percentiles", default=None,
+                        help="reading percentiles of the benign distribution to sweep "
+                             "(default: probes.reading_percentile_sweep)")
     parser.add_argument("--out", type=Path, default=None, help="write JSON here")
     args = parser.parse_args(argv)
 
-    config = load_measurements_config().probes
-    percentiles = [float(p) for p in args.percentiles.split(",")]
+    measurements = load_measurements_config()
+    config = measurements.probes
+    max_ability = control_ability_max(measurements.controls)
+    percentiles = (
+        [float(p) for p in args.percentiles.split(",")]
+        if args.percentiles
+        else list(config.reading_percentile_sweep)
+    )
     report: dict = {"runs": {}}
 
     for run_dir in args.run_dir:
@@ -140,8 +164,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\n{'='*86}\n{model}   ({run_dir})\n{'='*86}", flush=True)
 
         scored = rescore(results, summaries, config)
-        floor, controls = control_floor(scored)
-        print(f"negative control rungs (ability <= {CONTROL_ABILITY_MAX}): {controls}")
+        floor, controls = control_floor(scored, max_ability)
+        print(f"negative control rungs (ability <= {max_ability}): {controls}")
+        if not controls:
+            # Loud, and it does not widen the cut to find one. The floor is the
+            # basis for every pass/fail below it; a run with no can't-decode rung
+            # has no basis, and the nearest rungs are printed so the next move is
+            # a judgment about THOSE rather than about this threshold.
+            nearest = sorted(scored.items(), key=lambda kv: kv[1]["ability_rate"])[:3]
+            print("  !! NO NEGATIVE CONTROL RUNG in this run — the floor is undefined and")
+            print("     every rung below reads 'below floor'. Lowest-ability rungs were:")
+            for family, s in nearest:
+                print(f"       {family:<20} ability_rate={s['ability_rate']:.4f}")
+            print("     Design a can't-decode rung into the ladder; do not widen the cut.\n")
         print(f"surface-feature noise floor = max transfer AUROC over them = {floor:.3f}")
         print("  -> a rung at or below this reads no more than surface form; its per-cell")
         print("     deployment is UNMEASURED, not False.\n")

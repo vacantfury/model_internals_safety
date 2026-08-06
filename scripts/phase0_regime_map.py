@@ -148,12 +148,6 @@ from internals_safety.provenance import (
 
 PHASE = "phase0"
 
-# Layer count used ONLY for the pre-run estimate, before any model is loaded —
-# the dry-run path deliberately touches no weights. Both pilot models are 32
-# layers; a model with more would make the estimate low, so it is named here
-# rather than buried as a literal.
-N_LAYERS_ASSUMED = 32
-
 # Optional instruments a run may declare. The four measurements and I2 always
 # run: they add no forward pass. These do.
 OPTIONAL_INSTRUMENTS = (
@@ -189,6 +183,37 @@ class Plan:
     prune_layer_percentage: float = 0.20
     n_random_directions: int = 0
     max_sweep_layers: int = MAX_CAUSAL_LAYERS
+    # Transformer blocks of the target, from `ModelConfig.n_layers` — read off
+    # the checkpoint's config.json rather than assumed, because I1 and I3 cost
+    # one pass PER LAYER and the estimate is what the approval gate approves.
+    #
+    # This replaced `N_LAYERS_ASSUMED = 32`, whose comment said both pilot
+    # models were 32 layers. Checked: Llama-3.1-8B is, Qwen2.5-7B is 28 and
+    # Qwen2.5-0.5B is 24, so the constant over-priced both Qwen models while
+    # warning only about under-pricing deeper ones.
+    #
+    # `None` = the model config does not declare it, which is REPORTED, never
+    # substituted — see `layers_for_estimate`.
+    n_layers: int | None = None
+
+    @property
+    def layers_for_estimate(self) -> int:
+        """Layer count the per-layer instruments are priced against.
+
+        Raises rather than defaulting. A cost estimate is the input to a
+        sovereign approval gate, and a silently-guessed layer count produces a
+        confident number for a model nobody priced — which is the failure the
+        constant this replaced actually committed, on two of three models.
+        """
+        if self.n_layers is None:
+            raise ValueError(
+                f"{self.model}: cannot price per-layer instruments "
+                f"{[i for i in self.instruments if i in ('decode_lens', 'entropy_dynamics', 'causal_license')]} "
+                f"because the model config declares no `n_layers`. Add it from the "
+                f"checkpoint's config.json (`num_hidden_layers`) — it is a fact about "
+                f"the model, and `attach` will verify it once weights load."
+            )
+        return self.n_layers
 
     @property
     def prompt_forward_passes(self) -> int:
@@ -218,7 +243,7 @@ class Plan:
         if "decode_lens" not in self.instruments:
             return 0
         batches = -(-self.n_prompts // self.capture_batch_size)
-        return len(self.families) * N_LAYERS_ASSUMED * batches
+        return len(self.families) * self.layers_for_estimate * batches
 
     @property
     def lens_readouts(self) -> int:
@@ -231,7 +256,7 @@ class Plan:
         if "entropy_dynamics" not in self.instruments:
             return 0
         batches = -(-self.n_prompts // self.capture_batch_size)
-        return 2 * len(self.families) * N_LAYERS_ASSUMED * batches
+        return 2 * len(self.families) * self.layers_for_estimate * batches
 
     @property
     def causal_candidates(self) -> int:
@@ -243,7 +268,7 @@ class Plan:
         """
         if "causal_license" not in self.instruments:
             return 0
-        eligible = int(N_LAYERS_ASSUMED * (1.0 - self.prune_layer_percentage))
+        eligible = int(self.layers_for_estimate * (1.0 - self.prune_layer_percentage))
         return min(eligible, self.max_sweep_layers) * self.n_capture_positions
 
     @property
@@ -539,6 +564,7 @@ def build_plan(
         prune_layer_percentage=prune_layer_percentage,
         n_random_directions=n_random_directions,
         max_sweep_layers=max_sweep_layers,
+        n_layers=model_config.n_layers,
     )
 
 

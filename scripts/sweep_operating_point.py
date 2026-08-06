@@ -37,9 +37,21 @@ from pathlib import Path
 
 import numpy as np
 
+from internals_safety.config import load_measurements_config
 from internals_safety.measurements.guard_regimes import assign_guard_cell
 
-DEFAULT_PERCENTILES = (50.0, 75.0, 90.0, 95.0, 99.0)
+def default_percentiles() -> list[float]:
+    """The configured sweep grid — `probes.reading_percentile_sweep`.
+
+    It was a module constant `(50, 75, 90, 95, 99)` until 2026-08-06, while
+    `recalibrate_deployment.py` defaulted to `"50,75,90,95"`: the same knob with
+    two values and no way to notice they had diverged. Both now read this.
+
+    It also reaches 99.5, which neither copy did — Circuit Breakers tunes to a
+    <1% benign false-positive rate, so 99/99.5 are the established operating
+    points and stopping at 95 never swept them (TODO item 34).
+    """
+    return list(load_measurements_config().probes.reading_percentile_sweep)
 
 
 def load_run(run_dir: Path) -> tuple[dict, list[dict]]:
@@ -104,11 +116,16 @@ def sweep_family(summary: dict, family_cells: list[dict], percentiles) -> list[d
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_dir", type=Path)
-    parser.add_argument("--percentiles", default=",".join(str(p) for p in DEFAULT_PERCENTILES))
+    parser.add_argument("--percentiles", default=None,
+                        help="default: probes.reading_percentile_sweep")
     parser.add_argument("--json-out", type=Path, default=None)
     args = parser.parse_args()
 
-    percentiles = [float(p) for p in args.percentiles.split(",")]
+    percentiles = (
+        [float(p) for p in args.percentiles.split(",")]
+        if args.percentiles
+        else default_percentiles()
+    )
     results, cells = load_run(args.run_dir)
 
     by_family: dict[str, list[dict]] = {}

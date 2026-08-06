@@ -135,6 +135,42 @@ class TestPlan:
         assert "approval gate" in text and "wall-clock" in text
         assert "scripts/cost_model.py --model m" in text
 
+    def test_per_layer_instruments_are_priced_from_the_MODEL_not_a_constant(self, pilot):
+        """I1 costs one forward pass per layer, so the estimate the approval gate
+        sees scales with the target's depth. `N_LAYERS_ASSUMED = 32` charged
+        every model the same, which over-priced Qwen2.5-7B (28 layers) by 14%."""
+        from internals_safety.config import ModelConfig
+
+        def passes(n_layers):
+            config = ModelConfig(name="m", hf_id="x", device="cpu", n_layers=n_layers)
+            return pilot.build_plan(
+                config, ["a"], n_prompts=8, instruments=["decode_lens"]
+            ).instrument_forward_passes
+
+        assert passes(28) < passes(32)
+        assert passes(32) / passes(28) == pytest.approx(32 / 28)
+
+    def test_an_undeclared_layer_count_refuses_to_price_rather_than_guessing(self, pilot):
+        """A cost estimate is the input to a sovereign approval gate. Guessing
+        produces a confident number for a model nobody priced — which is what
+        the retired constant did on two of three models."""
+        from internals_safety.config import ModelConfig
+
+        plan = pilot.build_plan(
+            ModelConfig(name="m", hf_id="x", device="cpu"), ["a"], 8, instruments=["decode_lens"]
+        )
+        with pytest.raises(ValueError, match="declares no `n_layers`"):
+            _ = plan.instrument_forward_passes
+
+    def test_a_run_without_per_layer_instruments_needs_no_layer_count(self, pilot):
+        """The default run prices fine without one — the refusal is scoped to
+        the instruments that actually depend on depth."""
+        from internals_safety.config import ModelConfig
+
+        plan = pilot.build_plan(ModelConfig(name="m", hf_id="x", device="cpu"), ["a"], 8)
+        assert plan.instrument_forward_passes == 0
+        assert plan.describe(MEASUREMENTS)
+
     def test_select_families_defaults_to_the_whole_ladder(self, pilot):
         ladder = load_ladder()
         assert pilot.select_families(ladder, "all") == list(ladder)
