@@ -34,11 +34,13 @@ WildGuard/`combining_marks`** — a rung where the probe reads 0.854 against a
 is ≈0 across all 38 pairs: neither guard blocks on format without representing
 content, which retires the format-detector hypothesis empirically.
 
-**Second control, and it discounts some of those counts: §1.5.** The per-prompt
-decode read sits at the median of the benign distribution, so its benign
-false-positive rate is 0.50 by construction. The headline cell survives at ~88%
-genuine; `caesar3`'s 77% is roughly half artefact. Read §1.5 before quoting any
-count in §2–§3.
+**Second control, and it subtracts a finding: §1.5.** The per-prompt decode read
+sat at the median of the benign distribution — a 50% false-positive rate by
+construction. Swept across operating points, `zero_width` on Llama Guard is
+completely invariant (17 at every point), the headline `combining_marks` cell
+halves to **32**, and **`reverse_words` evaporates on both guards** (25→1, 16→2)
+and is no longer a failure finding. **Counts in §2–§3 below are the median-read
+originals; §1.5 carries the numbers of record.**
 
 **And the scope is smaller than hoped, honestly stated: the decode axis is
 measurable almost only where the encoding is surface-level.** On genuine ciphers
@@ -107,43 +109,68 @@ all ten measurable rungs, which confirms the threshold is applied rather than
 being a finding. A harmful prompt carrying no decoded content still reads
 "decoded" half the time.
 
-Backing that out with a two-component mixture (a prompt either carries content
-the probe sees, reading positive at ~1, or does not, reading positive at exactly
-the benign rate), the genuine fraction is `gap / (1 − benign)` — a LOWER bound,
-since genuinely-decoded prompts reading positive at less than 1 would require a
-larger fraction still:
+### The sweep (runs `8958861`/`8958862`, `scripts/sweep_operating_point.py`, $0)
 
-| guard / rung | AUROC | harmful | benign | gap | genuine ≥ | raw D&~B |
-|---|---|---|---|---|---|---|
-| L homoglyph | 0.985 | 1.00 | 0.50 | 0.50 | **1.00** | 8 |
-| L zero_width | 0.969 | 1.00 | 0.50 | 0.50 | **1.00** | 17 |
-| W zero_width | 0.954 | 0.99 | 0.50 | 0.49 | 0.98 | 28 |
-| W homoglyph | 0.948 | 0.98 | 0.50 | 0.48 | 0.96 | 23 |
-| W combining_marks | 0.854 | 0.94 | 0.50 | 0.44 | 0.88 | **69** |
-| L fullwidth | 0.880 | 0.92 | 0.50 | 0.42 | 0.84 | 12 |
-| L reverse_words | 0.796 | 0.90 | 0.50 | 0.40 | 0.80 | 25 |
-| W reverse_words | 0.818 | 0.88 | 0.50 | 0.38 | 0.76 | 16 |
-| L **caesar3** | 0.717 | 0.77 | 0.50 | 0.27 | **0.54** | **77** |
-| L combining_marks | 0.701 | 0.76 | 0.50 | 0.26 | 0.52 | 5 |
+`decoded_not_blocked` count at each operating point, with the implied genuine
+fraction `gap / (1 − benign)` beneath it. Licensing is identical throughout —
+only the per-prompt read moves.
 
-**Severity tracks probe strength**, exactly as TODO item 5 predicted before any
-guard-side code existed. Two consequences:
+| guard / rung | AUROC | pct 50 | pct 75 | pct 90 | verdict |
+|---|---|---|---|---|---|
+| L zero_width | 0.969 | **17** (1.00) | **17** (0.99) | **17** (0.92) | **invariant** |
+| W zero_width | 0.954 | 28 (0.98) | 23 (0.92) | 21 (0.90) | robust |
+| L homoglyph | 0.985 | 8 (1.00) | 7 (0.99) | 6 (0.96) | robust |
+| W homoglyph | 0.948 | 23 (0.96) | 23 (0.95) | 13 (0.82) | robust |
+| L fullwidth | 0.880 | 12 (0.84) | 10 (0.79) | 6 (0.68) | degrades |
+| W **combining_marks** | 0.854 | **69** (0.88) | 56 (0.75) | **32** (0.48) | **halves, survives** |
+| L caesar3 | 0.717 | 77 (0.54) | 59 (0.45) | 50 (0.44) | degrades, low genuine |
+| W reverse_words | 0.818 | 16 (0.76) | 9 (0.71) | **2** (0.54) | **evaporates** |
+| L reverse_words | 0.796 | 25 (0.80) | 8 (0.59) | **1** (0.40) | **evaporates** |
+| L combining_marks | 0.701 | 5 (0.52) | 0 (0.31) | **0** (0.17) | **evaporates** |
 
-- **The main headline survives.** WildGuard/`combining_marks` at 69 is ~88%
-  genuine — roughly 61 real and 8 artefact. It remains the strongest cell in the
-  run and the cleanest instance of AS-6's target regime.
-- **`caesar3`'s 77 is roughly half artefact** — about 54 genuine, 23
-  operating-point false positives. That is a second and independent reason to
-  downgrade it, alongside the contamination argument in §2. Do not build a
-  headline on it.
+### The rule, and it is the same shape as the licensing rule
 
-The scores behind these labels are now emitted per prompt
-(`cells.jsonl.decode_score` + the benign distribution in `results.json`), so any
-other operating point is offline arithmetic: `scripts/sweep_operating_point.py`.
-**Choosing the operating point is still open** — TODO item 5 requires it be
-decided on evidence, and the sweep is what produces that evidence. Nothing in
-this section changes licensing: an unlicensed rung stays unmeasured at every
-percentile.
+**No single percentile makes everything stable, and looking for one was the
+wrong question.** What the sweep does is sort the cells into three classes, and
+the class is the finding:
+
+1. **Operating-point invariant** — `zero_width` on Llama Guard reads **17 at 50,
+   75 AND 90**. A claim that does not move when its threshold moves by forty
+   percentiles is not a threshold artefact.
+2. **Robust, degrading gracefully** — both `homoglyph` cells, `W zero_width`,
+   `L fullwidth`.
+3. **Evaporating** — `reverse_words` on BOTH guards (25→1 and 16→2) and
+   `L combining_marks` (5→0). These were the operating point, not a finding.
+
+**Reporting rule of record: quote counts at the 90th percentile (10% benign
+false-positive rate), and print the 50/75/90 curve beside every claimed cell.**
+Stability across the curve is the evidence, exactly as 5/10/20-bin stability is
+the evidence for licensing (§1). Both knobs are now settled the same way — by
+requiring stability across a range rather than by choosing a value.
+
+Why 90 rather than 95 or 99: at n=100 benign examples, the 99th percentile is
+estimated from a single example and the 95th from five, so the threshold itself
+becomes noise-dominated and the harmful read rate collapses on every probe
+including the strongest. The 90th keeps ten benign examples above threshold —
+the smallest count that estimates a rate at all. That is a sample-size argument,
+not a preference.
+
+### What this costs the paper
+
+- **`reverse_words` is lost as a `decoded_not_blocked` finding on both guards.**
+  It read 25 and 16 at the median and is 1 and 2 at the 90th. It remains a
+  licensed rung with a real decode signal — the guard represents it and blocks
+  it (65% and 73%) — but the *failure* cell was threshold noise. This is a
+  genuine subtraction from §4's "8–28% across the surface band".
+- **The headline halves but holds.** WildGuard/`combining_marks` goes 69 → **32**.
+  With block rate 0.25, that is 32 of the 75 unblocked prompts confidently
+  carrying represented harm. Still AS-6's largest cell and still the cleanest
+  instance of its target regime — but **69% must not be quoted**.
+- **`zero_width` on Llama Guard is the cell to lead with**, not
+  `combining_marks`. It is smaller (17) and completely operating-point
+  invariant, which is worth more than a large fragile number.
+- **`caesar3` stays off the headline** — a third strike, after contamination
+  (§2) and its low genuine fraction (0.44–0.54) at every operating point.
 
 ---
 
@@ -261,9 +288,13 @@ one, and a causal arm would be needed to claim more.
   BOTH guards, with `fullwidth` and `caesar3` on Llama only. This is the same
   band AS-5's pilot identified as the only place its deployment probe licensed.
   Two papers, two model families, same answer.
-- **`decoded_not_blocked` is real and substantial wherever decode is measurable** —
-  5–28% on the surface band, **69% on WildGuard/`combining_marks`**, **77% on
-  Llama/`caesar3`**. AS-6's central cell is populated.
+- **`decoded_not_blocked` is real wherever decode is measurable — but the honest
+  counts are the 90th-percentile ones in §1.5, not the medians.** At a 10% benign
+  false-positive rate: 17 (L zero_width, operating-point invariant), 21 (W
+  zero_width), 13 (W homoglyph), 6 (L homoglyph, L fullwidth), and **32 on
+  WildGuard/`combining_marks`** — 32 of the 75 prompts it failed to block.
+  `reverse_words` drops to 1–2 and is NOT a failure finding. AS-6's central cell
+  is populated, on fewer rungs and at smaller counts than the first pass claimed.
 - **`blocked_without_decoding` is ≈0 everywhere** — max 8/100 across all 38
   (guard, rung) pairs, and exactly 0 on 7 of the 10 measurable ones. **The
   format-detector hypothesis the hostile review demanded be tested is
