@@ -120,3 +120,44 @@ probes:
 # reclassified. The change buys defensibility, not different answers: the cut is
 # now derived from the data's own null instead of guessed, it scales with n and
 # layer count, and it cannot be argued with in review the way a bare 0.70 could.
+
+# ---------------------------------------------------------------------------
+decode_lens:
+  # I1 — the Patchscopes decode measurement (Ghandeharioun et al., ICML 2024,
+  # arXiv 2401.06102). Replaces the transferred content probe as the answer to
+  # "did the model decode the ciphertext in situ".
+  #
+  # Why it is not just a better probe: measurements #2/#3 ask whether harm is
+  # linearly SEPARABLE, and separability can be carried by any correlated
+  # feature — raw character length reached AUROC 0.654 on 12 of 15 rungs
+  # (text_docs/as5/pilot_rebaseline.md §5). This asks whether the PLAINTEXT
+  # TOKENS become predictable from an intermediate state, which length cannot
+  # fake: a longer prompt does not make a specific word more likely.
+
+  # VERBATIM from the authors' next_token_prediction.ipynb, not paraphrased.
+  # A few-shot repetition scaffold: the model echoes whatever the patched
+  # position encodes. Raw rather than chat-templated on purpose — it is a
+  # completion task, and a chat turn invites conversation about it instead.
+  target_prompt: "cat -> cat\n1135 -> 1135\nhello -> hello\n?"
+
+  # The final token (the `?`), whose continuation the model is about to predict.
+  target_position: -1
+
+  # null = every captured layer. The per-layer curve is the instrument; §3.1
+  # expects decoding to peak intermediate-late, and the layer index is itself a
+  # validity check (instrument_layer.md §3.1: late-mid + instruction_final =
+  # content recovered by computation; early + last = present at the surface).
+  layers: null
+
+  batch_size: 16
+
+  # A cell decodes when probability mass on its own plaintext beats the mass on
+  # a MISMATCHED plaintext from the same condition by at least this margin.
+  #
+  # PLACEHOLDER — no reported number may depend on it yet. Tuning path, and it
+  # is the same free negative control that calibrated the deployment floor: the
+  # can't-decode rungs (tag_block, reverse_characters — both ability 0.00 on
+  # both models) cannot be decoding anything, so the margin they produce IS this
+  # instrument's noise floor. Set from that run; until then it is a guess and is
+  # labelled one.
+  min_control_margin: 0.05

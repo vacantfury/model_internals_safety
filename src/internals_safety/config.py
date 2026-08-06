@@ -317,10 +317,57 @@ class BehaviorConfig(StrictModel):
     batch_size: int = 8
 
 
+class DecodeLensConfig(StrictModel):
+    """I1 — the Patchscopes decode measurement that replaces the transferred probe.
+
+    Method: Ghandeharioun et al., **ICML 2024** (arXiv 2401.06102). A residual
+    state captured from the *encoded* prompt is patched into a separate target
+    prompt built to make the model say what that state encodes; we then read how
+    much probability lands on the *plaintext's* tokens. Unlike measurements #2
+    and #3 this asks about decoding directly rather than about a learned
+    separation, so it does not inherit the length confound: length is a property
+    of the input, and the readout here is a probability over specific plaintext
+    tokens.
+    """
+
+    # The token-identity Patchscope's target prompt, VERBATIM from the authors'
+    # own notebook (`patchscopes/code/next_token_prediction.ipynb`) rather than
+    # paraphrased — a few-shot repetition scaffold that makes the model echo
+    # whatever the patched position encodes. Deliberately raw rather than chat-
+    # templated: the scaffold is a completion task, and wrapping it in a chat
+    # turn asks the model to converse about it instead of continuing it.
+    #
+    # Tuning path: the validation gate below IS the tuning signal — a scaffold
+    # is better if it widens the gap between the comprehension rungs and the
+    # can't-decode controls. Alternatives to try if the gate fails are recorded
+    # in build plan §3.1, not chosen by taste here.
+    target_prompt: str = "cat -> cat\n1135 -> 1135\nhello -> hello\n?"
+    # Where in the target prompt the captured state is written. -1 is the final
+    # token (the `?`), which is the position whose continuation the model is
+    # about to predict.
+    target_position: int = -1
+    # Layers to sweep. `null` means every layer: the whole point of the
+    # instrument is the per-layer curve, since build plan §3.1 expects decoding
+    # to peak in intermediate-late layers rather than at a single site.
+    layers: list[int] | None = None
+    batch_size: int = 16
+    # A cell counts as decoding when probability mass on the plaintext's content
+    # tokens exceeds the SAME quantity measured against a mismatched plaintext
+    # (the built-in negative control). This is the margin it must clear.
+    #
+    # Tuning path: the can't-decode rungs (`tag_block`, `reverse_characters`,
+    # both measured at ability 0.00 on both models) are a free negative control
+    # exactly as they are for the deployment floor — `instrument_layer.md` §2.2.
+    # Set this from the margin those rungs produce, and until that run exists
+    # this value is a placeholder that no reported number may depend on.
+    min_control_margin: float = 0.05
+
+
 class MeasurementsConfig(StrictModel):
     ability: AbilityConfig = AbilityConfig()
     probes: ProbeConfig = ProbeConfig()
     behavior: BehaviorConfig = BehaviorConfig()
+    decode_lens: DecodeLensConfig = DecodeLensConfig()
 
 
 class JudgeConfig(StrictModel):
