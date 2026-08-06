@@ -674,12 +674,15 @@ class TestReplyInversionIsWired:
         assert len(inversion) == 1
         assert inversion[0]["kind"] == "causal"
 
-    def test_it_is_withheld_for_want_of_its_own_random_direction_control(self, run):
-        """The causal gate's null steers through a different prompt, so it is not
-        reusable here — a second measurement, filed rather than faked."""
-        withheld = json.loads((run / "results.json").read_text())["withheld"]
-        assert "reply_inversion" in withheld
-        assert any("no negative control" in why for why in withheld["reply_inversion"])
+    def test_its_OWN_random_direction_null_ran(self, run):
+        """The causal gate's null steers a plain prompt and reads refusal-token
+        probability; this steers an inversion prompt and reads a judgment answer,
+        so it is not reusable and I5 draws its own."""
+        readings = json.loads((run / "results.json").read_text())["readings"]
+        inversion = next(r for r in readings if r["instrument"] == "reply_inversion")
+        assert inversion["control_reading"] is not None
+        assert inversion["control_margin"] is not None
+        assert inversion["detail"]["null_p_value"] is not None
 
     def test_it_is_off_by_default(self, pilot):
         config = load_model_config("qwen2_5_0_5b_instruct")

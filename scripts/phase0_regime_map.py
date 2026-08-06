@@ -116,13 +116,16 @@ from internals_safety.measurements.causal import (
 )
 from internals_safety.measurements.causal_license import (
     RandomDirectionNull,
+    matched_norm_null,
     matched_norm_random_direction,
     random_direction_null,
 )
 from internals_safety.measurements.contract import Reading
 from internals_safety.measurements.reply_inversion import (
     forward_passes as inversion_forward_passes,
+    measure_inversion_null,
     measure_reply_inversion,
+    null_separations,
     reading as inversion_reading,
 )
 from internals_safety.measurements.regimes import assign_regime, build_regime_map
@@ -270,7 +273,7 @@ class Plan:
         """
         if "reply_inversion" not in self.instruments:
             return 0
-        return inversion_forward_passes() * self.n_prompts
+        return inversion_forward_passes(self.n_random_directions) * self.n_prompts
 
     def describe(self, measurements: MeasurementsConfig) -> str:
         generated_tokens = (
@@ -480,11 +483,39 @@ def run_reply_inversion(
         layer=site,
         batch_size=model_config.capture_batch_size,
     )
-    # No control passed: the matched-norm random direction has to be steered
-    # through the SAME inversion prompt to be comparable, which is a second
-    # measurement rather than a reuse of the causal gate's null. Filed, not
-    # faked — so this reads non-reportable and names the reason.
-    return inversion_reading(result)
+
+    # The negative control, and it is I5's OWN: matched-norm random directions
+    # steered through the same inversion prompt, at the same site, behind the
+    # same prompt-token mask. The causal gate's null is not reusable — it steers
+    # a plain prompt and reads refusal-token probability, so it says nothing
+    # about a judgment answer on an inversion prompt.
+    if config.n_random_directions < 1:
+        return inversion_reading(result)
+    generator = torch.Generator(device="cpu").manual_seed(measurements.probes.seed)
+    shifts = measure_inversion_null(
+        loaded,
+        harmful_prompts,
+        anchor=harmfulness,
+        coefficient=config.addition_coefficient,
+        n_directions=config.n_random_directions,
+        generator=generator,
+        layer=site,
+        batch_size=model_config.capture_batch_size,
+    )
+    # Expressed on the SAME statistic the reading reports — what separation would
+    # we have seen had a random direction stood in for the harmfulness one? A null
+    # of raw shifts against a separation is apples to oranges, and it fails in the
+    # flattering direction.
+    separations = null_separations(shifts, result.refusal_shift)
+    null = matched_norm_null(
+        result.separation, separations, alpha=measurements.probes.alpha
+    )
+    return inversion_reading(
+        result,
+        control_reading=sum(separations) / len(separations),
+        control_margin=null.margin,
+        null_p_value=null.p_value,
+    )
 
 
 def build_plan(

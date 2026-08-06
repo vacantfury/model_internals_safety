@@ -16,7 +16,9 @@ from internals_safety.measurements.reply_inversion import (
     build_inversion_batch,
     forward_passes,
     judgment_score,
+    measure_inversion_null,
     measure_reply_inversion,
+    null_separations,
     reading,
     resolve_answer_tokens,
 )
@@ -209,3 +211,119 @@ class TestRunningIt:
         from internals_safety.measurements import causal
 
         assert QUESTION != causal.QUESTION
+
+
+class TestTheNull:
+    """I5's own negative control. The causal gate's is NOT reusable: it steers a
+    plain prompt and reads refusal-token probability, while this steers an
+    inversion prompt and reads a judgment answer."""
+
+    def test_it_draws_one_shift_per_random_direction(self, tiny_model):
+        width = tiny_model.model.config.hidden_size
+        shifts = measure_inversion_null(
+            tiny_model, PROMPTS,
+            anchor=direction_at(width, layer=1, position="instruction_final"),
+            coefficient=5.0, n_directions=4,
+            generator=torch.Generator(device="cpu").manual_seed(0),
+            batch_size=2,
+        )
+        assert len(shifts) == 4
+        assert all(shift >= 0.0 for shift in shifts)
+
+    def test_the_shifts_are_absolute_because_a_random_sign_is_meaningless(self, tiny_model):
+        """A random direction is as likely to push the judgment down as up.
+        Signed shifts would average toward zero and make ANY real direction look
+        significant."""
+        width = tiny_model.model.config.hidden_size
+        shifts = measure_inversion_null(
+            tiny_model, PROMPTS,
+            anchor=direction_at(width, layer=1, position="instruction_final"),
+            coefficient=20.0, n_directions=6,
+            generator=torch.Generator(device="cpu").manual_seed(1),
+            batch_size=3,
+        )
+        assert all(shift >= 0.0 for shift in shifts)
+
+    def test_it_is_reproducible_under_a_seeded_generator(self, tiny_model):
+        width = tiny_model.model.config.hidden_size
+        args = dict(
+            anchor=direction_at(width, layer=1, position="instruction_final"),
+            coefficient=5.0, n_directions=3, batch_size=3,
+        )
+        first = measure_inversion_null(
+            tiny_model, PROMPTS,
+            generator=torch.Generator(device="cpu").manual_seed(7), **args
+        )
+        second = measure_inversion_null(
+            tiny_model, PROMPTS,
+            generator=torch.Generator(device="cpu").manual_seed(7), **args
+        )
+        assert first == second
+
+    def test_a_degenerate_anchor_is_refused(self, tiny_model):
+        width = tiny_model.model.config.hidden_size
+        zero = Direction(
+            vector=torch.zeros(width), layer=1, position="last",
+            n_positive=4, n_negative=4, raw_norm=0.0,
+        )
+        with pytest.raises(ValueError, match="degenerate"):
+            measure_inversion_null(
+                tiny_model, PROMPTS, anchor=zero, coefficient=1.0, n_directions=2
+            )
+
+    def test_an_empty_null_is_refused_rather_than_silently_licensing(self, tiny_model):
+        width = tiny_model.model.config.hidden_size
+        with pytest.raises(ValueError):
+            measure_inversion_null(
+                tiny_model, PROMPTS,
+                anchor=direction_at(width, 1, "last"), coefficient=1.0, n_directions=0,
+            )
+
+    def test_the_cost_includes_the_null_not_only_the_measurement(self):
+        """A control the estimate cannot see is a cost nobody approved — the
+        defect the causal gate shipped with for an hour."""
+        assert forward_passes() == 3
+        assert forward_passes(20) == 23
+
+    def test_a_controlled_reading_becomes_reportable(self):
+        from internals_safety.measurements.causal_license import matched_norm_null
+
+        result = InversionResult(
+            baseline=0.2, steered_harmfulness=0.9, steered_refusal=0.25,
+            layer=10, coefficient=1.0, n_prompts=8,
+        )
+        separations = null_separations([0.02] * 19, result.refusal_shift)
+        null = matched_norm_null(result.separation, separations)
+        verdict = reading(
+            result,
+            control_reading=sum(separations) / len(separations),
+            control_margin=null.margin,
+            length_null_margin=0.4,
+            null_p_value=null.p_value,
+        )
+        assert verdict.reportable
+        assert verdict.detail["null_p_value"] == pytest.approx(0.05)
+
+
+def test_the_null_is_expressed_on_the_same_statistic_the_reading_reports():
+    """Regression, 2026-08-06. The null drew |shift| while `value` reports the
+    SEPARATION, and the contract caught it by refusing to license the reading.
+    The mismatch failed in the FLATTERING direction: a null of small raw shifts
+    is cleared by almost any separation."""
+    result = InversionResult(
+        baseline=0.2, steered_harmfulness=0.9, steered_refusal=0.7,
+        layer=10, coefficient=1.0, n_prompts=8,
+    )
+    # A refusal arm that also moves: the separation is small (0.7 - 0.5 = 0.2)
+    # even though the raw harmfulness shift is large.
+    assert result.separation == pytest.approx(0.2)
+    # Random directions that move the answer as much as harmfulness does.
+    raw = [0.7] * 19
+    converted = null_separations(raw, result.refusal_shift)
+    assert converted == pytest.approx([0.2] * 19)
+    # On the raw scale the observed separation (0.2) would appear to crush a null
+    # of 0.7 only by comparison error; on the right scale it ties, which is the
+    # honest answer.
+    from internals_safety.measurements.causal_license import matched_norm_null
+
+    assert matched_norm_null(result.separation, converted).p_value == pytest.approx(1.0)

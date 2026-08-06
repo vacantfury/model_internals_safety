@@ -71,14 +71,7 @@ ROSTER: tuple[Item, ...] = (
     Item("I2", "processing trajectory", ("measurements.trajectory",)),
     Item("I3", "entropy dynamics", ("measurements.entropy_dynamics", "models.lens")),
     Item("I4", "SAE features", (), "not started; needs SAELens + an Instruct-reconstruction pre-gate"),
-    Item(
-        "I5",
-        "reply-inversion causal test",
-        ("measurements.reply_inversion",),
-        incomplete="built and wired; withheld until its own matched-norm random "
-        "direction is steered through the SAME inversion prompt (the causal "
-        "gate's null is not reusable — it steers a different prompt)",
-    ),
+    Item("I5", "reply-inversion causal test", ("measurements.reply_inversion",)),
     Item(
         "I6",
         "causal toolkit",

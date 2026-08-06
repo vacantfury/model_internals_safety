@@ -202,11 +202,20 @@ def matched_norm_random_direction(
 
 @dataclass(frozen=True)
 class RandomDirectionNull:
-    """The real direction's effect against matched-norm random ones."""
+    """The real direction's effect against matched-norm random ones.
 
-    observed_bypass: float
-    # One bypass score per random direction, from the identical intervention.
-    null_bypass: tuple[float, ...]
+    Field names are deliberately NEUTRAL rather than named for the causal gate's
+    bypass score. Two instruments now draw this null over different quantities —
+    the gate compares refusal-probability drops, I5 compares judgment shifts on
+    an inversion prompt — and a type whose fields say "bypass" while holding a
+    judgment shift is the kind of thing that misleads a reader six weeks later.
+    The statistic is supplied by the constructor; the null only knows it is
+    comparing one observed number against draws from a matched-norm ensemble.
+    """
+
+    observed: float
+    # One score per random direction, from the identical intervention.
+    null_values: tuple[float, ...]
     alpha: float = 0.05
 
     @property
@@ -217,10 +226,10 @@ class RandomDirectionNull:
         smallest reportable p-value is `1/(n+1)`, never 0, because a null that
         has never produced an equal value has not proved it cannot.
         """
-        if not self.null_bypass:
+        if not self.null_values:
             return float("nan")
-        at_least = sum(value >= self.observed_bypass for value in self.null_bypass)
-        return (at_least + 1) / (len(self.null_bypass) + 1)
+        at_least = sum(value >= self.observed for value in self.null_values)
+        return (at_least + 1) / (len(self.null_values) + 1)
 
     @property
     def licensed(self) -> bool:
@@ -231,9 +240,9 @@ class RandomDirectionNull:
     @property
     def margin(self) -> float:
         """How far the real direction beats the mean random one."""
-        if not self.null_bypass:
+        if not self.null_values:
             return float("nan")
-        return self.observed_bypass - sum(self.null_bypass) / len(self.null_bypass)
+        return self.observed - sum(self.null_values) / len(self.null_values)
 
 
 def random_direction_null(
@@ -248,7 +257,23 @@ def random_direction_null(
     stays pure scoring, as the rest of it does.
     """
     return RandomDirectionNull(
-        observed_bypass=observed.bypass_score,
-        null_bypass=tuple(c.bypass_score for c in controls),
+        observed=observed.bypass_score,
+        null_values=tuple(c.bypass_score for c in controls),
         alpha=alpha,
+    )
+
+
+def matched_norm_null(
+    observed: float, controls: Sequence[float], alpha: float = 0.05
+) -> RandomDirectionNull:
+    """The same null over a plain statistic, for instruments that are not the gate.
+
+    I5's quantity is a judgment shift on an inversion prompt, which the causal
+    gate's `CausalEvidence` cannot express. Same arithmetic, same +1 smoothing,
+    different measurement — and each instrument must draw its OWN null: a null
+    drawn on one prompt with one readout says nothing about a different prompt
+    with a different readout, however similar the intervention looks.
+    """
+    return RandomDirectionNull(
+        observed=observed, null_values=tuple(controls), alpha=alpha
     )

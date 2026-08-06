@@ -19,6 +19,7 @@ from internals_safety.config import (
 from internals_safety.measurements.causal_license import (
     CausalEvidence,
     matched_norm_random_direction,
+    matched_norm_null,
     random_direction_null,
 )
 from internals_safety.probes.linear import control_task_selectivity

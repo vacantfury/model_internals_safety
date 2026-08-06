@@ -94,8 +94,7 @@ def test_the_build_is_not_complete_and_says_which_items_are_open():
     """
     status = build_status()
     assert not status.complete
-    open_keys = " ".join(status.outstanding)
-    assert "I4" in open_keys and "I5" in open_keys
+    assert "I4" in " ".join(status.outstanding)
 
 
 def test_the_orphan_guard_and_the_completion_check_share_one_reachability_rule():

@@ -60,6 +60,7 @@ from typing import Sequence
 
 import torch
 
+from internals_safety.measurements.causal_license import matched_norm_random_direction
 from internals_safety.measurements.contract import Kind, Reading
 from internals_safety.models.interventions import add_direction
 from internals_safety.models.loader import LoadedModel
@@ -240,50 +241,137 @@ def measure_reply_inversion(
     batch = build_inversion_batch(loaded, prompts)
     affirmative, negative = resolve_answer_tokens(loaded)
     site = harmfulness.layer if layer is None else layer
-
-    def score(mask_for: str) -> float:
-        totals: list[float] = []
-        weights: list[int] = []
-        for start in range(0, batch.input_ids.shape[0], batch_size):
-            stop = start + batch_size
-            inputs = {
-                "input_ids": batch.input_ids[start:stop].to(loaded.device),
-                "attention_mask": batch.attention_mask[start:stop].to(loaded.device),
-            }
-            chunk_prompt_mask = batch.prompt_mask[start:stop]
-            if mask_for == "baseline":
-                with torch.inference_mode():
-                    logits = loaded.model(**inputs).logits
-            elif mask_for == "harmfulness":
-                with add_direction(
-                    loaded, harmfulness.vector, site, coefficient, mask=chunk_prompt_mask
-                ), torch.inference_mode():
-                    logits = loaded.model(**inputs).logits
-            else:
-                with add_direction(
-                    loaded, refusal.vector, site, coefficient
-                ), torch.inference_mode():
-                    logits = loaded.model(**inputs).logits
-            totals.append(judgment_score(logits, affirmative, negative))
-            weights.append(int(inputs["input_ids"].shape[0]))
-        usable = [(t, w) for t, w in zip(totals, weights) if t == t]
-        if not usable:
-            return float("nan")
-        return sum(t * w for t, w in usable) / sum(w for _, w in usable)
+    scorer = _Scorer(loaded, batch, affirmative, negative, site, coefficient, batch_size)
 
     return InversionResult(
-        baseline=score("baseline"),
-        steered_harmfulness=score("harmfulness"),
-        steered_refusal=score("refusal"),
+        baseline=scorer.score(None, masked=False),
+        # Harmfulness is written ONLY into the original prompt's tokens.
+        steered_harmfulness=scorer.score(harmfulness.vector, masked=True),
+        # Refusal gets every position — the more generous condition.
+        steered_refusal=scorer.score(refusal.vector, masked=False),
         layer=site,
         coefficient=coefficient,
         n_prompts=len(prompts),
     )
 
 
-def forward_passes() -> int:
-    """Passes over the prompt set: baseline, harmfulness-steered, refusal-steered."""
-    return 3
+class _Scorer:
+    """Runs one steering condition over the inversion batch and scores it.
+
+    Extracted when the null landed: the null draws N random directions through
+    the identical path, and the alternative was either duplicating the loop or
+    recomputing the tokenisation and answer-token resolution once per draw.
+    """
+
+    def __init__(self, loaded, batch, affirmative, negative, site, coefficient, batch_size):
+        self.loaded = loaded
+        self.batch = batch
+        self.affirmative = affirmative
+        self.negative = negative
+        self.site = site
+        self.coefficient = coefficient
+        self.batch_size = batch_size
+
+    def score(self, vector: torch.Tensor | None, *, masked: bool) -> float:
+        totals: list[float] = []
+        weights: list[int] = []
+        for start in range(0, self.batch.input_ids.shape[0], self.batch_size):
+            stop = start + self.batch_size
+            inputs = {
+                "input_ids": self.batch.input_ids[start:stop].to(self.loaded.device),
+                "attention_mask": self.batch.attention_mask[start:stop].to(self.loaded.device),
+            }
+            mask = self.batch.prompt_mask[start:stop] if masked else None
+            if vector is None:
+                with torch.inference_mode():
+                    logits = self.loaded.model(**inputs).logits
+            else:
+                with add_direction(
+                    self.loaded, vector, self.site, self.coefficient, mask=mask
+                ), torch.inference_mode():
+                    logits = self.loaded.model(**inputs).logits
+            totals.append(judgment_score(logits, self.affirmative, self.negative))
+            weights.append(int(inputs["input_ids"].shape[0]))
+        usable = [(t, w) for t, w in zip(totals, weights) if t == t]
+        if not usable:
+            return float("nan")
+        return sum(t * w for t, w in usable) / sum(w for _, w in usable)
+
+
+def measure_inversion_null(
+    loaded: LoadedModel,
+    prompts: Sequence[str],
+    anchor: Direction,
+    coefficient: float,
+    n_directions: int,
+    generator: torch.Generator | None = None,
+    layer: int | None = None,
+    batch_size: int = 8,
+) -> list[float]:
+    """|judgment shift| under matched-norm RANDOM directions at the same site.
+
+    **Why I5 cannot reuse the causal gate's null, stated because reusing it would
+    look reasonable and be wrong.** That null steers a plain prompt and measures
+    refusal-token probability; this steers an inversion prompt and measures a
+    judgment answer. A null drawn on one prompt with one readout says nothing
+    about a different prompt with a different readout, however similar the
+    intervention looks — so each instrument draws its own.
+
+    Random directions are steered with the SAME prompt-token mask the harmfulness
+    condition uses, because the comparison must hold the scope fixed and move
+    only the direction. Absolute shifts, for the reason `InversionResult.
+    separation` gives: a direction's sign is a convention of which class was
+    called positive.
+
+    The baseline is computed ONCE and shared, so N draws cost N+1 passes rather
+    than 2N.
+    """
+    if n_directions < 1:
+        raise ValueError("a null needs at least one draw")
+    if float(anchor.vector.norm()) == 0.0:
+        raise ValueError("cannot match the norm of a degenerate direction")
+
+    batch = build_inversion_batch(loaded, prompts)
+    affirmative, negative = resolve_answer_tokens(loaded)
+    site = anchor.layer if layer is None else layer
+    scorer = _Scorer(loaded, batch, affirmative, negative, site, coefficient, batch_size)
+
+    baseline = scorer.score(None, masked=False)
+    shifts: list[float] = []
+    for _ in range(n_directions):
+        random_vector = matched_norm_random_direction(anchor.vector, generator)
+        shifts.append(abs(scorer.score(random_vector, masked=True) - baseline))
+    return shifts
+
+
+def null_separations(shifts: Sequence[float], refusal_shift: float) -> list[float]:
+    """Turn random-direction shifts into the statistic `reading` actually reports.
+
+    **Caught 2026-08-06 by the contract refusing to license the reading.** The
+    null draws |judgment shift| under random directions, but `Reading.value` is
+    the SEPARATION — |harmfulness shift| minus |refusal shift|. Comparing the
+    second against a null of the first is apples to oranges, and it fails in the
+    flattering direction: the null's mean is small, so almost any separation
+    clears it.
+
+    So the null is expressed on the same scale by asking the question the claim
+    actually makes: *what separation would we have seen had a RANDOM direction
+    stood in for the harmfulness one?* The refusal arm is held fixed across the
+    substitution because it is not what is being tested.
+    """
+    return [abs(shift) - abs(refusal_shift) for shift in shifts]
+
+
+def forward_passes(n_random_directions: int = 0) -> int:
+    """Passes over the prompt set.
+
+    Three for the measurement — baseline, harmfulness-steered, refusal-steered —
+    plus one per random direction in the null, which shares the baseline. Counted
+    here rather than in the runner so the approval gate and the code cannot drift
+    apart, and INCLUDING the null because a control the estimate cannot see is a
+    cost nobody approved (the defect the causal gate shipped with for an hour).
+    """
+    return 3 + n_random_directions
 
 
 def reading(
@@ -292,6 +380,7 @@ def reading(
     control_reading: float | None = None,
     control_margin: float | None = None,
     length_null_margin: float | None = None,
+    null_p_value: float | None = None,
 ) -> Reading:
     """I5's condition-level verdict.
 
@@ -300,11 +389,11 @@ def reading(
     reporting one shift alone would be a number about steering strength rather
     than about the two representations being distinct.
 
-    The negative control is a matched-norm random direction steered at the same
-    site with the same coefficient (`causal_license.random_direction_null`).
-    Without it, a large separation is equally consistent with "any vector written
-    into the prompt tokens moves the answer, and the refusal direction happens to
-    be written somewhere less effective".
+    The negative control is `measure_inversion_null`: matched-norm random
+    directions steered at the same site, with the same coefficient, through the
+    same prompt-token mask. Without it, a large separation is equally consistent
+    with "any vector written into the prompt tokens moves the answer, and the
+    refusal direction happens to be written somewhere less effective".
     """
     return Reading(
         instrument="reply_inversion",
@@ -330,5 +419,6 @@ def reading(
             "harmfulness_shift": result.harmfulness_shift,
             "refusal_shift": result.refusal_shift,
             "n_prompts": result.n_prompts,
+            "null_p_value": null_p_value,
         },
     )
