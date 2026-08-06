@@ -236,9 +236,16 @@ def run_family(
             "top_token": verdict.top_token,
             "top_prob": verdict.top_prob,
             "cell": cell.value,
+            # The raw probe score behind `decoded`, with the threshold it was
+            # compared against. Emitted so that changing the operating point is
+            # offline arithmetic rather than a cluster re-run: `decoded` is
+            # `decode_score > decode_threshold`, and nothing else in this record
+            # depends on where that threshold sits.
+            "decode_score": score,
+            "decode_threshold": decode.threshold_score,
         }
-        for prompt, item, decoded, verdict, cell in zip(
-            harmful, encoded_harmful, decode.harmful, verdicts, cells
+        for prompt, item, decoded, score, verdict, cell in zip(
+            harmful, encoded_harmful, decode.harmful, decode.harmful_scores, verdicts, cells
         )
     ]
 
@@ -256,6 +263,18 @@ def run_family(
             "harmful_rate": decode.harmful_rate,
             "harmless_rate": decode.harmless_rate,
             "gap": decode.gap,
+            # The operating point, recorded explicitly rather than left implicit
+            # in the config: `harmless_rate` is 1 - reading_percentile/100 BY
+            # CONSTRUCTION, so a reader who does not know the percentile cannot
+            # tell a finding from a threshold. At the default 50 the benign
+            # false-positive rate is 50%, and the informative quantity is `gap`.
+            "reading_percentile": measurements.probes.reading_percentile,
+            "threshold_score": decode.threshold_score,
+            # The benign score distribution the threshold is a percentile OF.
+            # cells.jsonl carries the harmful scores; without these the benign
+            # side is unrecoverable and no other operating point can be computed
+            # offline, which is the whole point of emitting scores at all.
+            "harmless_scores": decode.harmless_scores,
         },
         # Reported beside licensing, never silently gating it (TODO 17b). A rung
         # licensed by permutation but sitting AT the length baseline is the exact

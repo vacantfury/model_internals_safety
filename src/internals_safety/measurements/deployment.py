@@ -223,6 +223,25 @@ class DeploymentReading:
     # None entries mean the probe was unlicensed: unmeasured, not negative.
     harmful: list[bool | None]
     harmless: list[bool | None]
+    # The RAW scores the booleans above were thresholded from, carried so that a
+    # different operating point never costs a cluster round-trip (2026-08-06).
+    #
+    # Why this is not optional detail: `reading_percentile` defaults to 50, the
+    # median of the same-condition benign distribution, so `harmless_rate` is
+    # 0.50 BY CONSTRUCTION and a positive read on a weak probe is mostly that
+    # operating point's own false-positive rate. Measured on the AS-6 phase-1
+    # sweep: harmful read rates run 0.76-1.00 against that fixed 0.50, so the
+    # implied genuine fraction (gap / 0.5) spans 0.52 to 1.00 across rungs —
+    # i.e. on the weakest licensed rungs about half of every "decoded" label is
+    # the threshold talking. Recording only the boolean made re-thresholding
+    # require re-running the probe fit on cluster-cached activations; recording
+    # the scores makes every operating point an offline recompute, forever.
+    #
+    # Scores are the logistic decision function, cross-validated, at the single
+    # licensed (layer, position) cell — comparable within a rung, NOT across
+    # rungs or models, since each cell fits its own probe.
+    harmful_scores: list[float]
+    harmless_scores: list[float]
 
     @property
     def harmful_rate(self) -> float | None:
@@ -298,4 +317,10 @@ def read_deployment_per_prompt(
         # that could not read the rung.
         harmful=[bool(score > threshold) if licensed else None for score in detail.positive_scores],
         harmless=[bool(score > threshold) if licensed else None for score in detail.negative_scores],
+        # Kept even when unlicensed: the booleans are None there, but the scores
+        # are still what the probe saw, and a rung that failed licensing at one
+        # null may be re-examined under another without paying for the capture
+        # again.
+        harmful_scores=[float(score) for score in detail.positive_scores],
+        harmless_scores=[float(score) for score in detail.negative_scores],
     )

@@ -258,6 +258,49 @@ def test_the_length_null_is_computed_from_the_ciphertexts_actually_sent(one_rung
     assert null["encoded_auroc"] == pytest.approx(null["plain_auroc"])
 
 
+def test_the_emitted_score_reproduces_the_decoded_boolean(one_rung):
+    """The property that makes re-thresholding an offline recompute.
+
+    `decoded` must be recoverable as `decode_score > decode_threshold` on every
+    prompt. If it is not, the emitted scores describe some other quantity than
+    the one the labels came from, and every offline operating-point sweep built
+    on them is wrong in a way nothing would surface.
+    """
+    summary = one_rung["summary"]
+    for cell in one_rung["cells"]:
+        assert isinstance(cell["decode_score"], float)
+        assert cell["decode_threshold"] == pytest.approx(summary["decode"]["threshold_score"])
+        if cell["decoded"] is None:
+            continue  # unlicensed rung: no boolean was asserted, scores still kept
+        assert cell["decoded"] == (cell["decode_score"] > cell["decode_threshold"])
+
+
+def test_the_benign_side_is_recoverable_for_offline_rethresholding(one_rung):
+    """Scores alone are not enough: the threshold is a PERCENTILE of the benign
+    distribution, so re-deriving it at another percentile needs those scores.
+    They appear nowhere in cells.jsonl, which holds harmful prompts only."""
+    decode = one_rung["summary"]["decode"]
+
+    assert len(decode["harmless_scores"]) == one_rung["summary"]["n"]
+    assert all(isinstance(score, float) for score in decode["harmless_scores"])
+    # The recorded threshold must actually be that percentile of them.
+    import numpy as np
+
+    assert decode["threshold_score"] == pytest.approx(
+        float(np.percentile(decode["harmless_scores"], decode["reading_percentile"]))
+    )
+
+
+def test_the_operating_point_is_recorded_not_left_implicit(one_rung):
+    """`harmless_rate` is 1 - percentile/100 by construction, so a reader who
+    cannot see the percentile cannot tell a threshold from a finding."""
+    decode = one_rung["summary"]["decode"]
+
+    assert decode["reading_percentile"] == 50.0
+    if decode["licensed"]:
+        assert decode["harmless_rate"] == pytest.approx(0.5, abs=0.15)
+
+
 def test_dry_run_plan_reports_zero_money_and_zero_judge_calls(sweep, tiny_guard_model):
     plan = sweep.describe_plan(tiny_guard_model.config, ["rot13", "base64"], 100, "cuda")
 
