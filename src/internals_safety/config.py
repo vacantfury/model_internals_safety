@@ -256,11 +256,18 @@ class ProbeConfig(StrictModel):
     # low end of that range, so it is conservative in the direction that matters —
     # it admits a weak-but-real signal rather than excluding one.
     #
-    # NOT yet a licensing gate: the margin is REPORTED beside licensing while the
-    # rule itself is settled (TODO item 17b). Tuning path: the same re-licensing
-    # sweep that found the confound, re-run per rung as the ladder grows, plus the
-    # guard-side rungs once AS-6 has them — a second corpus is the real test of
-    # whether one cut generalises.
+    # NOT a licensing gate, and now deliberately so rather than provisionally
+    # (settled 2026-08-06, TODO item 17b, evidence in text_docs/as6/phase1_map.md
+    # §1). The AS-6 phase-1 sweep licensed under the length-MATCHED null below at
+    # 5 / 10 / 20 strata; every bin-stable rung has margin >= +0.045 and every
+    # bin-unstable one has margin <= +0.031, so the two criteria partition the
+    # ladder identically — except on Llama Guard `combining_marks`, margin +0.045
+    # at p=0.005 on all three bin counts, which gating on this cut would discard
+    # on the third decimal place of a hand-set number. The matched null is
+    # therefore the rule and this stays a reported magnitude.
+    #
+    # Tuning path (unchanged, still owed): a SECOND corpus is the real test of
+    # whether one cut generalises — the current basis is one corpus, one ladder.
     length_null_min_margin: float = 0.05
     # Length-MATCHED permutation licensing (2026-08-05). When the caller supplies
     # length strata, the null permutes labels only WITHIN them, so a probe reading
@@ -272,9 +279,22 @@ class ProbeConfig(StrictModel):
     # This IS still a knob, stated plainly rather than glossed: more bins is a
     # stricter test. It is a milder one than the margin it replaces, because the
     # answer should be STABLE across a broad range instead of tuned to a value.
-    # Tuning path, and the check that must actually be run: re-license the AS-6
-    # phase-1 sweep at 5 / 10 / 20 bins and confirm the licensed set does not
-    # move. If it does, the rung is borderline and belongs reported as such.
+    #
+    # THE CHECK HAS BEEN RUN (2026-08-06, jobs 8957819/8957820 at 10 bins and
+    # 8958092-8958095 at 5/20; text_docs/as6/phase1_map.md §1). Result: a stable
+    # core that does not move at all — 6 rungs on Llama Guard, 4 on WildGuard,
+    # every one at p=0.005 at all three bin counts — plus four rungs that license
+    # at some bin counts and not others (llama morse `--L`, wildguard base64
+    # `LL-`, rot13 `-L-`, caesar7 `-L-`). Those four are exactly the rungs whose
+    # p-values sit in 0.025-0.055, i.e. inside the false-positive band expected
+    # from 38 tests at alpha 0.05. So the knob behaves as intended: it is stable
+    # where there is signal and unstable where there is not.
+    #
+    # CONSEQUENCE FOR CALLERS, and it is a rule not a suggestion: licensing a
+    # rung on ONE bin count is not enough. Report `L` only when 5/10/20 agree;
+    # anything else is borderline and must be reported as borderline rather than
+    # rounded to licensed or dropped. Re-running the extra bin counts is
+    # cache-warm (~9 min, $0), so there is no cost argument against it.
     length_strata_bins: int = 10
     # Percentile of the *same-condition negative* score distribution a positive
     # example must beat to read positive. An operating point, not an estimate:
