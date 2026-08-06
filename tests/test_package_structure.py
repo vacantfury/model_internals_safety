@@ -89,21 +89,22 @@ def test_the_contract_is_the_layer_s_sink():
 # recurring silently: a new orphan fails this test at the moment it is created,
 # rather than being noticed in an audit weeks later.
 DECLARED_ORPHANS = {
-    # I1. Needs one target forward pass per (prompt, layer), so wiring it
-    # changes what a run COSTS — that goes through the approval gate with a
-    # dry-run estimate, never in by default.
-    "measurements.decode_lens",
-    "models.patching",
-    # I3. Needs a lens readout per (prompt, layer). Same reason.
-    "measurements.entropy_dynamics",
-    "models.lens",
     # I5/I6. Causal write operations; gated on the matched-norm random-direction
-    # control, which is not built.
+    # control, which is not built. Wiring them before that control exists would
+    # let "steering worked" mean "perturbing anything worked".
     "measurements.causal_license",
     "models.interventions",
     # Predates the contract; H4 overlap metric, used from the docs not the spine.
     "probes.overlap",
 }
+
+# I1 (`measurements.decode_lens` + `models.patching`) and I3
+# (`measurements.entropy_dynamics` + `models.lens`) left this list on 2026-08-06
+# when `--instruments` landed. They are reachable but OFF by default, because
+# both add GPU work and turning them on silently would change what the approval
+# gate is approving. `Plan.describe` costs them separately — extra forward passes
+# for I1, lens readouts for I3 — so a --dry-run states the delta before anyone
+# approves a run.
 
 
 def reachable_modules() -> set[str]:

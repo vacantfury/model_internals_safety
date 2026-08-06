@@ -85,7 +85,14 @@ from internals_safety.measurements import ability as ability_module
 from internals_safety.measurements import behavior as behavior_module
 from internals_safety.measurements import deployment as deployment_module
 from internals_safety.measurements import recognition as recognition_module
+from internals_safety.measurements import decode_lens as decode_lens_module
+from internals_safety.measurements import entropy_dynamics as entropy_module
 from internals_safety.measurements import trajectory as trajectory_module
+from internals_safety.measurements.decode_lens import sweep_layers
+from internals_safety.measurements.entropy_dynamics import (
+    measure_entropy_dynamics,
+    separation,
+)
 from internals_safety.measurements.ability import measure_ability
 from internals_safety.measurements.behavior import measure_behavior
 from internals_safety.measurements.deployment import measure_deployment, read_deployment_per_prompt
@@ -104,6 +111,7 @@ from internals_safety.pipeline import (
     load_contrast_sets,
     resolve_run_paths,
     run_families,
+    select_known,
 )
 from internals_safety.provenance import (
     capture_provenance,
@@ -112,6 +120,16 @@ from internals_safety.provenance import (
 )
 
 PHASE = "phase0"
+
+# Layer count used ONLY for the pre-run estimate, before any model is loaded —
+# the dry-run path deliberately touches no weights. Both pilot models are 32
+# layers; a model with more would make the estimate low, so it is named here
+# rather than buried as a literal.
+N_LAYERS_ASSUMED = 32
+
+# Optional instruments a run may declare. The four measurements and I2 always
+# run: they add no forward pass. These do.
+OPTIONAL_INSTRUMENTS = ("decode_lens", "entropy_dynamics")
 
 
 @dataclass(frozen=True)
@@ -122,6 +140,11 @@ class Plan:
     device: str
     families: list[str]
     n_prompts: int
+    # Optional instruments this run declares. Empty is the default, and the
+    # default matters: I1 and I3 add GPU work, so turning them on changes what
+    # the approval gate is approving.
+    instruments: tuple[str, ...] = ()
+    capture_batch_size: int = 8
 
     @property
     def prompt_forward_passes(self) -> int:
@@ -139,6 +162,33 @@ class Plan:
         """Two judges over every attack response."""
         return 2 * len(self.families) * self.n_prompts
 
+    @property
+    def instrument_forward_passes(self) -> int:
+        """Extra TARGET forward passes I1 adds.
+
+        The decode lens patches each captured state into a separate inference
+        pass on the Patchscopes scaffold, batched over prompts, once per layer.
+        This is real GPU work the base plan does not do, which is why it is
+        declared rather than defaulted on.
+        """
+        if "decode_lens" not in self.instruments:
+            return 0
+        batches = -(-self.n_prompts // self.capture_batch_size)
+        return len(self.families) * N_LAYERS_ASSUMED * batches
+
+    @property
+    def lens_readouts(self) -> int:
+        """Unembedding matmuls I3 adds — not forward passes, but not free.
+
+        Each is [chunk, d_model] x [d_model, vocab] with vocab ~128k, so the
+        cost is memory-bandwidth-bound rather than compute-bound. Counted
+        separately from forward passes so the estimate cannot conflate them.
+        """
+        if "entropy_dynamics" not in self.instruments:
+            return 0
+        batches = -(-self.n_prompts // self.capture_batch_size)
+        return 2 * len(self.families) * N_LAYERS_ASSUMED * batches
+
     def describe(self, measurements: MeasurementsConfig) -> str:
         generated_tokens = (
             len(self.families)
@@ -154,6 +204,9 @@ class Plan:
                 f"generations           {self.generations} "
                 f"(<= {generated_tokens:,} new tokens at configured budgets)",
                 f"judge API calls       {self.judge_calls} (2 judges x every attack response)",
+                f"instruments           {', '.join(self.instruments) or 'none beyond the four measurements + I2'}",
+                f"  extra fwd passes    {self.instrument_forward_passes} (I1 decode lens)",
+                f"  lens readouts       {self.lens_readouts} (I3 entropy dynamics)",
                 "",
                 "No run launches from --dry-run. For the GPU count/type, $ and wall-clock the "
                 "approval gate needs (family rule, owner 2026-07-22), run:",
@@ -167,12 +220,15 @@ def build_plan(
     families: Sequence[str],
     n_prompts: int,
     allow_cpu: bool = False,
+    instruments: Sequence[str] = (),
 ) -> Plan:
     return Plan(
         model=model_config.name,
         device=resolve_device(model_config.device, allow_cpu_in_job=allow_cpu).type,
         families=list(families),
         n_prompts=n_prompts,
+        instruments=tuple(instruments),
+        capture_batch_size=model_config.capture_batch_size,
     )
 
 
@@ -201,8 +257,14 @@ def run_family(
     harm_judge: HarmBenchJudge,
     refresh_activations: bool = False,
     cache_dir: Path = ACTIVATIONS_DIR,
+    instruments: Sequence[str] = (),
 ) -> dict:
-    """Every measurement for one rung, plus the regime map they combine into."""
+    """Every measurement for one rung, plus the regime map they combine into.
+
+    `instruments` names the OPTIONAL roster for this run. The four measurements
+    and I2 always run because they add no forward pass; anything here does, and
+    was costed at the approval gate by `Plan.describe`.
+    """
     family = encoder.family
     encoded_harmful = _encode(encoder, harmful)
     encoded_harmless = _encode(encoder, harmless)
@@ -467,6 +529,61 @@ def run_family(
         )
     )
 
+    # ---- optional instruments, declared per run and costed at the gate ------
+    if "decode_lens" in instruments:
+        # I1. Patches each captured state into the Patchscopes scaffold and reads
+        # probability mass on the plaintext's own content tokens — the one
+        # instrument whose readout length cannot inflate, because a longer prompt
+        # does not make a specific word more likely unless the state encodes it.
+        curves = sweep_layers(
+            loaded,
+            encoded_harmful_batch,
+            HARMFULNESS_POSITION,
+            [prompt.text for prompt in harmful],
+            measurements.decode_lens,
+        )
+        readings.append(
+            decode_lens_module.reading(
+                curves,
+                measurements.decode_lens,
+                length_null_margin=length_null.margin(
+                    sum(c.best.matched for c in curves) / len(curves)
+                ),
+                # `layer=None` above takes each prompt's argmax over the layer
+                # grid, which is an uncorrected multiple comparison until a null
+                # covers it. Left False so the reading is withheld and says so.
+                selection_inside_null=False,
+                detail={"family": family},
+            )
+        )
+
+    if "entropy_dynamics" in instruments:
+        # I3. Label-free: nothing is fitted, so the route that broke the
+        # supervised probe is closed. The length null still applies.
+        statistic = "minimum"
+        profiles = [
+            measure_entropy_dynamics(loaded, batch, HARMFULNESS_POSITION)
+            for batch in (encoded_harmful_batch, encoded_harmless_batch)
+        ]
+        entropy_separation = separation(
+            profiles[0], profiles[1], statistic, measurements.probes
+        )
+        readings.append(
+            entropy_module.reading(
+                statistic=statistic,
+                auroc=entropy_separation.auroc,
+                licensed=entropy_separation.licensed,
+                # No control passed: I3's negative control is the ability-0
+                # floor, which is a CROSS-RUNG quantity this per-rung call
+                # cannot see. Withheld until the floor is computed run-wide.
+                control_auroc=None,
+                control_margin=None,
+                length_null_margin=length_null.margin(entropy_separation.auroc),
+                selection_inside_null=True,
+                detail={"family": family, "p_value": entropy_separation.p_value},
+            )
+        )
+
     return {
         "summary": summary,
         "cells": cells,
@@ -481,6 +598,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--model", required=True, help=f"conf/models/<name>.yaml; pilot set: {pilot.models}")
     add_common_arguments(parser, default_n_prompts=pilot.n_prompts)
+    parser.add_argument(
+        "--instruments",
+        nargs="*",
+        default=[],
+        help=f"optional instruments to run: {', '.join(OPTIONAL_INSTRUMENTS)}. Default none — "
+        "these add GPU work, so --dry-run costs them BEFORE the approval gate sees the run. "
+        "The four measurements and I2 (trajectory) always run; they add no forward pass.",
+    )
     args = parser.parse_args(argv)
 
     model_config = load_model_config(args.model)
@@ -488,7 +613,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     ladder = load_ladder()
     families = select_families(ladder, args.families if args.families else pilot.families)
 
-    plan = build_plan(model_config, families, args.n_prompts, allow_cpu=args.allow_cpu)
+    instruments = select_known(
+        args.instruments or None, OPTIONAL_INSTRUMENTS, label="instruments"
+    ) if args.instruments else []
+    plan = build_plan(
+        model_config, families, args.n_prompts,
+        allow_cpu=args.allow_cpu, instruments=instruments,
+    )
     print(plan.describe(measurements))
     if args.dry_run:
         return 0
@@ -540,6 +671,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             harm_judge,
             refresh_activations=args.refresh_activations,
             cache_dir=activations_dir,
+            instruments=instruments,
         ),
         report=lambda result: print(result["regime_map"], flush=True),
     )

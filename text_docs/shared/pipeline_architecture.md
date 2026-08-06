@@ -238,9 +238,19 @@ the spine is how a shared runner becomes a framework.
    `reportable_only`/`withheld_summary` rather than curated. Both scripts are on
    the seam already; passing no readings writes neither section, so a run whose
    instruments do not yet emit `Reading`s is not forced to fake them.
-5. **Next — wire the four original measurements to emit `Reading`s**, which is
-   what turns the seam from available into load-bearing. Only then I4, so it
-   lands wired instead of as a seventh orphan.
+5. ~~Wire the four original measurements to emit `Reading`s~~ — **done
+   2026-08-06**, and it immediately found that measurements #1 and #4 have no
+   negative control (TODO 37/38). Both now read non-reportable with the reason
+   named, rather than being quietly quotable.
+6. ~~Wire I1/I2/I3 into the spine~~ — **done 2026-08-06.** I2 runs always (no new
+   forward pass); I1 and I3 run only when `--instruments` declares them, because
+   both add GPU work and `--dry-run` must price it before the approval gate sees
+   the run. Orphans are now a build failure rather than an audit finding:
+   `tests/test_package_structure.py` asserts the unreachable set exactly, with a
+   stated reason per entry, and the list may only ever shrink.
+7. **Next — the four missing controls**, two of which (matched-norm random
+   direction, control-task selectivity) gate any I5/I6 claim. Then I4, so it
+   lands wired instead of as an orphan.
 
 ~~§3.2's package split~~ struck; replaced by `tests/test_package_structure.py`.
 

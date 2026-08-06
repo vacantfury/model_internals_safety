@@ -439,3 +439,97 @@ class TestScheduledJobGuard:
 
         monkeypatch.setenv("SLURM_JOB_ID", "1")
         assert resolve_device("cpu").type == "cpu"
+
+
+class TestDeclaredInstrumentRoster:
+    """`--instruments` — the approval gate sees the cost before the run happens.
+
+    I1 and I3 add GPU work that the four measurements and I2 do not. Turning
+    them on by default would change what a run costs without the gate seeing it,
+    which is the family's experiment-run rule and, since 2026-08-06, also the
+    gate-not-measurement rule. So the roster is DECLARED and `--dry-run` prices
+    the declaration.
+    """
+
+    def plan(self, instruments=()):
+        from internals_safety.config import load_model_config
+
+        return load_script().build_plan(
+            load_model_config("qwen2_5_0_5b_instruct"),
+            ["base64", "rot13"],
+            n_prompts=100,
+            allow_cpu=True,
+            instruments=instruments,
+        )
+
+    def test_the_default_roster_is_empty_and_costs_nothing_extra(self):
+        plan = self.plan()
+        assert plan.instruments == ()
+        assert plan.instrument_forward_passes == 0
+        assert plan.lens_readouts == 0
+
+    def test_declaring_i1_adds_forward_passes_to_the_estimate(self):
+        """The number the gate needs: I1's target passes are not free, and on a
+        two-rung run they outnumber the base capture passes."""
+        plan = self.plan(("decode_lens",))
+        assert plan.instrument_forward_passes > 0
+        assert plan.lens_readouts == 0
+
+    def test_declaring_i3_adds_lens_readouts_counted_separately(self):
+        """Separately, because they are not forward passes — they are
+        [chunk, d_model] x [d_model, vocab] matmuls, bandwidth-bound not
+        compute-bound. Conflating them would misprice the run."""
+        plan = self.plan(("entropy_dynamics",))
+        assert plan.lens_readouts > 0
+        assert plan.instrument_forward_passes == 0
+
+    def test_the_estimate_names_the_declared_roster(self):
+        from internals_safety.config import load_measurements_config
+
+        described = self.plan(("decode_lens",)).describe(load_measurements_config())
+        assert "decode_lens" in described
+        assert "I1 decode lens" in described and "I3 entropy dynamics" in described
+
+    def test_the_declared_instruments_actually_run_and_emit_readings(
+        self, pilot, tiny_model, monkeypatch, tmp_path
+    ):
+        """End to end, not just costed.
+
+        A flag that prices an instrument but does not run it would be worse than
+        no flag: the gate would approve work that never happens. This drives the
+        real code path for I1 and I3 on the tiny in-process model.
+        """
+        monkeypatch.setattr(pilot, "load_model", lambda config: tiny_model)
+        monkeypatch.setattr(
+            pilot, "RefusalJudge",
+            lambda config: RefusalJudge(config, service=StubService(default=yes_verdict())),
+        )
+        monkeypatch.setattr(
+            pilot, "HarmBenchJudge",
+            lambda config: HarmBenchJudge(config, service=StubService(default=no_verdict())),
+        )
+        assert pilot.main([
+            "--model", "qwen2_5_0_5b_instruct",
+            "--families", "rot13",
+            "--n-prompts", "4",
+            "--run-name", "instruments",
+            "--instruments", "decode_lens", "entropy_dynamics",
+            "--allow-dirty", "--allow-cpu",
+            "--outputs-dir", str(tmp_path),
+        ]) == 0
+
+        record = json.loads(
+            (tmp_path / "runs" / "phase0" / "qwen2_5_0_5b_instruct" / "instruments"
+             / "results.json").read_text()
+        )
+        instruments = {reading["instrument"] for reading in record["readings"]}
+        assert {"decode_lens", "entropy_dynamics"} <= instruments
+
+    def test_an_unknown_instrument_is_refused_rather_than_ignored(self):
+        """A typo'd --instruments would otherwise produce a run that silently
+        omitted the instrument it was launched to add."""
+        with pytest.raises(SystemExit, match="unknown instruments"):
+            load_script().main([
+                "--model", "qwen2_5_0_5b_instruct", "--instruments", "logit_lens",
+                "--dry-run", "--allow-cpu",
+            ])

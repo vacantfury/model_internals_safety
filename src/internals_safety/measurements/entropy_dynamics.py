@@ -38,6 +38,10 @@ from dataclasses import dataclass
 
 import torch
 
+import numpy as np
+from sklearn.metrics import roc_auc_score
+
+from internals_safety.config import ProbeConfig
 from internals_safety.measurements.contract import Kind, Reading
 from internals_safety.models.capture import ActivationBatch
 from internals_safety.models.lens import unembed
@@ -131,6 +135,63 @@ def measure_entropy_dynamics(
         position=position,
         layers=list(batch.layers),
         entropies=torch.stack(per_layer, dim=1),
+    )
+
+
+@dataclass(frozen=True)
+class EntropySeparation:
+    """How well one entropy statistic separates the two classes."""
+
+    statistic: str
+    auroc: float
+    p_value: float
+    alpha: float
+
+    @property
+    def licensed(self) -> bool:
+        return self.p_value <= self.alpha
+
+
+def _statistic(profile: EntropyProfile, statistic: str) -> torch.Tensor:
+    if statistic == "minimum":
+        return profile.minimum
+    if statistic == "resolution_layer":
+        return profile.resolution_layer().float()
+    if statistic == "total_drop":
+        return profile.total_drop()
+    raise ValueError(f"unknown statistic {statistic!r}; have {list(STATISTICS)}")
+
+
+def separation(
+    positive: EntropyProfile,
+    negative: EntropyProfile,
+    statistic: str,
+    config: ProbeConfig,
+) -> EntropySeparation:
+    """AUROC of one statistic between the classes, licensed by permutation.
+
+    **Nothing is fitted, so the null is over the STATISTIC rather than over a
+    model.** That is the whole cost argument for I3: shuffling labels on a 1-D
+    vector and recomputing an AUROC is microseconds, where the probe nulls are
+    hundreds of logistic fits. Its independence from the probes' failure mode is
+    what earns it a roster slot; being cheap is why it is never worth skipping.
+    """
+    scores = torch.cat([_statistic(positive, statistic), _statistic(negative, statistic)])
+    labels = np.concatenate([np.ones(positive.n_prompts), np.zeros(negative.n_prompts)])
+    values = scores.detach().cpu().numpy()
+    observed = float(roc_auc_score(labels, values))
+
+    generator = np.random.default_rng(config.seed)
+    null = np.array([
+        float(roc_auc_score(generator.permutation(labels), values))
+        for _ in range(config.n_permutations)
+    ])
+    # Two-sided in effect: an entropy statistic can separate in either direction
+    # (a marked input may resolve EARLIER or later), so the null is on |AUROC-0.5|.
+    centred_null = np.abs(null - 0.5)
+    p_value = float((np.sum(centred_null >= abs(observed - 0.5)) + 1) / (len(null) + 1))
+    return EntropySeparation(
+        statistic=statistic, auroc=observed, p_value=p_value, alpha=config.alpha
     )
 
 
