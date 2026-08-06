@@ -281,3 +281,136 @@ harmfulness direction firing on surface anomaly rather than harm (partly exclude
 by construction, since both classes traverse the identical encoding pipeline);
 small-sample licensing instability. **Do not build a claim on recognition until
 this is resolved.**
+
+---
+
+## 6. The instrument inventory, and the rule for growing it
+
+Written 2026-08-05 after a scoped literature search, in answer to a direct
+question: *is the probing layer good enough, and should we add more methods
+before the next experiments?*
+
+### 6.1 What is actually implemented — one method family, not several
+
+The honest inventory of `src/internals_safety/probes/` + the capture spine:
+
+| module | what it is |
+|---|---|
+| `probes/linear.py` | logistic-regression probes; layer sweep; plain->encoded transfer; cross-val; permutation licensing (length-matched strata); per-cell reading threshold |
+| `probes/directions.py` | difference-in-means directions, projection scores, cosine similarity |
+| `probes/overlap.py` | overlap coefficient / projection summaries (the H4 metric) |
+| `measurements/length_null.py` | the character-length baseline every probe number must clear |
+| `models/capture.py` | residual-stream activations at **2 positions** (`instruction_final`, `last`) x ~33 layers |
+
+Read as a whole this is **one method family: supervised linear read-out of the
+residual stream at two late positions.** `directions` and `overlap` are the same
+signal geometry expressed differently; the length null is a control on it, not an
+independent instrument. Everything the two papers currently claim about internals
+rests on that single family — and it has been instrument-failed twice in one week
+(§2.1 operating point, §3.2 lexical transparency).
+
+### 6.2 The adoption rule — more methods is NOT automatically better
+
+The failures above were **not** caused by having too few methods. They were caused
+by one method with no negative control and no sufficiency bar. Adding N methods
+without controls yields N more ways to be confidently wrong, and multiplies the
+forking-paths surface: at 6 methods x ~33 layers x 2 positions x 19 rungs,
+*something* always separates.
+
+**A new instrument is adopted only if it satisfies all three:**
+
+1. **It answers a question no implemented method answers** — not a variant of
+   "is harm linearly decodable here" (a nonlinear probe, a different classifier,
+   a different pooling would all inherit the same confounds and add nothing).
+2. **It has a negative control this ladder already provides free** — the ability-0
+   rungs (`tag_block`, `reverse_characters`). An instrument that cannot be shown
+   to read ~nothing on text the model provably cannot decode is not evidence.
+3. **It clears the length null** (`measurements/length_null.py`) on the same data.
+
+### 6.3 The real gap: everything implemented is CORRELATIONAL read-out
+
+Four capability classes are absent, and they are absent in a way that bears
+directly on claims both papers intend to make:
+
+- **Token-level decode evidence.** "Is harm linearly decodable" is not "did the
+  model decode the ciphertext". Only a lens answers the second.
+- **Causal evidence.** AS-5's Move C is a *repair* claim. A repair claim cannot be
+  made from a read-out — and Kwon 2026 already reports the harm direction is "a
+  read-out but not a selective write-handle" (§4.3). Zero patching, ablation or
+  steering exists in this repo today.
+- **Feature-level evidence.** A firing direction cannot distinguish "harm feature"
+  from "surface-anomaly feature". That distinction is exactly the unexplained
+  recognition anomaly of §5.
+- **Layer-trajectory / per-token structure.** The spine captures 2 late positions
+  and the analysis keeps the argmax cell. §4.2's displacement hypothesis is
+  untestable against it.
+
+### 6.4 Ranked shortlist, with method imports and the control each brings
+
+Ordered by evidence-per-unit-build, not by novelty.
+
+**1. Logit lens / token-level decode readout** *(already §4.1; unchanged as the
+top item)*. Method import: Fang & Marks 2512.01222. Two additions found in this
+search: **LogitLens4LLMs (arXiv 2503.11667)** ports logit-lens tooling to modern
+architectures (LLaMA-family included), which removes most of the plumbing risk;
+and **TriLens (arXiv 2606.01033)** uses *per-layer logit-lens entropy* rather than
+top-token identity, which is a strictly cheaper readout that needs no plaintext
+alignment. Control: must read ~0 on `tag_block`.
+
+**2. Layer trajectory instead of best-cell argmax.** Import: **arXiv 2605.02958,
+"Tracing the Dynamics of Refusal"** — argues directly that static terminal/pooled
+directions miss how refusal is *constructed across layers*, and gets more robust
+jailbreak detection from the trajectory. We already compute the full (layer x
+position) curve on every run and now persist it (`eaace85`), so this converts an
+existing discard into a measurement. **Near-zero build cost; do it regardless of
+what else is adopted.** It is also the first real test of §4.2.
+
+**3. Entropy dynamics — an unsupervised, label-free signal class.** Import:
+**arXiv 2606.25182, "What Intermediate Layers Know: Detecting Jailbreaks from
+Entropy Dynamics"**. Load-bearing property: it trains no classifier on our labels,
+so **the length confound that broke the supervised probe cannot enter it by the
+same route**. That makes it a genuine independent instrument under rule 6.2(1),
+not another read-out variant.
+
+**4. SAE features — the largest new capability, and it is off-the-shelf for BOTH
+our models.** **Llama Scope (arXiv 2410.20526)**: 256 TopK SAEs, every layer and
+sublayer, 32K/128K features. **Qwen-Scope (arXiv 2605.11887)** for the Qwen side.
+No SAE training needed. This is the instrument that can separate "harm feature"
+from "surface-anomaly feature" and therefore the one with a real chance at §5.
+  - **VERIFIED CAVEAT, must not be skipped:** Llama Scope is trained on
+    **Llama-3.1-8B-*Base***, and our target is **Instruct**. The paper explicitly
+    studies generalisation to fine-tuned models, so this is a transfer question
+    to measure, not a blocker — but any SAE result must first show the SAE
+    reconstructs Instruct activations acceptably, or the finding is about the
+    wrong model.
+  - *AS-6 inheritance, and it is a gift:* **Llama Guard 3 8B is itself a
+    fine-tune of Llama-3.1-8B**, so the same base-model SAEs are a candidate
+    instrument for the guard-side paper — same transfer question, one shared
+    validation. Test it once, both papers use it.
+
+**5. Causal methods — LAST, and only after 1-4 have established what to intervene
+on.** Needed for Move C. Adopt with the field's own warnings wired in from the
+start: **arXiv 2606.27510 ("The Curse of Multiple Mediators")** on hidden
+interaction effects in activation patching, and **arXiv 2607.10226 ("When Are
+Sparse Feature Interventions Actually Localized?")** on apparent SAE-steering
+success arising from weak or non-localized interventions. Mechanism reference for
+steering refusal specifically: **arXiv 2604.08524**. Related and worth reading for
+the repo's unlearning half: **arXiv 2605.24614**, activation patching as an audit
+of unlearning *depth*.
+
+**Explicitly NOT adopted:** further supervised linear-probe variants (nonlinear
+probes, alternative classifiers, alternative pooling). They fail rule 6.2(1) —
+same confounds, new hyperparameters, no new question.
+
+### 6.5 The scheduling fact that decides sequencing
+
+**Instruments 1-4 all read the same forward pass.** Lens readout, layer
+trajectory, entropy dynamics and SAE encoding are all functions of the residual
+stream on the same inputs; none needs generation, none needs a judge call, none
+needs training. Built together they cost **one** forward-pass-only run per model;
+built one at a time they cost four.
+
+So the sequencing answer is not "more lit search, then experiments" and not
+"experiments now". It is: **build 1-4 against the cached data and the offline
+controls, then spend one run.** The capture spine change (per-token readout) is
+shared by all four and is the single real engineering item.
