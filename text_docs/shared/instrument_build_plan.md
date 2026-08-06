@@ -30,6 +30,10 @@ separately; neither substitutes for the other.
 
 #### Tier (A) — peer-reviewed, venue confirmed
 
+*This table covers the citations the arXiv-only pass had already found. The
+coverage sweep below adds fifteen more tier-(A) papers, several of them higher-cited
+than anything here — read both tables together.*
+
 | paper | venue | cites |
 |---|---|---|
 | 2102.12452 probing classifiers (Belinkov) | *Computational Linguistics* (journal) | 942 |
@@ -90,13 +94,25 @@ wrong, and **nothing distinguishes the two cases without a third source** — wh
 is precisely the rule science settled independently. Our data is a second
 instance of their measured false-agreement case, not a repeat of the same one.
 
-**⚠️ OpenAlex is near-useless for recent ML venues, measured:** it reported
-*preprint-only* for 2507.11878 (NeurIPS), 2502.11367 (EMNLP), 2505.24428 (EMNLP),
-2502.03032 (ICML) and 2509.18127 (ACL) — every one of which Semantic Scholar
-placed at a named venue and DBLP confirms where reachable. Consequence for the
-house rule: the productive pair for CS work is **Semantic Scholar + DBLP**, with
-OpenAlex as a third opinion rather than half the primary check. Filed back to
-science as evidence against their just-settled pairing.
+**⚠️ OpenAlex cannot answer the venue question for recent ML proceedings, and the
+mechanism is now known.** Re-running all 63 citations through `resolve_status.py`
+on 2026-08-05 produced **18 disagreements out of 63 (29%), every one in the same
+direction** — Semantic Scholar names a venue, OpenAlex says arXiv. Checking
+whether this was a mis-set `primary_location`: it is not. For 2502.11367 (EMNLP),
+2507.11878 (NeurIPS) and 2505.24428 (EMNLP), OpenAlex holds **no published
+location at all** — every entry in `locations` is a repository. So the failure is
+ingestion lag, not field selection, and no query shape recovers it. Its citation
+counts diverge on the same records (Belinkov: 942 on S2, 21 on OpenAlex). This is
+filed to science as a measurement; the pairing is science's ruling to revisit or
+keep, not this repo's.
+
+**One `resolve_status.py` classification case, also filed as a measurement:**
+2404.14082 (the MI-for-AI-safety review, **TMLR, 499 citations**) came back
+`AGREE_PREPRINT_ONLY`. Semantic Scholar returns the venue *string*
+`"Trans. Mach. Learn. Res."` but `venue_type: null` and no publisher DOI, and the
+script requires one of the latter two. Same for the BlackboxNLP proceedings entry
+(2503.11232). A named venue string alone does not currently count as published —
+so a tier-(A) journal paper reads as tier (C) unless a human looks.
 
 #### What the passes changed, cumulatively
 
@@ -116,30 +132,72 @@ science as evidence against their just-settled pairing.
   not settled (C) — but either way it may not drive a decision, so §3.2's
   conditional trajectory promotion stands unchanged.
 
-#### Coverage: the topical sweep is INCOMPLETE, and that is stated, not hidden
+#### Coverage: the topical sweep is COMPLETE, and it found a large gap
 
-The published-venue topical sweep over Semantic Scholar and DBLP was **stopped
-before completion** (owner call, 2026-08-06) after a first attempt returned
-almost nothing — which was a **design error, not a finding**: it post-filtered a
-20-item relevance window to published venues in a preprint-dominated subfield, so
-the filter removed nearly everything by construction. A v2 with a 100-item window
-and published-fraction reporting was killed while still running.
+*Run 2026-08-05. Discovery via the OpenAlex backend skill (10 topics × 100
+results, 2023+, ranked by citations, 773 unique DOIs); status via Semantic
+Scholar exact-ID batch, because OpenAlex cannot answer the venue question at all
+(below). Artifacts: `discovery.json`, `s2_cache.json`, `new_published.json`.*
 
-**Therefore the coverage question — how much peer-reviewed work the arXiv-only
-pass missed — is OPEN, and no claim of comprehensiveness may be made.** What the
-truncated pass did surface, all previously absent from this plan and all SAE-side:
+**First, the premise that produced the earlier failure was false.** The v1 sweep
+post-filtered a 20-item relevance window to published venues, got nearly nothing,
+and that was read as "preprint-dominated subfield." Measured: **561 of 712
+resolved records (79%) sit at a named venue.** The field is not
+preprint-dominated; the 20-item window was.
 
-| paper | venue (S2; OpenAlex disagrees, DBLP unreachable) | note |
+| topic | published/resolved | new to us |
 |---|---|---|
-| 2502.11367 | EMNLP 2025, 21c | SAE features for classification + transfer |
-| 2505.24428 | EMNLP 2025, 14c | **model unlearning via SAE subspace projection** — directly relevant to this repo's training-time half |
-| 2502.03032 | ICML 2025, 10c | feature flow across layers for steering |
-| 2503.11232 | BlackboxNLP 2025, 10c | interpretable feature intervention (privacy) |
-| 2509.18127 | ACL 2025, 4c | Safe-SAIL, fine-grained safety landscape via SAEs |
+| lens | 48/73 | 47 |
+| probing | 86/92 | 86 |
+| causal | 63/83 | 62 |
+| sae | 91/94 | 91 |
+| refusal | 51/73 | 51 |
+| guard | 62/85 | 62 |
+| encoded | 35/58 | 35 |
+| confound | 16/23 | 16 |
+| trajectory | 40/45 | 39 |
+| unlearning | 69/86 | 68 |
 
-Six hits from a biased 20-item window is enough to show the gap is **real** and
-nowhere near enough to size it. Completing this sweep is filed as TODO work, and
-until it is done the literature map in §8 is explicitly partial.
+**494 peer-reviewed papers appear in neither canonical doc; 119 are on-object
+after excluding off-domain hits.** The queries are broad and pull surveys, so the
+raw count overstates. What does not overstate is *which* papers were missed —
+these are the field's most-cited work in the exact areas this plan builds
+instruments for:
+
+| paper | venue | cites | what it is to us |
+|---|---|---|---|
+| **2307.02483** Jailbroken: how does safety training fail | **NeurIPS 2023** | **2052** | the founding encoded-jailbreak paper, base64 included — AS-5's attack surface descends from it |
+| **2309.08600** SAEs find highly interpretable features | **ICLR 2023** | **1432** | I4's foundation |
+| **2310.03693** Fine-tuning aligned LMs compromises safety | **ICLR 2023** | **1313** | this repo's training-time half |
+| **2312.06681** Steering Llama 2 via contrastive activation addition | **ACL 2023** | **936** | I6's steering method |
+| **2406.11717** Refusal is mediated by a single direction | **NeurIPS 2024** | **914** | **measurement #3 is a variant of its method** |
+| **2402.10260** StrongREJECT for empty jailbreaks | **NeurIPS 2024** | 356 | the refusal-judge question, benchmarked |
+| **2406.04313** Circuit breakers | **NeurIPS 2024** | 317 | representation-level defense — AS-6-adjacent |
+| **2309.16042** Best practices of activation patching | **ICLR 2023** | 294 | a best-practices paper for the instrument I6 plans to build |
+| **2410.02707** LLMs know more than they show | **ICLR 2024** | 240 | internals encode what the output does not — structurally our gap |
+| **2401.06102** **Patchscopes** | **ICML 2024** | 233 | **see below — this changes I1** |
+| 2310.10348 attribution patching > ACDC | BlackboxNLP | 186 | cheaper causal method for I6 |
+| 2301.04709 causal abstraction | JMLR | 183 | I6's theoretical foundation |
+| 2407.15549 latent adversarial training | TMLR | 171 | training-time intervention |
+| 2409.18025 adversarial perspective on unlearning | TMLR | 121 | unlearning evaluation |
+| 2409.20089 refusal-feature adversarial training | ICLR 2024 | 70 | guard-side, AS-6 |
+
+**⚠️ Patchscopes (2401.06102, ICML 2024, 233c) is the single most consequential
+find, and it changes §3.1.** I1 is currently specified as a logit-lens decode
+measurement importing Fang & Marks (2512.01222) — a tier-(C) preprint with 4
+citations, which under the house rule may motivate the instrument but may not
+drive it. Patchscopes is the peer-reviewed framework for exactly this operation:
+decoding hidden representations into natural language by patching them into a
+separate inference pass, with the logit lens as an explicit special case. **I1
+should be specified as a Patchscopes instantiation with Fang & Marks as the
+specific application**, which moves the instrument's foundation from (C) to (A)
+and removes the "unreplicated import" caveat from §0's earlier reading. This is a
+design change to §3.1, filed, not yet made.
+
+**What this does NOT change:** the trajectory promotion in §3.2 still rests on
+2605.00269 (0 citations, preprint), and the sweep's `trajectory` topic surfaced
+no peer-reviewed replacement for its specific two-pathway claim. The conditional
+promotion stands as conditional.
 
 ---
 
@@ -666,6 +724,8 @@ expensive step is seventh, not first.**
 ## 8. Literature map
 
 Grouped for reuse by both papers' related-work sections. Read status per §0.
+**Bold entries were added by the completed coverage sweep (2026-08-05) and are
+tier (A); they were absent from the arXiv-only pass.**
 
 **Methodology and critique (the discipline this plan is built on)**
 2102.12452 probing classifiers · 2512.18792 dead salmons · 2603.19426 probe
@@ -673,39 +733,65 @@ evidence under controlled prompt structure · 2511.16288 probe geometry
 identifiability · 2408.15510 causal probing reliability · 2006.00995 amnesic
 probing · 2506.11673 mean projection / LEACE · 2604.11061 Pando (black-box
 control) · 2607.08349 certified interventional fidelity · 2404.14082 MI for AI
-safety review.
+safety review · **2309.16042 best practices of activation patching (ICLR, 294c)**
+· **2301.04709 causal abstraction (JMLR, 183c)** · **2310.10348 attribution
+patching outperforms ACDC (BlackboxNLP, 186c)**.
 
 **Lens family**
-2512.01222 Fang & Marks (primary import) · 2303.08112 tuned lens · 2503.11667
-LogitLens4LLMs · 2606.01033 TriLens · 2604.02608 steerable-but-not-decodable
-(risk).
+**2401.06102 Patchscopes (ICML 2024, 233c) — the peer-reviewed framework; the
+logit lens is a special case, and I1 should be specified as an instantiation of
+it** · 2512.01222 Fang & Marks (the specific ROT-13 application) · 2303.08112
+tuned lens · 2503.11667 LogitLens4LLMs · 2606.01033 TriLens · 2604.02608
+steerable-but-not-decodable (risk).
+
+**Attacks and evaluation (the object AS-5 measures — previously missing entirely)**
+**2307.02483 Jailbroken: how does safety training fail (NeurIPS 2023, 2052c) —
+the founding encoded-jailbreak paper** · **2402.10260 StrongREJECT (NeurIPS 2024,
+356c)** · **2308.03825 "Do Anything Now" (CCS 2023, 685c)** · **2311.09827
+cognitive overload (NAACL)** · **2402.08679 COLD-Attack (ICLR)**.
+
+**Training-time safety (this repo's other half — previously missing entirely)**
+**2310.03693 fine-tuning aligned LMs compromises safety (ICLR 2023, 1313c)** ·
+**2407.15549 latent adversarial training (TMLR, 171c)** · **2403.03218 WMDP
+(ICML, 497c)** · **2310.10683 LLM unlearning (NeurIPS, 335c)** · **2409.18025
+adversarial perspective on unlearning (TMLR, 121c)** · **2402.08787 rethinking
+machine unlearning (Nature Mach. Intell., 318c)**.
 
 **Trajectory and dynamics**
 2605.00269 two-pathway / length confound (**key**) · 2605.02958 refusal dynamics ·
 2606.25182 entropy dynamics · 2607.18348 residual-stream geometry across depth.
 
 **Sparse dictionaries**
-2410.20526 Llama Scope · 2605.11887 Qwen-Scope · 2505.23556 refusal via SAEs ·
-2409.14507 absorption · 2606.18322 unreliable interventions · 2607.10226 matched
-evaluation · 2607.12166 causal inertness.
+**2309.08600 SAEs find highly interpretable features (ICLR 2023, 1432c) — the
+foundation** · 2410.20526 Llama Scope · 2605.11887 Qwen-Scope · 2505.23556
+refusal via SAEs · 2409.14507 absorption · 2606.18322 unreliable interventions ·
+2607.10226 matched evaluation · 2607.12166 causal inertness · **2505.24428
+unlearning via SAE subspace projection (EMNLP)** · **2502.03032 feature flow
+across layers (ICML)** · **2509.18127 Safe-SAIL (ACL)**.
 
 **Causal methods**
-2508.21258 RelP · 2606.27510 multiple mediators · 2606.09899 attribution patching
-lies · 2606.08292 ablation-reversible heads · 2605.24614 unlearning depth ·
-2604.08524 what drives steering · 2603.18353 interpretability without
-actionability · 2505.11770 causal mechanisms predict OOD behavior.
+**2312.06681 contrastive activation addition (ACL 2023, 936c) — the steering
+method I6 plans to use** · 2508.21258 RelP · 2606.27510 multiple mediators ·
+2606.09899 attribution patching lies · 2606.08292 ablation-reversible heads ·
+2605.24614 unlearning depth · 2604.08524 what drives steering · 2603.18353
+interpretability without actionability · 2505.11770 causal mechanisms predict OOD
+behavior.
 
 **Safety internals (target side — AS-5)**
-2507.11878 harmfulness/refusal separately (**key**) · 2607.14147 Kwon prefill ·
-2607.00572 HARC · 2606.16349 refusal-to-safety geometry · 2605.08513 single neuron
-· 2604.09544 distinct harmful mechanism · 2606.28153 attention-head specialisation
-· 2606.08044 behavioral-eval failure · 2607.08883 optimizing against safety
-representations.
+**2406.11717 refusal mediated by a single direction (NeurIPS 2024, 914c) —
+measurement #3 is a variant of its method and must cite it** · 2507.11878
+harmfulness/refusal separately (**key**) · **2410.02707 LLMs know more than they
+show (ICLR 2024, 240c)** · 2607.14147 Kwon prefill · 2607.00572 HARC · 2606.16349
+refusal-to-safety geometry · 2605.08513 single neuron · 2604.09544 distinct
+harmful mechanism · 2606.28153 attention-head specialisation · 2606.08044
+behavioral-eval failure · 2607.08883 optimizing against safety representations.
 
 **Guard internals (defense side — AS-6)**
-2604.18519 SIREN · 2608.03201 refusal-cue shortcut in guard models (2026-08-04,
-new) · 2605.02914 guard safety-geometry collapse · 2608.03838 LatentGuard ·
-2604.26130 reward-lens (MI library for reward models).
+**2406.04313 circuit breakers (NeurIPS 2024, 317c)** · **2409.20089 refusal-feature
+adversarial training (ICLR 2024, 70c)** · 2604.18519 SIREN · 2608.03201
+refusal-cue shortcut in guard models (2026-08-04, new) · 2605.02914 guard
+safety-geometry collapse · 2608.03838 LatentGuard · 2604.26130 reward-lens (MI
+library for reward models).
 
 **Surface form, script and character-level processing (why encoded input is
 readable at all)**
