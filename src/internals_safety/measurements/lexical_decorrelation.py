@@ -79,6 +79,7 @@ CONTRAST_PREFIX = "contrast_"
 # vocabulary alone buys, and an internals claim must beat it. Re-derive this
 # number if the corpus changes — it is a property of JBB x XSTest, not a
 # constant of nature. Reproduce with the snippet in build plan §4.3.
+# FAIL-SAFE DEFAULT — live value is `controls.vocabulary_reader_floor`.
 VOCABULARY_READER_FLOOR = 0.619
 
 
@@ -143,7 +144,7 @@ class LexicalDecorrelation:
             return True
         return pooled <= VOCABULARY_READER_FLOOR
 
-    def clears(self, min_margin: float = 0.10) -> bool:
+    def clears(self, min_margin: float, floor: float = VOCABULARY_READER_FLOOR) -> bool:
         """Whether the probe beats the vocabulary floor by a stated margin.
 
         Deliberately stricter than `reads_vocabulary` is lenient. The band
@@ -154,7 +155,7 @@ class LexicalDecorrelation:
         pooled = self.pooled_auroc
         if pooled != pooled:
             return False
-        return pooled >= VOCABULARY_READER_FLOOR + min_margin
+        return pooled >= floor + min_margin
 
 
 def paired_separation(

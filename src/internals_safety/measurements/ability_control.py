@@ -74,10 +74,12 @@ from internals_safety.config import AbilityConfig
 from internals_safety.encodings.recovery import score_recovery
 from internals_safety.pairing import derangement, stratified_derangement
 
-# Bins for the length-matched arm. Matches `probes.length_strata_bins`' default
-# rather than introducing a second convention; the standing rule from the AS-6
-# licensing decision applies here too — a result should hold across bin counts
-# rather than be reported at one.
+# FAIL-SAFE DEFAULT ONLY — the live value is `probes.length_strata_bins` in
+# `conf/measurements.yaml`, and callers pass it. This constant existed as the
+# real setting until 2026-08-06, which was worse than an ordinary magic number:
+# it was a SECOND COPY of a value already configured, so the two could drift and
+# a "length-matched" claim would silently mean two different things in two
+# places. Kept only so the module is usable standalone in a test.
 DEFAULT_LENGTH_BINS = 10
 
 # ---------------------------------------------------------------------------
@@ -91,6 +93,10 @@ DEFAULT_LENGTH_BINS = 10
 #
 #     max mismatched similarity        0.5645   (cut 0.75, headroom 0.186)
 #     max mismatched content_overlap   0.6667   (order-blind cut 0.80)
+#
+# The live values are `controls.mismatched_*_ceiling` in conf/measurements.yaml;
+# the constants below are fail-safe defaults so the module stays importable
+# without a config in hand.
 #
 # ⚠️ The overlap ceiling is ABOVE `content_overlap_threshold` (0.60). That leg is
 # therefore NOT what keeps the control silent — a mismatched pairing does reach

@@ -100,13 +100,32 @@ def ablate_direction(
 
 @contextmanager
 def add_direction(
-    loaded: LoadedModel, direction: torch.Tensor, layer: int, coefficient: float
+    loaded: LoadedModel,
+    direction: torch.Tensor,
+    layer: int,
+    coefficient: float,
+    mask: torch.Tensor | None = None,
 ) -> Iterator[None]:
-    """Add `coefficient * direction` at one layer, every position.
+    """Add `coefficient * direction` at one layer, at the masked positions.
 
     The sufficiency test. One layer rather than all: the claim is that writing
     the direction *somewhere* induces the behaviour, and applying it everywhere
     would confound the effect with its accumulated magnitude.
+
+    **`mask` is `[batch, seq]` of bools, and its absence means EVERY position —
+    which is a convention worth stating rather than assuming (TODO 33).** CAA
+    (arXiv 2312.06681) adds from the instruction-end position *onward*, including
+    generated tokens; ours defaulted to everywhere, which under AS-5's setup
+    writes the direction into the encoded prompt itself. Those are different
+    interventions: theirs asks whether writing the direction into the model's own
+    RESPONSE induces the behaviour, ours also changes what the model reads the
+    prompt as — and for a paper about decoding, that is the confound the design
+    exists to avoid. The mask makes the choice explicit at the call site instead
+    of implicit in the default.
+
+    A per-row mask rather than a slice because batches are ragged: with padding,
+    "the tokens before the inversion question" is a different absolute index in
+    every row, and a scalar slice would steer the wrong span in all but one.
     """
     if not 0 <= layer < loaded.n_layers:
         raise ValueError(f"layer {layer} outside [0, {loaded.n_layers - 1}]")
@@ -116,7 +135,18 @@ def add_direction(
         raise ValueError(f"direction must be unit-norm, got {norm:.6f}")
 
     def transform(hidden: torch.Tensor) -> torch.Tensor:
-        return hidden + coefficient * unit.to(device=hidden.device, dtype=hidden.dtype)
+        delta = coefficient * unit.to(device=hidden.device, dtype=hidden.dtype)
+        if mask is None:
+            return hidden + delta
+        if mask.shape != hidden.shape[:2]:
+            # Loud rather than broadcast: a silently mis-shaped mask steers the
+            # wrong tokens and still returns a plausible number.
+            raise ValueError(
+                f"mask shape {tuple(mask.shape)} does not match the hidden state's "
+                f"[batch, seq] = {tuple(hidden.shape[:2])}"
+            )
+        scale = mask.to(device=hidden.device, dtype=hidden.dtype).unsqueeze(-1)
+        return hidden + scale * delta
 
     with _hook_layer_output(loaded, layer, transform):
         yield

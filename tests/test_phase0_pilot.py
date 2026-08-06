@@ -635,3 +635,60 @@ class TestTheCausalGateIsWired:
         assert plan.causal_forward_passes == (
             (2 + 3 * plan.causal_candidates) + (2 + 3 * 20)
         ) * plan.n_prompts
+
+
+class TestReplyInversionIsWired:
+    """I5 runs at model level too — same reason as the causal gate: it steers
+    with directions fit on the plain contrast sets, which do not depend on a
+    rung. Driven through the tiny model and stub judges; no spend."""
+
+    @pytest.fixture
+    def run(self, pilot, tiny_model, monkeypatch, tmp_path):
+        monkeypatch.setattr(pilot, "load_model", lambda config: tiny_model)
+        monkeypatch.setattr(
+            pilot,
+            "RefusalJudge",
+            lambda config: RefusalJudge(config, service=StubService(default=yes_verdict())),
+        )
+        monkeypatch.setattr(
+            pilot,
+            "HarmBenchJudge",
+            lambda config: HarmBenchJudge(config, service=StubService(default=no_verdict())),
+        )
+        exit_code = pilot.main([
+            "--model", "qwen2_5_0_5b_instruct",
+            "--families", "base64",
+            "--n-prompts", "4",
+            "--run-name", "inversion",
+            "--allow-dirty",
+            "--allow-cpu",
+            "--instruments", "reply_inversion",
+            "--outputs-dir", str(tmp_path),
+        ])
+        assert exit_code == 0
+        return tmp_path / "runs" / "phase0" / "qwen2_5_0_5b_instruct" / "inversion"
+
+    def test_the_reading_reaches_the_run_record(self, run):
+        readings = json.loads((run / "results.json").read_text())["readings"]
+        inversion = [r for r in readings if r["instrument"] == "reply_inversion"]
+        assert len(inversion) == 1
+        assert inversion[0]["kind"] == "causal"
+
+    def test_it_is_withheld_for_want_of_its_own_random_direction_control(self, run):
+        """The causal gate's null steers through a different prompt, so it is not
+        reusable here — a second measurement, filed rather than faked."""
+        withheld = json.loads((run / "results.json").read_text())["withheld"]
+        assert "reply_inversion" in withheld
+        assert any("no negative control" in why for why in withheld["reply_inversion"])
+
+    def test_it_is_off_by_default(self, pilot):
+        config = load_model_config("qwen2_5_0_5b_instruct")
+        assert pilot.build_plan(config, ["base64"], n_prompts=10).inversion_forward_passes == 0
+
+    def test_the_dry_run_prices_it(self, pilot):
+        config = load_model_config("qwen2_5_0_5b_instruct")
+        plan = pilot.build_plan(
+            config, ["base64"], n_prompts=10, instruments=["reply_inversion"]
+        )
+        assert plan.inversion_forward_passes == 3 * 10
+        assert "I5 reply inversion" in plan.describe(MEASUREMENTS)

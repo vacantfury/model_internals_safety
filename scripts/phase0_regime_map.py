@@ -120,6 +120,11 @@ from internals_safety.measurements.causal_license import (
     random_direction_null,
 )
 from internals_safety.measurements.contract import Reading
+from internals_safety.measurements.reply_inversion import (
+    forward_passes as inversion_forward_passes,
+    measure_reply_inversion,
+    reading as inversion_reading,
+)
 from internals_safety.measurements.regimes import assign_regime, build_regime_map
 from internals_safety.models.capture import capture_or_load
 from internals_safety.probes.directions import Direction, difference_in_means
@@ -148,16 +153,16 @@ N_LAYERS_ASSUMED = 32
 
 # Optional instruments a run may declare. The four measurements and I2 always
 # run: they add no forward pass. These do.
-OPTIONAL_INSTRUMENTS = ("decode_lens", "entropy_dynamics", "causal_license")
+OPTIONAL_INSTRUMENTS = (
+    "decode_lens",
+    "entropy_dynamics",
+    "causal_license",
+    "reply_inversion",
+)
 
-# Most layers the causal gate will sweep. Each candidate costs three passes over
-# both prompt sets, so this is a cost cap — and it is expressed as a CAP rather
-# than as a fixed stride, which is what it was first written as and which was
-# wrong: a stride of 4 sweeps 7 layers of a 32-layer model (intended) but exactly
-# ONE layer of a 3-layer model, and on a shallow model that one layer is layer 0,
-# whose `resid_pre` is the raw embedding. Measured 2026-08-06: the whole sweep
-# came back degenerate for that reason. A cap derives the stride from the depth
-# and holds the cost fixed at both ends.
+# FAIL-SAFE DEFAULT — the live value is `causal_license.max_sweep_layers` in
+# conf/measurements.yaml, and every real call passes it. Kept so `Plan` is
+# constructible in a test without a config in hand.
 MAX_CAUSAL_LAYERS = 8
 
 
@@ -180,6 +185,7 @@ class Plan:
     n_capture_positions: int = 2
     prune_layer_percentage: float = 0.20
     n_random_directions: int = 0
+    max_sweep_layers: int = MAX_CAUSAL_LAYERS
 
     @property
     def prompt_forward_passes(self) -> int:
@@ -235,7 +241,7 @@ class Plan:
         if "causal_license" not in self.instruments:
             return 0
         eligible = int(N_LAYERS_ASSUMED * (1.0 - self.prune_layer_percentage))
-        return min(eligible, MAX_CAUSAL_LAYERS) * self.n_capture_positions
+        return min(eligible, self.max_sweep_layers) * self.n_capture_positions
 
     @property
     def causal_forward_passes(self) -> int:
@@ -255,6 +261,17 @@ class Plan:
         null = causal_forward_passes(self.n_random_directions) if self.n_random_directions else 0
         return (real + null) * self.n_prompts
 
+    @property
+    def inversion_forward_passes(self) -> int:
+        """Passes I5 adds — three over the harmful set, model-level.
+
+        Small, and priced anyway: the rule that bit this repo is that a control
+        or instrument the estimate cannot see is a cost nobody approved.
+        """
+        if "reply_inversion" not in self.instruments:
+            return 0
+        return inversion_forward_passes() * self.n_prompts
+
     def describe(self, measurements: MeasurementsConfig) -> str:
         generated_tokens = (
             len(self.families)
@@ -273,6 +290,8 @@ class Plan:
                 f"instruments           {', '.join(self.instruments) or 'none beyond the four measurements + I2'}",
                 f"  extra fwd passes    {self.instrument_forward_passes} (I1 decode lens)",
                 f"  lens readouts       {self.lens_readouts} (I3 entropy dynamics)",
+                f"  inversion passes    {self.inversion_forward_passes} "
+                "(I5 reply inversion, model-level)",
                 f"  causal fwd passes   {self.causal_forward_passes} "
                 f"({self.causal_candidates} candidate directions x 3 passes + 2 baselines, "
                 "model-level not per-family)",
@@ -284,7 +303,9 @@ class Plan:
         )
 
 
-def causal_candidate_cells(batch, prune_layer_percentage: float) -> list[tuple[int, str]]:
+def causal_candidate_cells(
+    batch, prune_layer_percentage: float, max_layers: int = MAX_CAUSAL_LAYERS
+) -> list[tuple[int, str]]:
     """(layer, position) cells the gate sweeps, capped and pruned up front.
 
     The filter discards the last `prune_layer_percentage` of layers anyway, so
@@ -293,15 +314,15 @@ def causal_candidate_cells(batch, prune_layer_percentage: float) -> list[tuple[i
     the cost boundary, and a caller reading only one of them still gets a correct
     answer.
 
-    The stride is DERIVED from the depth so that at most `MAX_CAUSAL_LAYERS` are
-    swept, rather than fixed. A fixed stride is the same cost knob only when the
+    The stride is DERIVED from the depth so that at most `max_layers` are swept,
+    rather than fixed. A fixed stride is the same cost knob only when the
     model has the depth it was chosen for; at 3 layers it selected layer 0 alone,
     whose `resid_pre` is the raw embedding before any computation.
     """
     eligible = list(batch.layers[: int(len(batch.layers) * (1.0 - prune_layer_percentage))])
     if not eligible:
         return []
-    stride = max(1, -(-len(eligible) // MAX_CAUSAL_LAYERS))
+    stride = max(1, -(-len(eligible) // max_layers))
     return [
         (layer, position)
         for layer in eligible[::stride]
@@ -332,7 +353,9 @@ def run_causal_gate(
     anything by this much worked" are the same observation.
     """
     config = measurements.causal_license
-    cells = causal_candidate_cells(plain_harmful_batch, config.prune_layer_percentage)
+    cells = causal_candidate_cells(
+        plain_harmful_batch, config.prune_layer_percentage, config.max_sweep_layers
+    )
     swept = [
         difference_in_means(plain_harmful_batch, plain_harmless_batch, layer, position)
         for layer, position in cells
@@ -406,6 +429,64 @@ def run_causal_gate(
     )
 
 
+def run_reply_inversion(
+    loaded,
+    plain_harmful_batch,
+    plain_harmless_batch,
+    harmful_prompts: Sequence[str],
+    model_config: ModelConfig,
+    measurements: MeasurementsConfig,
+) -> Reading:
+    """I5 — did the intervention change the model's JUDGMENT, or just behaviour?
+
+    Zhao et al., NeurIPS 2025. Model-level for the same reason the causal gate is:
+    it steers with directions fit on the plain contrast sets, and those do not
+    depend on a rung.
+
+    Their own finding supplies the two directions. They report that at `t_inst`
+    hidden states cluster by intrinsic *harmfulness* and at `t_post-inst` by
+    *behaviour* — exactly our `instruction_final` and `last`. So harmfulness is
+    difference-in-means at the first and refusal at the second. That is an
+    inference from their result, not a procedure copied from them.
+    """
+    config = measurements.causal_license
+    # The last eligible layer under the filter's own prune: late enough that the
+    # residual stream carries the instruction's meaning, early enough that the
+    # prune's argument (near the output the stream is committed to tokens) holds.
+    eligible = plain_harmful_batch.layers[
+        : int(len(plain_harmful_batch.layers) * (1.0 - config.prune_layer_percentage))
+    ]
+    if not eligible:
+        return unmeasured_reading(config, "no layer survives the prune — nothing to steer at")
+    site = eligible[-1]
+
+    harmfulness = difference_in_means(
+        plain_harmful_batch, plain_harmless_batch, site, HARMFULNESS_POSITION
+    )
+    refusal = difference_in_means(plain_harmful_batch, plain_harmless_batch, site, "last")
+    if not viable_directions([harmfulness, refusal]) == [harmfulness, refusal]:
+        return unmeasured_reading(
+            config,
+            "the harmfulness or refusal direction is degenerate at the steering "
+            "site — the classes coincide there, so nothing can be written in",
+        )
+
+    result = measure_reply_inversion(
+        loaded,
+        harmful_prompts,
+        harmfulness=harmfulness,
+        refusal=refusal,
+        coefficient=config.addition_coefficient,
+        layer=site,
+        batch_size=model_config.capture_batch_size,
+    )
+    # No control passed: the matched-norm random direction has to be steered
+    # through the SAME inversion prompt to be comparable, which is a second
+    # measurement rather than a reuse of the causal gate's null. Filed, not
+    # faked — so this reads non-reportable and names the reason.
+    return inversion_reading(result)
+
+
 def build_plan(
     model_config: ModelConfig,
     families: Sequence[str],
@@ -414,6 +495,7 @@ def build_plan(
     instruments: Sequence[str] = (),
     prune_layer_percentage: float = 0.20,
     n_random_directions: int = 0,
+    max_sweep_layers: int = MAX_CAUSAL_LAYERS,
 ) -> Plan:
     return Plan(
         model=model_config.name,
@@ -425,6 +507,7 @@ def build_plan(
         n_capture_positions=len(model_config.capture.positions),
         prune_layer_percentage=prune_layer_percentage,
         n_random_directions=n_random_directions,
+        max_sweep_layers=max_sweep_layers,
     )
 
 
@@ -526,6 +609,11 @@ def run_family(
         [item.ciphertext for item in encoded_harmful],
         [item.ciphertext for item in encoded_harmless],
         seed=measurements.probes.seed,
+        ngram_range=(
+            measurements.controls.black_box_ngram_min,
+            measurements.controls.black_box_ngram_max,
+        ),
+        max_features=measurements.controls.black_box_max_features,
     )
     length_margin = length_null.margin(curve.observed_max_transfer_auroc)
     beats_length_null = length_null.beats_null(
@@ -666,7 +754,9 @@ def run_family(
             "plain_auroc": black_box.plain_auroc,
             "encoded_auroc": black_box.encoded_auroc,
             "surface_loss": black_box.surface_loss,
-            "hides_content_from_the_surface": black_box.hides_content_from_the_surface(),
+            "hides_content_from_the_surface": black_box.hides_content_from_the_surface(
+                measurements.controls.black_box_min_surface_loss
+            ),
             "observed_max_transfer_auroc": curve.observed_max_transfer_auroc,
             "margin": black_box.margin(curve.observed_max_transfer_auroc),
             "beats_black_box_baseline": black_box.beats_baseline(
@@ -713,6 +803,9 @@ def run_family(
         responses=[record.response for record in ability_records],
         ciphertexts=[record.ciphertext for record in ability_records],
         config=measurements.ability,
+        # ONE bin count for every length-matched claim in the repo — the same
+        # value the probe layer's matched permutation null uses.
+        n_bins=measurements.probes.length_strata_bins,
     )
     readings = [
         # P3 comes from the control's length-matched arm, NOT from the shared
@@ -854,6 +947,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         allow_cpu=args.allow_cpu, instruments=instruments,
         prune_layer_percentage=measurements.causal_license.prune_layer_percentage,
         n_random_directions=measurements.causal_license.n_random_directions,
+        max_sweep_layers=measurements.causal_license.max_sweep_layers,
     )
     print(plan.describe(measurements))
     if args.dry_run:
@@ -897,6 +991,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     # them. Running it per rung would repeat an identical computation and invite
     # the reading that a rung has its own causally-licensed direction.
     causal_readings: list = []
+    if "reply_inversion" in instruments:
+        causal_readings.append(
+            run_reply_inversion(
+                loaded,
+                plain_harmful_batch,
+                plain_harmless_batch,
+                [prompt.text for prompt in harmful],
+                model_config,
+                measurements,
+            )
+        )
     if "causal_license" in instruments:
         causal_readings.append(
             run_causal_gate(

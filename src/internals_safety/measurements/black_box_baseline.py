@@ -48,6 +48,7 @@ from sklearn.pipeline import make_pipeline
 # Character n-grams rather than words: most rungs destroy word boundaries
 # (base64, hex, zero_width), so a word tokenizer would see one long token and the
 # baseline would be a strawman on exactly the rungs that matter most.
+# FAIL-SAFE DEFAULT — live value is `controls.black_box_ngram_{min,max}`.
 NGRAM_RANGE = (2, 5)
 # ⚠️ TF-IDF l2-normalises by default, so this baseline is BLIND TO LENGTH by
 # construction — a doubled document has the same normalised vector. That is why
@@ -60,6 +61,7 @@ NGRAM_RANGE = (2, 5)
 # Capped so the baseline cannot simply memorise each document. Without a cap,
 # n-gram counts on ~200 texts exceed the sample size by orders of magnitude and
 # cross-validation would be measuring a nearest-neighbour lookup.
+# FAIL-SAFE DEFAULT — live value is `controls.black_box_max_features`.
 MAX_FEATURES = 5000
 
 
@@ -68,6 +70,8 @@ def surface_auroc(
     negative_texts: Sequence[str],
     seed: int = 0,
     folds: int = 5,
+    ngram_range: tuple[int, int] = NGRAM_RANGE,
+    max_features: int = MAX_FEATURES,
 ) -> float:
     """Cross-validated AUROC of a character-n-gram classifier on raw text.
 
@@ -95,7 +99,7 @@ def surface_auroc(
         return float("nan")
 
     model = make_pipeline(
-        TfidfVectorizer(analyzer="char", ngram_range=NGRAM_RANGE, max_features=MAX_FEATURES),
+        TfidfVectorizer(analyzer="char", ngram_range=ngram_range, max_features=max_features),
         LogisticRegression(max_iter=2000),
     )
     splits = min(folds, smallest_class)
@@ -163,7 +167,7 @@ class BlackBoxBaseline:
         """
         return self.plain_auroc - self.encoded_auroc
 
-    def hides_content_from_the_surface(self, min_loss: float = 0.05) -> bool:
+    def hides_content_from_the_surface(self, min_loss: float) -> bool:
         """Whether this rung meaningfully removed content from the surface.
 
         The screen `instrument_layer.md` states in words — "a deployment probe
@@ -192,6 +196,8 @@ def measure_black_box_baseline(
     encoded_positive: Sequence[str],
     encoded_negative: Sequence[str],
     seed: int = 0,
+    ngram_range: tuple[int, int] = NGRAM_RANGE,
+    max_features: int = MAX_FEATURES,
 ) -> BlackBoxBaseline:
     """Compute the surface baseline from the exact texts a run sent to the model.
 
@@ -202,8 +208,14 @@ def measure_black_box_baseline(
     """
     return BlackBoxBaseline(
         family=family,
-        plain_auroc=surface_auroc(plain_positive, plain_negative, seed=seed),
-        encoded_auroc=surface_auroc(encoded_positive, encoded_negative, seed=seed),
+        plain_auroc=surface_auroc(
+            plain_positive, plain_negative, seed=seed,
+            ngram_range=ngram_range, max_features=max_features,
+        ),
+        encoded_auroc=surface_auroc(
+            encoded_positive, encoded_negative, seed=seed,
+            ngram_range=ngram_range, max_features=max_features,
+        ),
         n_positive=len(plain_positive),
         n_negative=len(plain_negative),
     )

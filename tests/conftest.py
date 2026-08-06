@@ -41,6 +41,12 @@ def tiny_tokenizer() -> PreTrainedTokenizerFast:
         "system": 4,
         "user": 5,
         "assistant": 6,
+        # I5's two answer tokens. Added 2026-08-06: without them both map to
+        # [UNK], and `reply_inversion.resolve_answer_tokens` correctly refuses to
+        # score a judgment it cannot distinguish. Appended with fresh ids so
+        # every existing id is unchanged, and still inside `vocab_size=16`.
+        "Certainly": 7,
+        "No": 8,
     }
     backend = Tokenizer(models.WordLevel(vocab=vocab, unk_token="[UNK]"))
     backend.pre_tokenizer = pre_tokenizers.WhitespaceSplit()

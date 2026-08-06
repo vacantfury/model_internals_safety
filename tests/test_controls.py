@@ -11,13 +11,23 @@ import numpy as np
 import pytest
 import torch
 
-from internals_safety.config import CausalLicenseConfig, ProbeConfig
+from internals_safety.config import (
+    CausalLicenseConfig,
+    ProbeConfig,
+    load_measurements_config,
+)
 from internals_safety.measurements.causal_license import (
     CausalEvidence,
     matched_norm_random_direction,
     random_direction_null,
 )
 from internals_safety.probes.linear import control_task_selectivity
+
+
+# The live cuts, read from conf/measurements.yaml rather than defaulted in a
+# signature — the house rule is that tunables live in YAML, and passing them
+# explicitly here is what makes every call site say which cut it used.
+CONTROLS = load_measurements_config().controls
 
 
 def evidence(bypass: float, layer: int = 4) -> CausalEvidence:
@@ -181,7 +191,7 @@ class TestBlackBoxBaseline:
 
         baseline = measure_black_box_baseline("x", self.HARMFUL, [], self.HARMFUL, [])
         assert not baseline.beats_baseline(0.99, min_margin=0.05)
-        assert not baseline.hides_content_from_the_surface()
+        assert not baseline.hides_content_from_the_surface(CONTROLS.black_box_min_surface_loss)
 
     def test_the_margin_is_taken_against_the_encoded_baseline(self):
         from internals_safety.measurements.black_box_baseline import BlackBoxBaseline
@@ -200,8 +210,8 @@ class TestBlackBoxBaseline:
 
         hiding = BlackBoxBaseline("base32", 0.615, 0.514, 100, 100)
         preserving = BlackBoxBaseline("rot13", 0.615, 0.615, 100, 100)
-        assert hiding.hides_content_from_the_surface()
-        assert not preserving.hides_content_from_the_surface()
+        assert hiding.hides_content_from_the_surface(CONTROLS.black_box_min_surface_loss)
+        assert not preserving.hides_content_from_the_surface(CONTROLS.black_box_min_surface_loss)
         assert hiding.surface_loss > preserving.surface_loss
 
 
@@ -251,7 +261,7 @@ class TestLexicalDecorrelation:
         vocabulary_reader = self.result([0.472, 0.486, 0.621, 0.635, 0.748], fpr=0.36)
         assert vocabulary_reader.pooled_auroc == pytest.approx(0.5924, abs=0.03)
         assert vocabulary_reader.reads_vocabulary
-        assert not vocabulary_reader.clears()
+        assert not vocabulary_reader.clears(CONTROLS.lexical_min_margin, CONTROLS.vocabulary_reader_floor)
 
     def test_the_floor_is_derived_not_chosen(self):
         """A 0.60 cut was written first, by taste, and measurement put the
@@ -261,19 +271,19 @@ class TestLexicalDecorrelation:
         assert self.result([self.FLOOR]).reads_vocabulary
 
     def test_an_intent_reader_clears(self):
-        assert self.result([0.85, 0.80, 0.90]).clears()
+        assert self.result([0.85, 0.80, 0.90]).clears(CONTROLS.lexical_min_margin, CONTROLS.vocabulary_reader_floor)
 
     def test_the_ambiguous_band_neither_passes_nor_clearly_fails(self):
         """floor..floor+margin is recorded as withheld-and-ambiguous rather than
         rounded in either direction."""
         ambiguous = self.result([self.FLOOR + 0.05])
         assert not ambiguous.reads_vocabulary
-        assert not ambiguous.clears()
+        assert not ambiguous.clears(CONTROLS.lexical_min_margin, CONTROLS.vocabulary_reader_floor)
 
     def test_no_pairs_fails_closed(self):
         empty = self.result([])
         assert empty.pooled_auroc != empty.pooled_auroc  # NaN
-        assert empty.reads_vocabulary and not empty.clears()
+        assert empty.reads_vocabulary and not empty.clears(CONTROLS.lexical_min_margin, CONTROLS.vocabulary_reader_floor)
 
     def test_pooling_is_weighted_so_a_loose_family_cannot_mask_a_tight_one(self):
         from internals_safety.measurements.lexical_decorrelation import (
