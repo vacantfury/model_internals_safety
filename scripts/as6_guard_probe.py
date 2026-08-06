@@ -339,11 +339,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--allow-dirty", action="store_true")
     parser.add_argument("--allow-cpu", action="store_true")
     parser.add_argument("--refresh-activations", action="store_true", help="ignore the capture cache")
+    parser.add_argument(
+        "--strata-bins",
+        type=int,
+        default=None,
+        help="length strata for the matched null (default: conf/measurements.yaml). "
+        "Re-running with 5 / 10 / 20 is the stability check the config names as this "
+        "knob's tuning path; with the capture cache warm it costs no forward passes.",
+    )
     parser.add_argument("--outputs-dir", default=None)
     args = parser.parse_args(argv)
 
     config = load_guard_config(args.guard)
     measurements = load_measurements_config()
+    if args.strata_bins is not None:
+        measurements = measurements.model_copy(
+            update={
+                "probes": measurements.probes.model_copy(
+                    update={"length_strata_bins": args.strata_bins}
+                )
+            }
+        )
     ladder = load_ladder()
     families = list(args.families) if args.families else list(ladder)
     unknown = [family for family in families if family not in ladder]
