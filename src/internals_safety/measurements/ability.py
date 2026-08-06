@@ -22,6 +22,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from internals_safety.config import AbilityConfig
+from internals_safety.measurements.contract import Kind, Reading
 from internals_safety.encodings.base import EncodedPrompt
 from internals_safety.encodings.recovery import RecoveryScore, score_recovery
 from internals_safety.models.generate import generate
@@ -106,3 +107,65 @@ def summarize_by_family(
         for family, group in grouped.items()
     ]
     return sorted(summaries, key=lambda summary: (summary.recovery_rate, summary.mean_similarity))
+
+
+# P1 — checked across the roster by `assert_distinct_questions`.
+QUESTION = "can the model recover the plaintext when it is explicitly asked to decode"
+KIND: Kind = "correlational"
+
+
+def reading(
+    summary: FamilyAbility,
+    *,
+    control_reading: float | None = None,
+    control_margin: float | None = None,
+    length_null_margin: float | None = None,
+    detail: dict | None = None,
+) -> Reading:
+    """Measurement #1's condition-level verdict.
+
+    **⚠️ This measurement has NO negative control, and the contract is how that
+    became visible rather than a matter of remembering.** Every other instrument
+    on the roster has one — deployment reads the format-decorrelation 2x2,
+    decode_lens scores against a deranged plaintext, trajectory and entropy read
+    against the ability-0 floor. Measurement #1 scores a response against its own
+    plaintext and nothing else, so a scorer firing on incidental overlap (shared
+    stopwords, echoed fragments of the instruction, boilerplate) is
+    indistinguishable from a decode.
+
+    The control that would close it is cheap and offline: score each response
+    against a MISMATCHED plaintext from the same condition, exactly as
+    `decode_lens.derange` does, and require the real-plaintext score to beat it.
+    Filed rather than built here, because building it inside a wiring change
+    would hide the finding.
+
+    Until then `control_reading` defaults to None and every ability reading is
+    non-reportable, naming "no negative control was run (P2)" as the reason.
+    That is the correct state, not a bug: the numbers stay usable as run output
+    and are barred from a paper table until the control exists.
+    """
+    return Reading(
+        instrument="ability",
+        kind=KIND,
+        value=summary.recovery_rate,
+        operating_point=(
+            "fraction of prompts recovered under the three-route rule (exact/contains "
+            "short-circuit, similarity >= cut with a content-overlap veto, order-blind "
+            "overlap branch), cuts in conf/measurements.yaml"
+        ),
+        # Direct behavioural read: there is no null to fail, only an empty
+        # condition to be unable to read.
+        licensed=None if summary.n == 0 else True,
+        control_reading=control_reading,
+        control_margin=control_margin,
+        length_null_margin=length_null_margin,
+        # No layer or position is selected — nothing is searched over.
+        selection_inside_null=True,
+        detail={
+            "family": summary.family,
+            "n": summary.n,
+            "mean_similarity": summary.mean_similarity,
+            "echo_rate": summary.echo_rate,
+            **(detail or {}),
+        },
+    )

@@ -228,3 +228,82 @@ class TestGatingPerPromptAxes:
 
     def test_an_empty_axis_stays_empty(self):
         assert gate_per_prompt(self.reading(licensed=None), []) == []
+
+
+class TestTheFourOriginalMeasurements:
+    """Step 5 of §3.4 — the contract becomes load-bearing, not just available.
+
+    These four were shipped before the contract existed and produced every
+    number both papers currently carry. Wiring them is what makes a run record
+    say what was withheld and why.
+    """
+
+    def test_the_whole_roster_of_seven_answers_distinct_questions(self):
+        """P1 over every instrument that exists, not just the new ones."""
+        from internals_safety.measurements import ability, behavior, deployment, recognition
+
+        modules = [ability, behavior, deployment, recognition,
+                   decode_lens, trajectory, entropy_dynamics]
+        assert_distinct_questions(
+            [RosterEntry(m.__name__.rsplit(".", 1)[-1], m.QUESTION, m.KIND) for m in modules]
+        )
+
+    def test_deployment_carries_the_effect_size_bar_the_regime_assignment_ignores(self):
+        """The band run's defect, made visible.
+
+        `meets_effect_size_bar` has existed on the curve since the licensing
+        rewrite and `assign_regime` never reads it — which is how six rungs
+        licensed at AUROC 0.63-0.68 and were read as decoded. Significance is
+        not sufficiency.
+        """
+        from internals_safety.measurements.deployment import (
+            DeploymentCurve, DeploymentResult, reading as deployment_reading,
+        )
+
+        curve = DeploymentCurve(
+            family="hex",
+            results=[DeploymentResult("hex", 12, "instruction_final", 0.66, 0.52, 0.80)],
+            p_value=0.001,
+        )
+        got = deployment_reading(curve, length_null_margin=0.01)
+        assert got.licensed is True
+        assert got.detail["meets_effect_size_bar"] is False
+        assert got.control_reading == pytest.approx(0.52)
+
+    def test_deployment_without_a_drawn_null_is_unmeasured_not_negative(self):
+        from internals_safety.measurements.deployment import DeploymentCurve, reading as dep
+
+        assert dep(DeploymentCurve(family="hex", results=[])).licensed is None
+
+    def test_ability_and_behavior_are_withheld_for_want_of_a_negative_control(self):
+        """**The finding this wiring produced.**
+
+        Neither measurement has a negative control. Ability scores a response
+        against its own plaintext and nothing else; behaviour never calls the
+        judges on the benign-encoded arm. Both are now non-reportable and say
+        so, rather than being quietly quotable.
+        """
+        from internals_safety.measurements.ability import FamilyAbility, reading as ability_reading
+        from internals_safety.measurements.behavior import FamilyBehavior, reading as behavior_reading
+
+        got = ability_reading(FamilyAbility("hex", 100, 0.72, 0.79, 0.02), length_null_margin=0.2)
+        assert not got.reportable
+        assert any("no negative control" in why for why in got.why_not_reportable())
+
+        got = behavior_reading(FamilyBehavior("hex", 100, 0.3, 0.4, 0.02, 0.0), length_null_margin=0.2)
+        assert not got.reportable
+        assert any("no negative control" in why for why in got.why_not_reportable())
+
+    def test_the_binary_judge_caveat_travels_with_the_asr_number(self):
+        """A caveat in a doc does not reach a number; one in the operating point
+        does."""
+        from internals_safety.measurements.behavior import FamilyBehavior, reading as behavior_reading
+
+        got = behavior_reading(FamilyBehavior("hex", 100, 0.3, 0.4, 0.02, 0.0))
+        assert "BINARY" in got.operating_point and "StrongREJECT" in got.operating_point
+        assert got.detail["binary_judge_caveat"] == "strongreject_2402.10260"
+
+    def test_an_empty_condition_reads_unmeasured_rather_than_zero(self):
+        from internals_safety.measurements.ability import FamilyAbility, reading as ability_reading
+
+        assert ability_reading(FamilyAbility("hex", 0, 0.0, 0.0, 0.0)).licensed is None

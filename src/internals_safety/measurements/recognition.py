@@ -26,6 +26,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from internals_safety.config import ProbeConfig
+from internals_safety.measurements.contract import Kind, Reading
 from internals_safety.models.capture import ActivationBatch
 from internals_safety.probes.directions import Direction, sweep_directions
 from internals_safety.probes.linear import (
@@ -216,4 +217,54 @@ def read_recognition_per_prompt(
         # was a reporting artefact.
         harmful=[bool(score > threshold) if licensed else None for score in positive_scores],
         harmless=[bool(score > threshold) if licensed else None for score in negative_scores],
+    )
+
+
+# P1 — checked across the roster by `assert_distinct_questions`.
+QUESTION = "is harmfulness linearly represented at the instruction-final position under this encoding"
+KIND: Kind = "correlational"
+
+
+def reading(
+    result: RecognitionResult,
+    *,
+    control_reading: float | None = None,
+    control_margin: float | None = None,
+    length_null_margin: float | None = None,
+    detail: dict | None = None,
+) -> Reading:
+    """Measurement #3's condition-level verdict.
+
+    **P2 does NOT come free here, and the contract is what makes that visible.**
+    Unlike deployment, this probe is fit WITHIN the encoded condition, so there
+    is no transfer control riding along — `control_reading` has to be supplied
+    from outside (the ability-0 rungs are the natural negative control: whatever
+    this reads where nothing was decoded is the instrument's surface-feature
+    floor). Passing nothing leaves the reading non-reportable rather than
+    quietly reportable, which is the intended behaviour.
+
+    P7 holds for the same reason it does on deployment: the max AUROC is tested
+    against a null of maxima, so the layer search is inside the null.
+    """
+    observed = result.observed_max_auroc
+    return Reading(
+        instrument="recognition",
+        kind=KIND,
+        value=observed,
+        operating_point=(
+            "max AUROC over the harmfulness curve at the instruction-final position, "
+            "licensed by a permutation null of maxima under shuffled labels"
+        ),
+        licensed=None if observed != observed else result.recognized,
+        control_reading=control_reading,
+        control_margin=control_margin,
+        length_null_margin=length_null_margin,
+        selection_inside_null=True,
+        detail={
+            "p_value": result.p_value,
+            "alpha": result.alpha,
+            "meets_effect_size_bar": result.meets_effect_size_bar,
+            "effect_size_threshold": result.threshold,
+            **(detail or {}),
+        },
     )
