@@ -345,72 +345,39 @@ directly on claims both papers intend to make:
   and the analysis keeps the argmax cell. §4.2's displacement hypothesis is
   untestable against it.
 
-### 6.4 Ranked shortlist, with method imports and the control each brings
+### 6.4 The roster, the sequencing, and the literature map
 
-Ordered by evidence-per-unit-build, not by novelty.
+**Superseded and moved.** The ranked instrument roster that stood here — with each
+instrument's question, method imports, validation gate, cost and per-paper use —
+plus the build sequence and the annotated literature map, is now canonical in
+**`text_docs/shared/instrument_build_plan.md`** (written 2026-08-05 after a
+comprehensive literature sweep). It is a sibling of this file: **this file is what
+the instrument layer has been FOUND to do; the build plan is what it WILL be.**
 
-**1. Logit lens / token-level decode readout** *(already §4.1; unchanged as the
-top item)*. Method import: Fang & Marks 2512.01222. Two additions found in this
-search: **LogitLens4LLMs (arXiv 2503.11667)** ports logit-lens tooling to modern
-architectures (LLaMA-family included), which removes most of the plumbing risk;
-and **TriLens (arXiv 2606.01033)** uses *per-layer logit-lens entropy* rather than
-top-token identity, which is a strictly cheaper readout that needs no plaintext
-alignment. Control: must read ~0 on `tag_block`.
+Keeping a second copy here would be dual truth, so this section is a pointer. Two
+results from that sweep belong here as findings and are recorded above and below
+rather than only in the plan:
 
-**2. Layer trajectory instead of best-cell argmax.** Import: **arXiv 2605.02958,
-"Tracing the Dynamics of Refusal"** — argues directly that static terminal/pooled
-directions miss how refusal is *constructed across layers*, and gets more robust
-jailbreak detection from the trajectory. We already compute the full (layer x
-position) curve on every run and now persist it (`eaace85`), so this converts an
-existing discard into a measurement. **Near-zero build cost; do it regardless of
-what else is adopted.** It is also the first real test of §4.2.
-
-**3. Entropy dynamics — an unsupervised, label-free signal class.** Import:
-**arXiv 2606.25182, "What Intermediate Layers Know: Detecting Jailbreaks from
-Entropy Dynamics"**. Load-bearing property: it trains no classifier on our labels,
-so **the length confound that broke the supervised probe cannot enter it by the
-same route**. That makes it a genuine independent instrument under rule 6.2(1),
-not another read-out variant.
-
-**4. SAE features — the largest new capability, and it is off-the-shelf for BOTH
-our models.** **Llama Scope (arXiv 2410.20526)**: 256 TopK SAEs, every layer and
-sublayer, 32K/128K features. **Qwen-Scope (arXiv 2605.11887)** for the Qwen side.
-No SAE training needed. This is the instrument that can separate "harm feature"
-from "surface-anomaly feature" and therefore the one with a real chance at §5.
-  - **VERIFIED CAVEAT, must not be skipped:** Llama Scope is trained on
-    **Llama-3.1-8B-*Base***, and our target is **Instruct**. The paper explicitly
-    studies generalisation to fine-tuned models, so this is a transfer question
-    to measure, not a blocker — but any SAE result must first show the SAE
-    reconstructs Instruct activations acceptably, or the finding is about the
-    wrong model.
-  - *AS-6 inheritance, and it is a gift:* **Llama Guard 3 8B is itself a
-    fine-tune of Llama-3.1-8B**, so the same base-model SAEs are a candidate
-    instrument for the guard-side paper — same transfer question, one shared
-    validation. Test it once, both papers use it.
-
-**5. Causal methods — LAST, and only after 1-4 have established what to intervene
-on.** Needed for Move C. Adopt with the field's own warnings wired in from the
-start: **arXiv 2606.27510 ("The Curse of Multiple Mediators")** on hidden
-interaction effects in activation patching, and **arXiv 2607.10226 ("When Are
-Sparse Feature Interventions Actually Localized?")** on apparent SAE-steering
-success arising from weak or non-localized interventions. Mechanism reference for
-steering refusal specifically: **arXiv 2604.08524**. Related and worth reading for
-the repo's unlearning half: **arXiv 2605.24614**, activation patching as an audit
-of unlearning *depth*.
-
-**Explicitly NOT adopted:** further supervised linear-probe variants (nonlinear
-probes, alternative classifiers, alternative pooling). They fail rule 6.2(1) —
-same confounds, new hyperparameters, no new question.
-
-### 6.5 The scheduling fact that decides sequencing
-
-**Instruments 1-4 all read the same forward pass.** Lens readout, layer
-trajectory, entropy dynamics and SAE encoding are all functions of the residual
-stream on the same inputs; none needs generation, none needs a judge call, none
-needs training. Built together they cost **one** forward-pass-only run per model;
-built one at a time they cost four.
-
-So the sequencing answer is not "more lit search, then experiments" and not
-"experiments now". It is: **build 1-4 against the cached data and the offline
-controls, then spend one run.** The capture spine change (per-token readout) is
-shared by all four and is the single real engineering item.
+- **The length confound is established literature, not just our observation.**
+  arXiv 2605.00269 finds white-box OOD detection scores — naming CED, RAUQ and
+  **WildGuard confidence** — structurally confounded by sequence length at
+  |r| >= 0.61, collapsing to chance (~0.50) under length-matched evaluation. Our
+  `measurements/length_null.py` and the length-matched permutation strata
+  (`a1ae5f7`) are the same control, reached independently. §2's licensing-vs-
+  reading distinction and this are the same lesson from two directions.
+- **Our lexical-transparency reclassification of `reverse_words` (§3.2) has a
+  published name and a published consequence.** The same paper formalises a
+  **vocabulary-transparency spectrum** and reports that *trajectory* features —
+  hidden-state evolution across layers — are the pathway that retains signal on
+  covert-intent inputs sharing vocabulary with normal text (0.721 avg AUROC,
+  0.850 on jailbreak), precisely where single-cell scores collapse. Our three
+  sound rungs sit on that side of the spectrum. **This promotes trajectory
+  analysis from a cheap extra to a first-class instrument**, and it costs no new
+  capture because §2.2's re-read already persists the full curves.
+- **Our two capture positions have an established interpretation.** arXiv
+  2507.11878 studies exactly `t_inst` (last instruction token) and `t_post-inst`
+  (last sequence token) — our `instruction_final` and `last` — and finds the first
+  clusters by the instruction's intrinsic **harmfulness** while the second
+  clusters by the model's **behaviour**. That is a free interpretation of
+  measurements this repo already takes, and it is why recognition (read at
+  `instruction_final`) and behaviour are not redundant.
