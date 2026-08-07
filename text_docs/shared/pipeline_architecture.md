@@ -347,3 +347,119 @@ what stops it being reopened by the next session.
    *computed* from `reportable_only` + `withheld_summary` instead of curated by
    hand. Deferred to step 3, because founding a schema home before the spine
    exists is a home for one caller.
+
+---
+
+## 5. The layout review — three questions, settled 2026-08-07
+
+**Owner ask: "everything built? should we review the structure?"** Recorded here
+rather than in a new document, because "how the code is ARRANGED" is what this
+file already is — a fourth `text_docs/shared/` sibling on the same subject would
+be the exact defect the review was checking for.
+
+Scope was three questions: the `src/` namespace cut (TODO 23, whose trigger had
+fired on 2026-08-05 and gone unanswered), the `conf/` overlap that presets
+introduced the same morning, and the `scripts/` kinds that writing `submit.py`
+exposed.
+
+### 5.1 `src/` — NO CHANGE, and the answer came from reading, not arguing
+
+TODO 23 asked "(a) read what the sibling repos actually do before adopting
+anything — the convention is theirs, and guessing it would fork it."
+
+Read, 2026-08-07:
+
+| repo | `src/` cut by | `text_docs/` cut by | papers hosted |
+|---|---|---|---|
+| `llm_guardrail_security` | ROLE — `attacks/ defense/ evaluation/ analysis/ experiment/ prompt_transformations/ utils/` | PAPER — `autoattack_defense/ bestofn_attack/ bestofn_defense/ imgaug_defense/ judge_reliability/ shared/` | **four** |
+| `llm_agent_security` | ROLE — `attacks/ defenses/ scoring/ analysis/ harness/ utils/` | PAPER — `agent_injection/ shared/` | one |
+| this repo | ROLE — `measurements/ probes/ models/ encodings/ judges/ guards/` | PAPER — `as5/ as6/ shared/` | two |
+
+**The family convention is role-cut code and paper-cut docs, and the guardrail
+repo demonstrates it at four papers.** Neither sibling has ever namespaced `src/`
+by paper. This repo already matched, so the "deferred layout decision" that TODO
+23 said was now live resolves to *no change is owed* — `probes/`,
+`measurements/`, `models/` are shared instrument serving both papers, and only
+the object-of-study layer (`guards/`) is paper-specific.
+
+**Recorded so it is not re-litigated.** The question had been open since
+2026-08-05 and would have been re-asked by the next session that added an AS-6
+module. The proposal stub's "Namespace note" — *adopt the family's namespace
+convention when AS-6 first lands code or configs* — is now answered in place.
+
+**One residual was real and is fixed:** the AS-6 proposal had lived inside
+`text_docs/as5/proposal.md` since registration, flagged-not-fixed because the
+as5 tree was another session's live area. Moved to `text_docs/as6/proposal.md`
+with a pointer left behind.
+
+### 5.2 `conf/` — `pilot.yaml` renamed to `corpus.yaml`
+
+The presets landed on the morning of 2026-08-07 and immediately raised a
+one-home question: `conf/experiment/*.yaml` declares `n_prompts` and `families`,
+and so does `conf/pilot.yaml`.
+
+**Traced rather than assumed.** `pilot.yaml` holds five fields and they do two
+different jobs:
+
+- `harmful_set` / `harmless_set` — **the contrast pair itself**, read by every
+  entrypoint of both papers, overridable by nothing. JBB's benign set is
+  theme-matched to its harmful set, which is the entire reason it is the negative
+  class rather than the larger OR-Bench set; a preset must not be able to break
+  that pairing.
+- `n_prompts` / `families` / `models` — **defaults for a bare invocation**, which
+  a preset supersedes.
+
+So it is not a second home. "Which sets are the contrast pair", "what does a bare
+run do", and "what does `causal_sweep` do" are three different facts with one
+home each; defaults-plus-declaration is a layering, not duplication.
+
+**What WAS a defect is the name.** `scripts/as6_guard_probe.py` — not the pilot,
+and the other paper — called `load_pilot_config()` to find out which prompt sets
+form the contrast pair. The file is read by every run of both papers and every
+future phase; `pilot` was a fossil of phase 0 that had become actively
+misleading about ownership.
+
+Renamed `conf/pilot.yaml` → `conf/corpus.yaml`, `PilotConfig` → `CorpusConfig`,
+`load_pilot_config` → `load_corpus_config`, and the run record's `config.pilot`
+→ `config.corpus`. **`SCHEMA_VERSION` bumped 1 → 2** for that last one: nothing
+in the repo reads the key, so no reader broke — which is precisely why the bump
+was worth making rather than skipping, since a field renamed silently under a
+version that did not move is how a version field stops being trustworthy, and
+that only has to happen once.
+
+### 5.3 `scripts/` — NOT split, and a silent trap closed instead
+
+Eleven scripts, three genuine kinds, no stated distinction:
+
+- **entrypoints** (launch a run, need a GPU) — `phase0_regime_map`,
+  `as6_guard_probe`, `sae_pregate`
+- **analysis** (re-read a prior run, CPU-only) — `rescore_ability`,
+  `rebaseline_pilot`, `recalibrate_deployment`, `relicense_probes`,
+  `sweep_operating_point`
+- **tooling** (no experiment at all) — `build_status`, `cost_model`, `submit`
+
+A `scripts/entrypoints/` + `scripts/analysis/` split was considered and
+**declined**: eleven files do not need a directory, and the launchable set is
+already named — `config.Entrypoint` is a `Literal` that `submit.py` resolves
+against, so the one distinction that carries consequences is typed and tested.
+This is §3.2's judgment applied again: *a directory cannot check an invariant
+and a test can.*
+
+**But the investigation found a real trap and it is now closed.**
+`completion.reachable_modules` globbed `scripts/*.py` **non-recursively**. The
+day anyone puts a script in a subdirectory, every module reachable only from
+there silently becomes an orphan — `test_no_module_is_an_orphan_except_the_declared_ones`
+would report wired modules as unwired, and `build_status.py` would report built
+instruments as unbuilt. Both point the reader at the wrong thing and neither
+raises. Changed to `rglob`, so the walk no longer depends on a directory staying
+flat — which matters whether or not the split is ever made.
+
+### 5.4 What this review did NOT find
+
+Stated because a review that reports only findings reads as if everything it
+touched was broken. `text_docs/{as5,as6,shared}/` is correct and matches the
+family. `conf/` splits by kind (`models/`, `guards/`, `experiment/`, plus one
+file per concern) exactly as both siblings do. `measurements/` needed no split —
+that was settled and struck in §3.2 on measured evidence. The instrument
+contract, the spine, and the write-side plug-in point are all where §3.1, §3.3
+and §3.5 put them.

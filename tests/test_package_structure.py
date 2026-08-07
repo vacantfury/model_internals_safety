@@ -16,6 +16,7 @@ this file can, which is why the proposal was struck in favour of the test.
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
@@ -139,6 +140,53 @@ DECLARED_ORPHANS = {
 # gate is approving. `Plan.describe` costs them separately — extra forward passes
 # for I1, lens readouts for I3 — so a --dry-run states the delta before anyone
 # approves a run.
+
+
+def test_code_is_cut_by_ROLE_never_by_PAPER():
+    """The family convention, settled 2026-08-07 by reading both siblings.
+
+    `llm_guardrail_security` hosts FOUR papers and cuts `src/` by role
+    (`attacks/ defense/ evaluation/ analysis/`), cutting `text_docs/` by paper.
+    `llm_agent_security` does the same. So the convention is **role-cut code,
+    paper-cut docs** — and this repo already matched it, which is why TODO 23's
+    "deferred layout decision" resolved to no change (`pipeline_architecture.md`
+    §5.1).
+
+    Pinned as a test because the question was open for two days and would have
+    been re-asked by the next session adding an AS-6 module. A paper-named
+    package under `src/` is the specific thing that must not appear: `guards/`
+    is AS-6's object of study, which is a ROLE, and stays.
+    """
+    package = Path(measurements.__file__).parent.parent
+    paper_shaped = [
+        directory.name
+        for directory in package.iterdir()
+        if directory.is_dir() and re.fullmatch(r"as\d+", directory.name)
+    ]
+    assert not paper_shaped, (
+        f"paper-named package(s) {paper_shaped} under src/. The family cuts CODE by role "
+        "and DOCS by paper — put paper-specific prose in text_docs/<paper>/, and name a "
+        "code package for what it does (guards/ is AS-6's object of study, not 'as6')."
+    )
+
+
+def test_the_orphan_walk_survives_a_scripts_subdirectory():
+    """`rglob`, not `glob` — closing a trap found in the 2026-08-07 review.
+
+    With a flat glob, moving any script into `scripts/<subdir>/` silently turns
+    every module reachable only from there into an orphan: this file's own
+    orphan guard reports wired modules as unwired and `build_status.py` reports
+    built instruments as unbuilt. Neither raises, and both point at the wrong
+    thing. Asserted here so the walk cannot quietly go flat again.
+    """
+    import inspect
+
+    from internals_safety.completion import reachable_modules as walk
+
+    assert "rglob" in inspect.getsource(walk), (
+        "reachable_modules no longer walks scripts/ recursively; a script in a "
+        "subdirectory would make its imports invisible to the orphan guard"
+    )
 
 
 def test_no_module_is_an_orphan_except_the_declared_ones():

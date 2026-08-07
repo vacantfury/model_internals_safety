@@ -294,13 +294,13 @@ class TestNPromptsFitsTheCorpus:
 
     @pytest.mark.parametrize("name", PRESETS)
     def test_it_does_not_ask_for_more_prompts_than_exist(self, name):
-        from internals_safety.config import load_pilot_config
+        from internals_safety.config import load_corpus_config
         from internals_safety.paths import DATA_DIR
 
         preset = load_preset(name)
         if preset.n_prompts is None:
             return
-        pilot = load_pilot_config()
+        pilot = load_corpus_config()
         for prompt_set_name in (pilot.harmful_set, pilot.harmless_set):
             path = DATA_DIR / prompt_set_name
             if not path.exists():

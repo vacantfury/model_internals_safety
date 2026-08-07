@@ -1,6 +1,18 @@
-# Phase-0 regime-map pilot — the corpus and scope of `scripts/phase0_regime_map.py`.
-# Instrument knobs live in measurements.yaml; the judge LLM lives in judges.yaml.
-# These are corpus/scope choices for one experiment, so they get their own file.
+# The contrast pair BOTH papers measure against, plus the default run scope.
+# Instrument knobs live in measurements.yaml; the judge LLM lives in judges.yaml;
+# a specific cluster run is declared in conf/experiment/<preset>.yaml.
+#
+# Renamed from `pilot.yaml` 2026-08-07 (structure review). The old name said
+# "one experiment" while the content is what every run of either paper reads —
+# `as6_guard_probe.py` was loading "the pilot config" to find the contrast pair.
+#
+# TWO LAYERS, deliberately:
+#   harmful_set / harmless_set   the contrast pair itself. Declared HERE and
+#                                nowhere else; a preset may not override it.
+#   n_prompts / families / models  DEFAULTS for a bare invocation, which a
+#                                preset supersedes. Not a second home — "what
+#                                does a bare run do" is a different fact from
+#                                "what does causal_sweep do".
 
 # The contrast pair. JailbreakBench ships its benign set as a *theme-matched*
 # counterpart to its harmful set (jbb_defamation <-> benign_defamation, and so

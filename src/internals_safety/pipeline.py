@@ -92,7 +92,7 @@ def load_contrast_sets(
     if len(harmful) != len(harmless):
         raise SystemExit(
             f"contrast sets differ in size ({len(harmful)} vs {len(harmless)}); the probe's "
-            "classes must be matched — see conf/pilot.yaml"
+            "classes must be matched — see conf/corpus.yaml"
         )
     return harmful, harmless
 

@@ -35,7 +35,7 @@ from internals_safety.config import (
     load_judge_config,
     load_measurements_config,
     load_model_config,
-    load_pilot_config,
+    load_corpus_config,
     load_preset,
 )
 from internals_safety.cost import (
@@ -72,10 +72,10 @@ def judge_prices(model: str) -> tuple[float, float]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    pilot = load_pilot_config()
+    corpus = load_corpus_config()
     cost_config = load_cost_config()
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--model", default=None, help=f"conf/models/<name>.yaml; pilot set: {pilot.models}")
+    parser.add_argument("--model", default=None, help=f"conf/models/<name>.yaml; pilot set: {corpus.models}")
     parser.add_argument(
         "--preset",
         default=None,
@@ -90,7 +90,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         choices=sorted(cost_config.hardware),
         help=f"GPU type to cost against (default: {DEFAULT_HARDWARE})",
     )
-    parser.add_argument("--n-prompts", type=int, default=pilot.n_prompts)
+    parser.add_argument("--n-prompts", type=int, default=corpus.n_prompts)
     parser.add_argument("--families", nargs="+", default=None, help="default: every configured rung")
     parser.add_argument(
         "--all-phases",
@@ -123,8 +123,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if unknown:
         raise SystemExit(f"unknown encoding families {unknown}; have {sorted(ladder)}")
 
-    harmful = prompt_set(pilot.harmful_set, limit=args.n_prompts)
-    harmless = prompt_set(pilot.harmless_set, limit=args.n_prompts)
+    harmful = prompt_set(corpus.harmful_set, limit=args.n_prompts)
+    harmless = prompt_set(corpus.harmless_set, limit=args.n_prompts)
 
     print(f"tokenising {model_config.hf_id} ...", flush=True)
     from transformers import AutoTokenizer
@@ -186,7 +186,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print()
     print(format_estimate(phase0, f"PHASE 0 — one model, {len(families)} rungs"))
 
-    n_models = len(pilot.models) or 1
+    n_models = len(corpus.models) or 1
     print()
     print(
         f"PHASE 0 — full pilot ({n_models} models)\n"

@@ -135,7 +135,13 @@ def capture_provenance(
 # definitional: a schema identity, not a tunable — it changes when the shape
 # changes, by hand, in the same commit. Tuning path: none; a swept schema version
 # is a contradiction.
-SCHEMA_VERSION = 1
+#
+# v2 (2026-08-07, structure review): `config.pilot` became `config.corpus` when
+# `conf/pilot.yaml` was renamed. Nothing in the repo reads that key, so no reader
+# broke — which is exactly why the bump is worth making rather than skipping. A
+# field renamed silently under a version that did not move is how a version field
+# stops being trustworthy, and it only has to happen once.
+SCHEMA_VERSION = 2
 
 
 def upstream_ref(path: Path) -> dict[str, Any]:

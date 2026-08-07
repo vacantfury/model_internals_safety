@@ -70,7 +70,7 @@ from internals_safety.config import (
     MeasurementsConfig,
     load_guard_config,
     load_measurements_config,
-    load_pilot_config,
+    load_corpus_config,
 )
 from internals_safety.data import Prompt, digest
 from internals_safety.encodings.base import Encoder
@@ -354,10 +354,10 @@ def describe_plan(config: GuardConfig, families: Sequence[str], n: int, device: 
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    pilot = load_pilot_config()
+    corpus = load_corpus_config()
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--guard", required=True, help="conf/guards/<name>.yaml")
-    add_common_arguments(parser, default_n_prompts=pilot.n_prompts)
+    add_common_arguments(parser, default_n_prompts=corpus.n_prompts)
     parser.add_argument(
         "--strata-bins",
         type=int,
@@ -388,7 +388,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     guard_working_tree(device, allow_dirty=args.allow_dirty)
 
-    harmful, harmless = load_contrast_sets(pilot.harmful_set, pilot.harmless_set, args.n_prompts)
+    harmful, harmless = load_contrast_sets(corpus.harmful_set, corpus.harmless_set, args.n_prompts)
 
     directory, activations_dir, run_name = resolve_run_paths(
         PHASE, config.name, args.run_name, args.outputs_dir

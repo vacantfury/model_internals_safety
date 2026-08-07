@@ -77,7 +77,7 @@ from internals_safety.config import (
     load_judge_config,
     load_measurements_config,
     load_model_config,
-    load_pilot_config,
+    load_corpus_config,
 )
 from internals_safety.data import Prompt, digest, prompt_set
 from internals_safety.encodings.base import EncodedPrompt, Encoder
@@ -1332,10 +1332,10 @@ def run_family(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    pilot = load_pilot_config()
+    corpus = load_corpus_config()
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--model", required=True, help=f"conf/models/<name>.yaml; pilot set: {pilot.models}")
-    add_common_arguments(parser, default_n_prompts=pilot.n_prompts)
+    parser.add_argument("--model", required=True, help=f"conf/models/<name>.yaml; pilot set: {corpus.models}")
+    add_common_arguments(parser, default_n_prompts=corpus.n_prompts)
     parser.add_argument(
         "--instruments",
         nargs="*",
@@ -1349,7 +1349,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     model_config = load_model_config(args.model)
     measurements = load_measurements_config()
     ladder = load_ladder()
-    families = select_families(ladder, args.families if args.families else pilot.families)
+    families = select_families(ladder, args.families if args.families else corpus.families)
 
     instruments = select_known(
         args.instruments or None, OPTIONAL_INSTRUMENTS, label="instruments"
@@ -1367,7 +1367,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     guard_working_tree(plan.device, allow_dirty=args.allow_dirty)
 
-    harmful, harmless = load_contrast_sets(pilot.harmful_set, pilot.harmless_set, args.n_prompts)
+    harmful, harmless = load_contrast_sets(corpus.harmful_set, corpus.harmless_set, args.n_prompts)
 
     judge_config = load_judge_config()
     refusal_judge = RefusalJudge(judge_config)
@@ -1504,7 +1504,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     record = capture_provenance(
         config={
-            "pilot": pilot.model_dump(),
+            "corpus": corpus.model_dump(),
             "model": model_config.model_dump(),
             "measurements": measurements.model_dump(),
             "judges": judge_config.model_dump(),
@@ -1514,8 +1514,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "phase": PHASE,
             "run_name": run_name,
             "corpus": {
-                "harmful_set": pilot.harmful_set,
-                "harmless_set": pilot.harmless_set,
+                "harmful_set": corpus.harmful_set,
+                "harmless_set": corpus.harmless_set,
                 "n_prompts": len(harmful),
                 "harmful_digest": digest(harmful),
                 "harmless_digest": digest(harmless),

@@ -165,10 +165,24 @@ def reachable_modules() -> set[str]:
     now imports it from here, because two copies of a reachability rule is how
     the orphan guard and the completion check start disagreeing about what
     "wired" means.
+
+    **`rglob`, not `glob` — and the difference is a trap, not a preference
+    (structure review 2026-08-07, `pipeline_architecture.md` §5).** With a flat
+    `glob("*.py")`, the day anyone puts a script in `scripts/<subdir>/` every
+    module reachable ONLY from there silently becomes an orphan: the orphan
+    guard would report modules as unwired that are wired, and `build_status.py`
+    would report instruments as unbuilt that are built. Both failures point the
+    reader at the wrong thing, and neither raises.
+
+    The review considered splitting `scripts/` into `entrypoints/` and
+    `analysis/` and declined — eleven files do not need a directory, and the
+    launchable set is already named by `config.Entrypoint`. But the trap is
+    closed either way, because a walk that depends on a directory staying flat
+    is a walk that breaks on a reorganisation nobody thinks to check.
     """
     seen: set[str] = set()
     queue: deque[str] = deque()
-    for script in SCRIPTS_DIR.glob("*.py"):
+    for script in SCRIPTS_DIR.rglob("*.py"):
         queue.extend(_internal_imports(script))
     while queue:
         module = queue.popleft()

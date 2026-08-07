@@ -729,12 +729,27 @@ class JudgeConfig(StrictModel):
     use_batch_api: bool | None = False
 
 
-class PilotConfig(StrictModel):
-    """`conf/pilot.yaml` — the phase-0 regime-map corpus and sweep.
+class CorpusConfig(StrictModel):
+    """`conf/corpus.yaml` — the contrast pair, and the default run scope.
 
     Separate from `measurements.yaml` because these are *corpus and scope*
-    choices for one experiment, not knobs of the instruments; phases 1-3 will
-    carry their own.
+    choices, not knobs of the instruments.
+
+    **Renamed from `PilotConfig`/`conf/pilot.yaml` 2026-08-07 (structure review,
+    `pipeline_architecture.md` §5).** The old name was a fossil of phase 0 and
+    had become actively misleading: `as6_guard_probe.py` — which is not the
+    pilot, and is the other paper — called `load_pilot_config()` to find out
+    which prompt sets form the contrast pair. That is a fact about the CORPUS
+    both papers share, not about one experiment.
+
+    **The two jobs this file does, now that presets exist.** `harmful_set` and
+    `harmless_set` are the contrast pair itself, declared here and nowhere else
+    — JBB ships its benign set theme-matched to its harmful set, which is the
+    whole reason it is the negative class, and no preset may override it.
+    `n_prompts` and `families` are DEFAULTS for a bare invocation, which a
+    preset supersedes. That is a layering, not a second home: "which sets are
+    the contrast pair", "what does a bare run do", and "what does causal_sweep
+    do" are three different facts, and each has exactly one home.
     """
 
     harmful_set: str = "jbb_prompts.jsonl"
@@ -793,8 +808,8 @@ def load_judge_config(conf_dir: Path = CONF_DIR) -> JudgeConfig:
     return JudgeConfig(**load_yaml(conf_dir / "judges.yaml"))
 
 
-def load_pilot_config(conf_dir: Path = CONF_DIR) -> PilotConfig:
-    return PilotConfig(**load_yaml(conf_dir / "pilot.yaml"))
+def load_corpus_config(conf_dir: Path = CONF_DIR) -> CorpusConfig:
+    return CorpusConfig(**load_yaml(conf_dir / "corpus.yaml"))
 
 
 # ---------------------------------------------------------------------------

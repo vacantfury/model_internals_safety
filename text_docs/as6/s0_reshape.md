@@ -148,7 +148,7 @@ So the strongest available framing is no longer "we manufacture the middle cell.
 | 240 (HarmBench) | ±5.1 pp (±7.0 corrected) |
 | 340 (pooled) | ±4.3 pp (±5.9 corrected) |
 
-**The effect being declared absent is the (B) cell itself, measured at 3–13 per 100 — so at n=100 the equivalence bound is wider than the effect.** And buying power costs the control that licenses measurement #2: HarmBench has no theme-matched benign set, which is precisely what `conf/pilot.yaml` says stops the content probe separating on topic. §2.2's "the nulls carry the evidence" is dead.
+**The effect being declared absent is the (B) cell itself, measured at 3–13 per 100 — so at n=100 the equivalence bound is wider than the effect.** And buying power costs the control that licenses measurement #2: HarmBench has no theme-matched benign set, which is precisely what `conf/corpus.yaml` (named `pilot.yaml` until 2026-08-07) says stops the content probe separating on topic. §2.2's "the nulls carry the evidence" is dead.
 
 **Repo defects it surfaced (all verified by this session):** the false premise in four documents · `rescore_ability.py` self-check now RED (74/1500) · `CLAUDE.md` stale on both instrument fixes and on "verified offline". All corrected this session except the re-baseline, which is filed.
 
