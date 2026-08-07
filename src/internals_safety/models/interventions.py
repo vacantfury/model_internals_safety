@@ -112,16 +112,42 @@ def add_direction(
     the direction *somewhere* induces the behaviour, and applying it everywhere
     would confound the effect with its accumulated magnitude.
 
-    **`mask` is `[batch, seq]` of bools, and its absence means EVERY position —
-    which is a convention worth stating rather than assuming (TODO 33).** CAA
-    (arXiv 2312.06681) adds from the instruction-end position *onward*, including
-    generated tokens; ours defaulted to everywhere, which under AS-5's setup
-    writes the direction into the encoded prompt itself. Those are different
-    interventions: theirs asks whether writing the direction into the model's own
-    RESPONSE induces the behaviour, ours also changes what the model reads the
-    prompt as — and for a paper about decoding, that is the confound the design
-    exists to avoid. The mask makes the choice explicit at the call site instead
-    of implicit in the default.
+    **`mask` is `[batch, seq]` of bools, and its absence means EVERY position.
+    SETTLED 2026-08-07 (TODO 33): the convention is PER CONDITION, and the
+    default is right for the condition it defaults in.**
+
+    The three-way comparison, read from the sources rather than argued:
+
+    - **Arditi et al. (NeurIPS 2024)** — `activation += coeff * vector` over the
+      whole `[batch, seq, d_model]`, no mask (`hook_utils.get_activation_addition_input_pre_hook`).
+      **Every position.**
+    - **CAA (arXiv 2312.06681)** — `mask = position_ids >= from_id` with
+      `from_id = find_instruction_end_postion(...)`. **Instruction-end onward.**
+      Tied to their multiple-choice format, where the thing being steered is the
+      A/B answer.
+    - **Ours** — every position by default, which **matches Arditi**, the paper
+      this estimator was ported from.
+
+    ⚠️ TODO 33 was filed reading CAA alone and framed ours as the outlier
+    ("ours contaminates the input, CAA's does not"). Checking the closer source
+    corrected that: ours matches our own method's paper, and CAA is the one that
+    differs. Being unlike CAA is not by itself a defect.
+
+    **The confound is real, and it is CONDITION-SCOPED.** Adding at every
+    position writes the direction into the prompt as well as the response, so a
+    positive result cannot separate "the direction causes the behaviour" from
+    "the direction changed what the model read the prompt as". That second
+    reading only *bites* where the prompt is something the model must decode:
+
+    - **Plain prompts → every position (Arditi).** The causal gate runs on the
+      plain contrast sets, where there is no ciphertext and nothing to decode, so
+      the every-position form is both the grounded choice and the one that keeps
+      us comparable to the paper we cite.
+    - **Encoded prompts → `from_instruction_end` (CAA).** Here the confound is
+      live: writing the direction into ciphertext could change the decode itself,
+      which for a paper about decoding is the exact thing the design exists to
+      rule out. A phase-2 sufficiency test on an encoded condition MUST pass a
+      mask, and `from_instruction_end` builds it.
 
     A per-row mask rather than a slice because batches are ragged: with padding,
     "the tokens before the inversion question" is a different absolute index in
@@ -150,3 +176,53 @@ def add_direction(
 
     with _hook_layer_output(loaded, layer, transform):
         yield
+
+
+def from_instruction_end(
+    loaded: LoadedModel, prompts: Sequence[str], width: int | None = None
+) -> torch.Tensor:
+    """CAA's steering mask: `[batch, seq]`, True from instruction-end ONWARD.
+
+    **The tool the settled convention requires, built at settle time rather than
+    left to phase 2 to re-derive** (TODO 33, 2026-08-07). `add_direction`'s
+    default is every-position, matching Arditi et al.; this builds the other
+    convention, which is MANDATORY for a sufficiency test on an ENCODED
+    condition — there, adding into the prompt could change the decode itself, and
+    a paper about decoding cannot report a result that confounds the two.
+
+    Mirrors CAA's `mask = position_ids >= from_id` with
+    `from_id = find_instruction_end_postion(...)`, resolved through our own
+    capture spine instead of their `END_STR` scan: `instruction_final` is a
+    position name the spine already resolves per prompt against that prompt's own
+    tokenization, so the boundary comes from the same machinery every measurement
+    reads at, rather than from a second string-matching implementation that could
+    drift from it.
+
+    LEFT padding, matching the capture spine and `build_inversion_batch`: the
+    final position must be a real token in every row. `width` defaults to the
+    longest rendered prompt; pass it to match an existing batch's `input_ids`.
+    """
+    from internals_safety.models.loader import prepare_prompts
+
+    lengths: list[int] = []
+    boundaries: list[int] = []
+    for prepared in prepare_prompts(loaded, prompts, positions=["instruction_final"]):
+        tokens = loaded.tokenizer.encode(prepared.text, add_special_tokens=False)
+        lengths.append(len(tokens))
+        # `instruction_final` is a NEGATIVE index from the end of the rendered
+        # prompt; the first steered position is the one after it.
+        offset = prepared.positions["instruction_final"]
+        boundaries.append(len(tokens) + offset)
+
+    resolved_width = width if width is not None else max(lengths, default=0)
+    if resolved_width < max(lengths, default=0):
+        raise ValueError(
+            f"width {resolved_width} is shorter than the longest rendered prompt "
+            f"({max(lengths)}); a truncated mask steers the wrong span"
+        )
+
+    mask = torch.zeros((len(lengths), resolved_width), dtype=torch.bool)
+    for index, (length, boundary) in enumerate(zip(lengths, boundaries)):
+        pad = resolved_width - length
+        mask[index, pad + boundary :] = True
+    return mask

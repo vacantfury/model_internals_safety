@@ -206,8 +206,38 @@ Two concrete findings from `generate_vectors.py` and `utils/helpers.py`:
   the prompt as" — which, for a paper about decoding, is the confound the whole
   design exists to avoid.
 
-  **This is an open delta, not yet a fix**, because the sufficiency claim it
-  serves is a phase-2 claim and no number depends on it today. Filed.
+  **✅ SETTLED 2026-08-07 (TODO 33) — and this bullet's own framing was wrong.**
+  It was written reading CAA alone and implied ours was the outlier. Checking the
+  CLOSER source corrected that: **Arditi et al. add at every position with no
+  mask** (`hook_utils.get_activation_addition_input_pre_hook`:
+  `activation += coeff * vector` over the whole `[batch, seq, d_model]`). Ours
+  matches the paper this estimator was ported from; **CAA is the one that
+  differs**, and their `from_pos` is tied to a multiple-choice format where the
+  steered thing is the A/B answer. Being unlike CAA is not by itself a defect.
+
+  **The settled rule is PER CONDITION, because the confound is condition-scoped:**
+
+  - *Plain prompts → every position (Arditi).* The causal gate runs on the plain
+    contrast sets. Nothing there is encoded, so "the direction changed what the
+    model read the prompt as" has no ciphertext to act on, and the every-position
+    form keeps us comparable to the paper we cite. **No change to `causal.py`.**
+  - *Encoded prompts → instruction-end onward (CAA).* Here the confound is live
+    and disqualifying: writing the direction into ciphertext could change the
+    decode, and AS-5 exists to separate decoding from refusing. A phase-2
+    sufficiency test on an encoded condition MUST pass a mask.
+
+  **The tool was built at settle time rather than left for phase 2 to re-derive:**
+  `models/interventions.from_instruction_end` mirrors CAA's
+  `mask = position_ids >= from_id`, resolved through our own capture spine's
+  `instruction_final` rather than a second string-matching scan that could drift
+  from it. `add_direction`'s default is unchanged and now documents all three
+  conventions; `tests/test_interventions.py::TestTheSteeringPositionConvention`
+  pins the default so a later tidy-up cannot silently make it CAA-shaped and
+  change what the causal gate measures.
+
+  *The generalizable lesson, which is this session's second instance: a delta
+  filed against ONE source is a comparison, not a verdict. Item 33 and the
+  coverage sweep both reported a gap measured against a narrow index.*
 
 ---
 
