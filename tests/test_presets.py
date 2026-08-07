@@ -9,12 +9,15 @@ problem re-entering through the launcher.
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
+from typing import get_args
 
 import pytest
 import yaml
 
 from internals_safety.config import (
+    Entrypoint,
     PresetConfig,
     ResourceConfig,
     list_presets,
@@ -22,9 +25,18 @@ from internals_safety.config import (
     load_model_config,
     load_preset,
 )
-from internals_safety.paths import CONF_DIR
+from internals_safety.paths import CONF_DIR, PROJECT_ROOT
 
 PRESETS = list_presets()
+
+
+def _script(name: str):
+    """Import a scripts/*.py module by path — they are entrypoints, not package
+    members, so there is no import path to them."""
+    spec = importlib.util.spec_from_file_location(name, PROJECT_ROOT / "scripts" / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def leaf_keys(node, into: set[str]) -> set[str]:
@@ -323,3 +335,75 @@ class TestNoKnobDriftIntoPresets:
             raw = yaml.safe_load((CONF_DIR / "experiment" / f"{name}.yaml").read_text())
             present = leaf_keys(raw, set()) & (knobs - generic)
             assert not present, f"{name}.yaml carries knob-shaped key(s) {sorted(present)}"
+
+
+class TestEveryShippedPresetCanBeCosted:
+    """The approval gate is a THREE-command loop, and step 2 must not break.
+
+    `submit.py <preset>` -> `cost_model.py --preset <preset>` -> the owner's go
+    -> `--submit`. Every preset shipped here has passed the other invariants in
+    this file for weeks while three of six could not be costed at all:
+
+    - `sae_pregate_base` CRASHED — the Base checkpoint ships no chat template,
+      which the repo already knew (`chat_template_from` in its model config) and
+      the cost script did not consult.
+    - `relicense_all` refused with "--model or --preset is required" while
+      --preset was set, because it declares `targets:` (plural).
+    - `sae_pregate_instruct` was the dangerous one: it SUCCEEDED, reporting
+      5.8-10.3 GPU-hours, a $2.08-6.26 judge bill and "EXCEEDS the 8h partition
+      limit" for three 1-hour tasks that run no ladder and call no judge. It
+      sets no `families`, and the phase-0 default for unset families is every
+      configured rung.
+
+    A number of the wrong shape is worse than a crash, so the invariant is
+    asserted structurally rather than left to whoever next reads the output.
+    """
+
+    cost_model = _script("cost_model")
+    _PHASE0_SHAPED = cost_model._PHASE0_SHAPED
+    _COST_ELSEWHERE = cost_model._COST_ELSEWHERE
+    report_declared_cost = staticmethod(cost_model.report_declared_cost)
+
+    @pytest.mark.parametrize("name", PRESETS)
+    def test_its_entrypoint_has_a_cost_route(self, name):
+        """Either the phase-0 census describes it, or something else does."""
+        entrypoint = load_preset(name).entrypoint
+        assert entrypoint in self._PHASE0_SHAPED or entrypoint in self._COST_ELSEWHERE, (
+            f"{name} runs {entrypoint!r}, which no cost route covers; the approval "
+            "gate cannot be satisfied for it"
+        )
+
+    def test_the_two_routes_do_not_overlap(self):
+        """An entrypoint on both routes would be costed twice, differently."""
+        assert not (self._PHASE0_SHAPED & set(self._COST_ELSEWHERE))
+
+    def test_every_entrypoint_is_routed(self):
+        """Adding a fifth entrypoint must not silently inherit the phase-0 shape."""
+        routed = set(self._PHASE0_SHAPED) | set(self._COST_ELSEWHERE)
+        assert routed == set(get_args(Entrypoint)), (
+            f"unrouted entrypoint(s) {set(get_args(Entrypoint)) - routed}"
+        )
+
+    @pytest.mark.parametrize("name", PRESETS)
+    def test_a_non_phase0_preset_reports_without_a_tokenizer(self, name, capsys):
+        """The branch must not reach the census — no network, no weights.
+
+        `report_declared_cost` is the whole non-phase-0 path, so running it here
+        proves the crash and the misleading refusal are both gone.
+        """
+        preset = load_preset(name)
+        if preset.entrypoint in self._PHASE0_SHAPED:
+            pytest.skip("phase-0 shaped; its census needs a tokenizer")
+        assert self.report_declared_cost(name, preset, "/outputs") == 0
+        out = capsys.readouterr().out
+        assert "judge API spend     $0.00" in out
+        assert preset.entrypoint in out
+
+    def test_the_phase0_census_is_not_claimed_for_the_guard_entrypoint(self):
+        """AS-6 sweeps the ladder but reads a verdict from the logits.
+
+        No generation and no judge, so the decode half of the census would be
+        invention. It is the one entrypoint whose shape makes it look like it
+        belongs on the phase-0 route.
+        """
+        assert "as6_guard_probe" not in self._PHASE0_SHAPED

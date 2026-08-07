@@ -58,6 +58,78 @@ from internals_safety.judges.refusal import RefusalJudge
 # estimate.
 DEFAULT_HARDWARE = "h200_144gb"  # the only measured profile (conf/cost.yaml) and what ops/phase0.sbatch requests
 
+# Which entrypoints the phase-0 census actually describes. `census_phase0`
+# prices a ladder sweep with generation and judge calls; an entrypoint doing
+# none of those gets a confident number for work it will never do.
+#
+# **This set exists because the wrong number was silent.** `--preset
+# sae_pregate_instruct` reported 5.8-10.3 GPU-hours, a $2.08-6.26 judge bill and
+# "EXCEEDS the 8h partition limit" for a job the same preset declares as three
+# 1-hour tasks that run no ladder and call no judge: the preset sets no
+# `families`, so the census fell back to all 19 rungs. A crash would have been
+# kinder — the approval gate's worst failure is a plausible number for a
+# different run.
+#
+# `as6_guard_probe` is deliberately NOT here even though it sweeps the ladder:
+# it reads a verdict from the logits at one position, so it neither generates
+# nor judges, and the decode half of the census would be pure invention.
+_PHASE0_SHAPED = frozenset({"phase0_regime_map"})
+
+# Where each other entrypoint's forward-pass census actually lives. DELEGATED,
+# not reimplemented: `sae_pregate --dry-run` already prints its pass count and
+# its zero judge spend, and a second copy here would be the same two-sources-of-
+# truth defect one level up. `relicense_probes` has no dry-run because it has
+# nothing to census — no model, no generation, no API.
+_COST_ELSEWHERE: dict[str, str | None] = {
+    "sae_pregate": "./run python scripts/sae_pregate.py --model {target} --n-prompts {n_prompts} --dry-run",
+    "as6_guard_probe": "./run python scripts/as6_guard_probe.py --guard {target} --dry-run",
+    "relicense_probes": None,
+}
+
+# `PresetConfig.tasks` needs an outputs root to build paths with, but this
+# script only ever counts the rows. Any root gives the same count; the real one
+# is the launcher's business, so naming a fake one keeps the two from drifting.
+_TASK_COUNT_ROOT = "/outputs"
+
+
+def report_declared_cost(name: str, preset, outputs_dir: str) -> int:
+    """The approval-gate triple for a preset the phase-0 census does not describe.
+
+    Every number printed here is one the preset itself declares or that this
+    repo knows structurally — task count, the resource ask, and the fact that a
+    job with no judge spends nothing. Nothing is estimated, because an estimate
+    of the wrong shape is what this branch exists to prevent.
+    """
+    resources = preset.resources
+    n_tasks = len(preset.tasks(outputs_dir))
+    target = preset.target or ", ".join(preset.targets)
+
+    print(f"costing preset {name!r}\n")
+    print(f"entrypoint            {preset.entrypoint}")
+    print(f"target                {target}")
+    print(f"array tasks           {n_tasks}")
+    print()
+    print("THE APPROVAL-GATE TRIPLE (declared, not estimated)")
+    if resources.is_gpu_job:
+        print(f"  hardware            {n_tasks} x {resources.gres} on partition '{resources.partition}'")
+    else:
+        print(f"  hardware            none — {resources.cpus} CPU / {resources.mem} on partition '{resources.partition}'")
+    print(f"  wall-clock          {resources.time} per task (a CEILING the scheduler enforces)")
+    print(f"  judge API spend     $0.00 — this entrypoint calls no judge")
+    print()
+
+    census = _COST_ELSEWHERE[preset.entrypoint]
+    if census is None:
+        print("The phase-0 census does not describe this run and there is nothing to")
+        print("census: it loads no model, generates no tokens and calls no API. The")
+        print("ceiling above IS the wall-clock ask.")
+    else:
+        command = census.format(target=target, n_prompts=preset.n_prompts or 100)
+        print("The phase-0 census does not describe this run. For the forward-pass")
+        print("count, ask the entrypoint that owns it:")
+        print(f"\n    {command}\n")
+    return 0
+
 
 def judge_prices(model: str) -> tuple[float, float]:
     """Dollars per million input / output tokens, from llm_utils' price table.
@@ -105,6 +177,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         for flag, value in (("--model", args.model), ("--families", args.families)):
             if value is not None:
                 raise SystemExit(f"{flag} and --preset both set; the preset IS the declaration")
+        # Dispatch on the entrypoint the preset already declares, BEFORE filling
+        # in the phase-0 arguments. Reaching the census with a preset it does
+        # not describe is how `sae_pregate_instruct` came to be priced at 19
+        # rungs: `families` is unset because the entrypoint has no ladder, and
+        # the phase-0 default for unset families is "every configured rung".
+        if preset.entrypoint not in _PHASE0_SHAPED:
+            return report_declared_cost(args.preset, preset, _TASK_COUNT_ROOT)
         args.model = preset.target
         if isinstance(preset.families, list):
             args.families = preset.families
