@@ -116,6 +116,10 @@ weak one (0.63–0.68) the harmful rate is 0.63–0.76 against the same 0.50, so
 deployment probe reads there is by construction NOT decoded content, so its
 transfer AUROC on those rungs is this instrument's surface-feature noise floor.
 
+⚠️ **The table below is run-specific and does NOT port** — §2.4 shows the
+statistic grows with the control-set size, so these two numbers belong to
+`band2-20260805` and to no other run. Re-derive per run; never import them.
+
 Measured (`scripts/recalibrate_deployment.py`, run `band2-20260805`):
 
 | model | control rungs | floor |
@@ -144,6 +148,82 @@ Hard incoherence falls **monotonically** as the read tightens, on both models:
 The coherence check endorses the strict read on its own internal consistency,
 without assuming the answer we want. That is the argument to use; do not justify
 an operating point by the regime counts it produces.
+
+### 2.4 The floor statistic is n-dependent, and §2.2's table is not portable
+
+**Found 2026-08-07** by re-licensing the whole pilot ladder (`relicense_all`, job
+`8995184`, 30 CPU array tasks, 29 completed, $0). That run supplied a control set
+of **11 rungs on Llama and 10 on Qwen** — the inert cipher band — against the
+**two** rungs §2.2 had to work with. Three things came out of the larger set, and
+the second is a defect in the fix §2.2 landed.
+
+**(a) Significance is not sufficiency — measured a second time, now within one
+run.** Permutation licensing passes **14/15 rungs on Llama and 14/14 on Qwen**.
+It is a real test and it is answering a different question: whether a separation
+exists, never what produces it. On Qwen, twelve of fourteen rungs sit inside a
+band 0.046 wide (0.638–0.683) and every one is "significant".
+
+**(b) ⚠️ `control_floor`'s MAX is an extreme-value statistic, so the floor grows
+with the size of the control set.** Same instrument, same models, different
+number of can't-decode rungs in the run:
+
+| model | controls | floor (max) | controls | floor (max) |
+|---|---|---|---|---|
+| Llama-3.1-8B | 2 (`band2`) | 0.656 | **11** (pilot ladder) | **0.674** |
+| Qwen2.5-7B | 2 (`band2`) | 0.671 | **10** (pilot ladder) | **0.683** |
+
+A rung's pass/fail therefore depends on *how many rungs the model happened to be
+unable to decode in that run* — which is not a property of the rung. **Floors
+from different runs are not comparable, and the §2.2 numbers must not be carried
+into a run with a different ladder.** The docstring's rationale ("a rung that
+read higher on nothing is the binding constraint") is sound for n=2 and becomes
+an upward-biased estimator as n grows.
+
+The stable alternative, and the house convention already used for attribution, is
+**mean + 2 SD of the control distribution**: 0.711 (Llama), 0.691 (Qwen). It
+selects the same two rungs on both models with **zero control false positives**.
+Not yet adopted in config — it changes a gate answer, so it is settled
+deliberately or not at all (TODO).
+
+**(c) The gate answer is robust to that choice, which is what makes it
+reportable.** Only `zero_width` and `reverse_words` clear on both models:
+
+    Llama   zero_width 0.945 (+0.272)   reverse_words 0.844 (+0.171)
+    Qwen    zero_width 0.989 (+0.306)   reverse_words 0.870 (+0.187)
+
+`hex` clears on Llama by **+0.017** and fails on Qwen by **−0.021** under max,
+and fails both under mean+2SD. Every floor ever applied to it — the retired 0.70
+guess, max, mean+2SD — has landed within ±0.02 of it. **A rung that sits inside
+the noise of every bar and flips sign across models is not a measurable rung.**
+
+**The two decisive cells are both on Llama, and they are the cleanest available
+statement of the confound §2.1–§2.2 exist to contain** — established inside a
+single run against its own control, needing no external length null:
+
+| rung | ability (settled cuts) | deployment AUROC | vs control ceiling 0.674 |
+|---|---|---|---|
+| `hex` | **0.84** | 0.6908 | +0.017 |
+| `unicode_escape` | **0.54** | 0.6610 | **−0.013** |
+
+The model recovers the plaintext on **84 of 100** `hex` prompts, and the
+deployment probe reads it at essentially the value it reads on rungs the model
+cannot decode at all. On `unicode_escape` it decodes over half the time and the
+probe reads *below* that ceiling. No appeal to a weak probe explains a monotone
+failure like that: the probe is not reading decoding.
+
+⚠️ **Ability under the settled cuts is not the number quoted in `CLAUDE.md`.**
+Recomputed here: Llama `hex` **0.84** (not 72/100) and Qwen `hex` **0.01** (not
+25/100). The Qwen figures on record came from a **0.60** similarity cut; the
+settled cut is **0.75**. Under the settled rule `hex` and `unicode_escape` are
+Llama-readable and Qwen-inert — which is itself why `hex` cannot anchor
+anything, and it is a second reason beyond the floor disagreement.
+
+*Reproduce:* `scripts/control_floor.py` — derives the control set from
+recomputed ability rather than a listed one, prints both floors with their n, and
+refuses to call a rung measurable when they disagree.
+
+*AS-6 inheritance:* the guard-side ladder must carry enough can't-decode rungs to
+estimate a control **distribution**, not just bound it — n=2 cannot yield an SD.
 
 ---
 
