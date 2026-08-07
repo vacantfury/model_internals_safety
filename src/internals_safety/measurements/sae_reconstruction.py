@@ -112,7 +112,11 @@ class RandomDictionary:
         self.k = k
 
     def encode(self, activations: torch.Tensor) -> torch.Tensor:
-        scores = activations.to(self.weights.dtype) @ self.weights.T
+        # Same coercion as the trained dictionary's seam: activations move to
+        # the weights, not the reverse. Symmetric on purpose — a control that
+        # breaks where the real dictionary works is not a matched control.
+        activations = activations.to(device=self.weights.device, dtype=self.weights.dtype)
+        scores = activations @ self.weights.T
         # Top-k, matching Llama Scope's TopK architecture rather than an L1
         # penalty: the control has to share the trained dictionary's SPARSITY,
         # since a dense control would reconstruct better for a reason that has
@@ -122,7 +126,7 @@ class RandomDictionary:
         return kept.scatter_(-1, indices, values)
 
     def decode(self, features: torch.Tensor) -> torch.Tensor:
-        return features @ self.weights
+        return features.to(self.weights.device) @ self.weights
 
 
 def variance_explained(original: torch.Tensor, reconstruction: torch.Tensor) -> float:

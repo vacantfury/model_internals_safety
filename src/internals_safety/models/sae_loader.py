@@ -145,6 +145,17 @@ class LlamaScopeSAE:
         so the decoder bias is NOT subtracted before encoding. Asserted by the
         loader rather than assumed here — see `load_llama_scope_sae`.
         """
+        # Coerce the ACTIVATIONS to the dictionary's device, never the reverse:
+        # the weights are d_sae x d_model (~134M params for Llama Scope) and the
+        # batch is [n, d_model], so moving the weights per call would be absurd.
+        #
+        # This seam exists because `measure_reconstruction` deliberately hands
+        # the round trip `h.float().cpu()` while `sae_pregate.py` loads the
+        # dictionary with `device=cuda` — a contradiction that killed job
+        # 9006556 after it had loaded an 8B model and a 540 MB dictionary.
+        # Fixing it HERE rather than at either call site makes the mismatch
+        # unexpressible, which is the same lesson as `strata` earlier today.
+        activations = activations.to(self.encoder_weight.device)
         weight = self.encoder_weight.to(activations.dtype)
         pre = self._normalise(activations) @ weight.T + self.encoder_bias.to(activations.dtype)
         # JumpReLU: pass values above the threshold through UNCHANGED, zero the
@@ -153,6 +164,7 @@ class LlamaScopeSAE:
         return torch.where(pre > self.jump_relu_threshold, pre, torch.zeros_like(pre))
 
     def decode(self, features: torch.Tensor) -> torch.Tensor:
+        features = features.to(self.decoder_weight.device)
         weight = self.decoder_weight.to(features.dtype)
         reconstruction = features @ weight.T + self.decoder_bias.to(features.dtype)
         return self._denormalise(reconstruction)

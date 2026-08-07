@@ -98,3 +98,73 @@ def test_the_watchlist_actually_matches_something():
     found = {name for path in script_paths() for name, _ in call_sites(path)}
     missing = sorted(set(WATCHED) - found)
     assert not missing, f"watched but never called in scripts/: {missing}"
+
+
+def second_device() -> str | None:
+    """A real device that is not CPU, or None.
+
+    ⚠️ `meta` does NOT work here and the first version of this test used it.
+    `cpu @ meta` silently SUCCEEDS — meta propagates through matmul instead of
+    rejecting the mix — so the test passed on the pre-fix code and guarded
+    nothing. Verified before trusting it, which is the rule this file's own
+    `test_the_watchlist_actually_matches_something` states: a green check over
+    an empty set is not evidence.
+    """
+    import torch
+
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return None
+
+
+@pytest.mark.skipif(second_device() is None, reason="needs a non-CPU device")
+class TestDictionarySeamsCoerceDevice:
+    """A CPU batch against a non-CPU dictionary must work, not raise.
+
+    Job `9006556` loaded an 8B model and a 540 MB dictionary and then died on
+    `mat2 is on cuda:0, different from other tensors on cpu` — because
+    `measure_reconstruction` hands the round trip `h.float().cpu()` while
+    `sae_pregate.py` loads the dictionary with `device=cuda`. Two call sites,
+    each locally reasonable, contradicting each other. Verified to REJECT the
+    pre-fix code on this device pair, not merely to pass on the fixed one.
+    """
+
+    def test_the_trained_dictionary_moves_the_batch_to_its_own_device(self):
+        import torch
+
+        from internals_safety.models.sae_loader import LlamaScopeSAE
+
+        device, d_model, d_sae = second_device(), 8, 16
+        sae = LlamaScopeSAE(
+            encoder_weight=torch.zeros(d_sae, d_model, device=device),
+            encoder_bias=torch.zeros(d_sae, device=device),
+            decoder_weight=torch.zeros(d_model, d_sae, device=device),
+            decoder_bias=torch.zeros(d_model, device=device),
+            jump_relu_threshold=0.0,
+            input_norm=1.0,
+            output_norm=1.0,
+            d_model=d_model,
+            d_sae=d_sae,
+            hook_point="blocks.17.hook_resid_post",
+            trained_on="test",
+            nominal_top_k=4,
+        )
+        features = sae.encode(torch.zeros(3, d_model))   # CPU in, GPU dictionary
+        assert features.device.type == device
+        assert sae.decode(features).device.type == device
+
+    def test_the_random_control_coerces_the_same_way(self):
+        """Symmetry matters: a control that breaks where the real dictionary
+        works is not a matched control."""
+        import torch
+
+        from internals_safety.measurements.sae_reconstruction import RandomDictionary
+
+        device = second_device()
+        control = RandomDictionary(
+            d_model=8, n_features=16, k=4, generator=torch.Generator().manual_seed(0)
+        )
+        control.weights = control.weights.to(device)
+        assert control.encode(torch.zeros(3, 8)).device.type == device
