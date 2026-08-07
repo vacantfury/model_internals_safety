@@ -157,6 +157,18 @@ of **11 rungs on Llama and 10 on Qwen** — the inert cipher band — against th
 **two** rungs §2.2 had to work with. Three things came out of the larger set, and
 the second is a defect in the fix §2.2 landed.
 
+⚠️ **The licensing column of that run is under the RETIRED null.**
+`relicense_probes.py` calls `measure_deployment` without `strata=`, so it drew
+the plain permutation null — not the **length-matched** null settled as the rule
+on 2026-08-06 (`as6/phase1_map.md` §1). The settled rule was threaded into
+`measure_deployment` and into AS-6's sweep, and never into the re-licensing
+script; a job launched from a preset therefore ran the superseded test. **The
+conclusion below is unaffected, because the screen compares AUROCs against
+control rungs and never consults the p-value** — but no licensing count from this
+run may be reported, and AS-5's matched-null re-licensing remains open (TODO).
+*This is the settled-rule-not-threaded failure, and it is the third instance: a
+rule can be adopted, tested, and documented, and still not reach every caller.*
+
 **(a) Significance is not sufficiency — measured a second time, now within one
 run.** Permutation licensing passes **14/15 rungs on Llama and 14/14 on Qwen**.
 It is a real test and it is answering a different question: whether a separation
