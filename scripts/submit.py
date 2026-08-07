@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -45,7 +46,17 @@ COMMENT_PREFIX = "preset="
 
 
 class SqueueUnavailable(RuntimeError):
-    """The collision check could not run. Never silently treated as 'no collision'."""
+    """The collision check could not run. Never silently treated as 'no collision'.
+
+    `binary_missing` separates the two cases, because only one is alarming:
+    squeue ABSENT means this is not a submit host at all, while squeue PRESENT
+    AND FAILING means slurmctld is unreachable on a machine where sbatch still
+    works — the exact moment an unguarded submit creates a duplicate.
+    """
+
+    def __init__(self, message: str, *, binary_missing: bool) -> None:
+        super().__init__(message)
+        self.binary_missing = binary_missing
 
 
 def active_jobs_for(preset_name: str) -> list[tuple[str, str, str]]:
@@ -71,10 +82,14 @@ def active_jobs_for(preset_name: str) -> list[tuple[str, str, str]]:
              "-O", "JobID:24,Comment:64,Name:64,StateCompact:12"],
             capture_output=True, text=True, timeout=60, check=False,
         )
-    except (OSError, subprocess.SubprocessError):
-        raise SqueueUnavailable("squeue could not be run")
+    except FileNotFoundError:
+        raise SqueueUnavailable("squeue is not installed here", binary_missing=True)
+    except (OSError, subprocess.SubprocessError) as error:
+        raise SqueueUnavailable(f"squeue could not be run: {error}", binary_missing=False)
     if result.returncode != 0:
-        raise SqueueUnavailable(result.stderr.strip() or f"squeue exited {result.returncode}")
+        raise SqueueUnavailable(
+            result.stderr.strip() or f"squeue exited {result.returncode}", binary_missing=False
+        )
 
     stamped = f"{COMMENT_PREFIX}{preset_name}"
     derived = f"is_{preset_name}"
@@ -216,10 +231,32 @@ def main(argv: list[str] | None = None) -> int:
     try:
         active = active_jobs_for(args.preset)
     except SqueueUnavailable as error:
-        # Loud, and NOT fatal. sbatch is the real backstop — on a machine with no
-        # squeue there is no sbatch either, so refusing here would only block the
-        # laptop while changing nothing about what reaches the cluster.
-        print(f"\n⚠️  collision check did not run ({error}); submitting unchecked", file=sys.stderr)
+        # **Fail closed iff sbatch can actually reach a queue.** The question is
+        # not whether squeue works, it is whether a duplicate is POSSIBLE:
+        #
+        #   sbatch absent  -> nothing can be submitted from here, so the guard's
+        #                     opinion is moot; warn and proceed (the laptop case).
+        #   sbatch present -> this IS a submit host and slurmctld merely blipped;
+        #                     proceeding would leave the guard off at exactly the
+        #                     moment and on exactly the machine where duplicates
+        #                     get made. Refuse.
+        #
+        # Credit to the peer session for the distinction: the original version
+        # reasoned "no squeue -> no sbatch", which is true only for the first
+        # case and silently wrong for the second.
+        if shutil.which("sbatch") is not None:
+            print(
+                f"\nREFUSED — the collision check could not run ({error}), and sbatch IS "
+                "available here,\nso a duplicate is possible. Re-run, or pass --force to "
+                "submit unchecked.",
+                file=sys.stderr,
+            )
+            return 4
+        print(
+            f"\n⚠️  collision check did not run ({error}); sbatch is absent here, "
+            "so nothing can be duplicated from this host",
+            file=sys.stderr,
+        )
         active = []
 
     if active:

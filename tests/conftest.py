@@ -23,9 +23,21 @@ from internals_safety.models.loader import attach
 # keeps them intact. Character offsets are what the position resolver reads, so
 # the template only has to be structurally faithful, not byte-identical to any
 # real model's.
+# `| trim` is not decoration — it is the STRICTEST real behaviour, and the suite
+# must model the strictest or it licenses code the cluster rejects.
+#
+# Llama-3.1-8B-Instruct's shipped template trims message content; Qwen2.5-7B's
+# does not. So the same corpus renders content verbatim on Qwen and mangled on
+# Llama, and `instruction_final_offset` — which locates the capture position by
+# `rendered.rindex(user_message)` — refuses to resolve on Llama alone. This
+# template previously interpolated content raw, so 1001 hermetic tests passed
+# while a prompt with a trailing space killed two H200 jobs on 2026-08-07.
+#
+# Same shape as the peer session's `meta`-device fixture the same afternoon: a
+# fake more permissive than the real thing does not test, it certifies.
 TINY_CHAT_TEMPLATE = (
     "{% for message in messages %}"
-    "<|im_start|> {{ message['role'] }}\n{{ message['content'] }} <|im_end|>\n"
+    "<|im_start|> {{ message['role'] }}\n{{ message['content'] | trim }} <|im_end|>\n"
     "{% endfor %}"
     "{% if add_generation_prompt %}<|im_start|> assistant\n{% endif %}"
 )

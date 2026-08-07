@@ -144,21 +144,49 @@ class TestForceIsLoud:
 
 
 class TestAFailedCheckIsNotACleanCheck:
-    def test_squeue_failure_warns_on_stderr_and_still_submits(self, monkeypatch, capsys):
-        """sbatch is the real backstop; a machine without squeue has no sbatch.
+    """Fail closed iff sbatch can actually reach a queue.
 
-        Refusing here would block the laptop and change nothing on the cluster —
-        but it must never look like a clean check.
-        """
+    The first version of this guard reasoned "no squeue means no sbatch, so
+    warn and proceed". That is true on a laptop and silently wrong on the
+    cluster: squeue failing because slurmctld is unreachable happens on a
+    machine where sbatch still works, which is precisely when an unguarded
+    submit makes a duplicate. The peer session caught it.
+
+    The branch is mutation-tested on its own below — passing counts from
+    mutating the guard as a whole would not have shown this path was covered.
+    """
+
+    def test_it_refuses_when_sbatch_exists_but_squeue_failed(self, monkeypatch, capsys):
+        """The dangerous case: a real submit host with a blipping controller."""
         sent = fake_squeue(monkeypatch, [], returncode=1)
+        monkeypatch.setattr(submit.shutil, "which", lambda name: "/usr/bin/sbatch")
+        assert submit.main(["smoke", "--submit"]) == 4
+        assert sent == [], "refused but sbatch still ran"
+        assert "sbatch IS available" in capsys.readouterr().err
+
+    def test_it_proceeds_when_sbatch_is_absent(self, monkeypatch, capsys):
+        """The laptop: nothing can reach a queue, so the guard's opinion is moot."""
+        sent = fake_squeue(monkeypatch, [], returncode=1)
+        monkeypatch.setattr(submit.shutil, "which", lambda name: None)
         assert submit.main(["smoke", "--submit"]) == 0
         assert len(sent) == 1
         assert "collision check did not run" in capsys.readouterr().err
 
-    def test_squeue_missing_entirely_raises_the_typed_error(self, monkeypatch):
-        def explode(command, **kwargs):
+    def test_the_two_unavailable_causes_are_distinguished(self, monkeypatch):
+        """'not installed' and 'ran and failed' are different facts."""
+        def missing(command, **kwargs):
             raise FileNotFoundError("squeue")
 
-        monkeypatch.setattr(submit.subprocess, "run", explode)
-        with pytest.raises(submit.SqueueUnavailable):
+        monkeypatch.setattr(submit.subprocess, "run", missing)
+        with pytest.raises(submit.SqueueUnavailable) as absent:
             submit.active_jobs_for("smoke")
+        assert absent.value.binary_missing is True
+
+        monkeypatch.setattr(
+            submit.subprocess, "run",
+            lambda command, **kwargs: _FakeCompleted(returncode=1, stderr="slurmctld down"),
+        )
+        with pytest.raises(submit.SqueueUnavailable) as failed:
+            submit.active_jobs_for("smoke")
+        assert failed.value.binary_missing is False
+        assert "slurmctld down" in str(failed.value)
