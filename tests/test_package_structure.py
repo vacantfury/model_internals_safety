@@ -36,6 +36,7 @@ PURE_MODULES = (
     "black_box_baseline",
     "lexical_decorrelation",
     "ability_control",
+    "behavior_control",
     "contract",
     "causal_license",
 )
@@ -62,7 +63,18 @@ def sibling_imports(module: str) -> set[str]:
 
 @pytest.mark.parametrize("module", PURE_MODULES)
 def test_combination_and_licensing_modules_import_no_measurement_sibling(module):
-    assert sibling_imports(module) == set(), (
+    """...except `contract`, which is the layer's shared vocabulary.
+
+    The allowance was added 2026-08-06 when `behavior_control` landed producing a
+    `Screen`. It is the SAME allowance instruments already have, and for the same
+    reason: the invariant's stated purpose is that these modules must not reach
+    back into the modules that PRODUCED the numbers they judge. `contract`
+    produces no numbers — it is the type a verdict is declared in, and it is the
+    layer's sink, which `test_the_contract_is_the_layer_s_sink` pins separately.
+    Refusing it would only have pushed every control to return loose tuples that
+    some other module reassembles into the same object.
+    """
+    assert sibling_imports(module) <= {"contract"}, (
         f"{module}.py imports a measurement sibling. It combines or licenses "
         "measurements and must stay a pure function of plain values — otherwise "
         "a licensing change starts requiring a measurement module to be read, "

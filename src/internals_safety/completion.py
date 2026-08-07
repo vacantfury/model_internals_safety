@@ -124,6 +124,7 @@ CONTROLS: tuple[Item, ...] = (
     Item("black-box", "surface classifier (P4)", ("measurements.black_box_baseline",)),
     Item("lexical", "XSTest vocabulary decorrelation", ("measurements.lexical_decorrelation",)),
     Item("ability", "mismatched-plaintext derangement", ("measurements.ability_control",)),
+    Item("judge", "benign-arm judge control (#4)", ("measurements.behavior_control",)),
     Item("random-direction", "matched-norm null", ("measurements.causal_license",)),
     Item("pairing", "derangement primitives", ("pairing",)),
 )

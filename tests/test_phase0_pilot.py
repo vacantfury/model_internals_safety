@@ -863,3 +863,96 @@ class TestLexicalControlIsWired:
         )
         assert one.lexical_capture_passes == 450
         assert many.lexical_capture_passes == one.lexical_capture_passes
+
+
+class TestBehaviorControlIsWired:
+    """TODO 38 — measurement #4's negative control, inside a real run.
+
+    The judges are stubbed to say REFUSED / NOT-JAILBROKEN on everything, which
+    makes the benign arm's ASR exactly 0 — the clean-judge case. What the tests
+    pin is that the arm ran, that its verdict reaches `reportable`, and that a
+    run which does not declare it says so rather than passing silently.
+    """
+
+    def _run(self, pilot, tiny_model, monkeypatch, tmp_path, instruments, name):
+        monkeypatch.setattr(pilot, "load_model", lambda config: tiny_model)
+        monkeypatch.setattr(
+            pilot,
+            "RefusalJudge",
+            lambda config: RefusalJudge(config, service=StubService(default=yes_verdict())),
+        )
+        monkeypatch.setattr(
+            pilot,
+            "HarmBenchJudge",
+            lambda config: HarmBenchJudge(config, service=StubService(default=no_verdict())),
+        )
+        argv = [
+            "--model", "qwen2_5_0_5b_instruct",
+            "--families", "base64",
+            "--n-prompts", "4",
+            "--run-name", name,
+            "--allow-dirty", "--allow-cpu",
+            "--outputs-dir", str(tmp_path),
+        ]
+        if instruments:
+            argv += ["--instruments", instruments]
+        assert pilot.main(argv) == 0
+        record = tmp_path / "runs" / "phase0" / "qwen2_5_0_5b_instruct" / name / "results.json"
+        return json.loads(record.read_text())
+
+    @pytest.fixture
+    def with_control(self, pilot, tiny_model, monkeypatch, tmp_path):
+        return self._run(
+            pilot, tiny_model, monkeypatch, tmp_path, "behavior_control", "bc_on"
+        )
+
+    @pytest.fixture
+    def without_control(self, pilot, tiny_model, monkeypatch, tmp_path):
+        return self._run(pilot, tiny_model, monkeypatch, tmp_path, None, "bc_off")
+
+    def test_a_run_WITHOUT_the_control_withholds_every_behaviour_number(self, without_control):
+        """⚠️ The point of making it REQUIRED. Before TODO 38 a behaviour reading
+        with no control at all looked exactly like one whose control passed."""
+        withheld = without_control["withheld"]
+        assert "behavior" in withheld
+        assert any("NOT RUN" in why for why in withheld["behavior"])
+
+    def test_the_control_runs_the_judges_on_the_BENIGN_arm(self, with_control):
+        behavior = next(
+            r for r in with_control["readings"] if r["instrument"] == "behavior"
+        )
+        assert behavior["detail"]["benign_arm_n"] == 4
+        assert behavior["detail"]["benign_arm_asr"] == 0.0
+
+    def test_the_screen_reaches_the_contract_not_just_the_detail(self, with_control):
+        """It has to be somewhere `reportable` can see it, which is the whole
+        lesson of the lexical control riding in `detail`."""
+        behavior = next(
+            r for r in with_control["readings"] if r["instrument"] == "behavior"
+        )
+        names = [screen["name"] for screen in behavior["controls"]]
+        assert "judge_benign_arm" in names
+
+    def test_the_over_refusal_rate_is_recorded_as_a_RESULT(self, with_control):
+        """H5's degenerate outcome, measured directly. The stub refusal judge
+        says refused to everything, so this is 1.0 — and it must NOT be read as
+        a control failure, because it is a fact about the model."""
+        behavior = next(
+            r for r in with_control["readings"] if r["instrument"] == "behavior"
+        )
+        assert behavior["detail"]["benign_arm_refusal_rate"] == 1.0
+
+    def test_it_is_OFF_by_default_because_it_costs_judge_money(self, pilot):
+        config = load_model_config("qwen2_5_0_5b_instruct")
+        plan = pilot.build_plan(config, ["base64"], n_prompts=10)
+        assert plan.behavior_control_judge_calls == 0
+
+    def test_the_dry_run_prices_it_as_judge_calls_not_forward_passes(self, pilot):
+        """The only control on the roster that lands on the API bill rather than
+        the cluster allocation, so it has to be priced in its own units."""
+        config = load_model_config("qwen2_5_0_5b_instruct")
+        plan = pilot.build_plan(
+            config, ["base64", "rot13"], n_prompts=10, instruments=["behavior_control"]
+        )
+        assert plan.behavior_control_judge_calls == 2 * 10 * 2
+        assert "benign judge calls" in plan.describe(MEASUREMENTS)

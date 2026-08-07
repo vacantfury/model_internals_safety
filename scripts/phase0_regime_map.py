@@ -127,6 +127,10 @@ from internals_safety.measurements.causal_license import (
     matched_norm_random_direction,
     random_direction_null,
 )
+from internals_safety.measurements.behavior_control import (
+    judge_calls as behavior_control_judge_calls,
+    summarize_control as summarize_behavior_control,
+)
 from internals_safety.measurements.contract import Reading, Screen
 from internals_safety.measurements.lexical_decorrelation import (
     LexicalDecorrelation,
@@ -169,6 +173,7 @@ OPTIONAL_INSTRUMENTS = (
     "reply_inversion",
     "attribution",
     "lexical",
+    "behavior_control",
 )
 
 # FAIL-SAFE DEFAULT — the live value is `causal_license.max_sweep_layers` in
@@ -346,6 +351,20 @@ class Plan:
         return attribution_forward_passes(self.attribution_cells) * self.n_prompts
 
     @property
+    def behavior_control_judge_calls(self) -> int:
+        """Judge API calls measurement #4's negative control adds.
+
+        ⚠️ The only control on the roster that costs MONEY rather than GPU time.
+        The benign-encoded arm is already captured and already generated for the
+        probes; what this pays for is calling the two judges on it. Priced here
+        because a control the estimate cannot see is a cost nobody approved —
+        and this one lands on the API bill, not the cluster allocation.
+        """
+        if "behavior_control" not in self.instruments:
+            return 0
+        return behavior_control_judge_calls(self.n_prompts, len(self.families))
+
+    @property
     def lexical_capture_passes(self) -> int:
         """Passes the XSTest control adds — the corpus once, MODEL-level.
 
@@ -393,6 +412,9 @@ class Plan:
                 f"  causal fwd passes   {self.causal_forward_passes} "
                 f"({self.causal_candidates} candidate directions x 3 passes + 2 baselines, "
                 "model-level not per-family)",
+                f"  benign judge calls  {self.behavior_control_judge_calls} "
+                "(measurement #4's negative control — 2 judges x the benign-encoded "
+                "arm; the only control that costs MONEY, not GPU)",
                 f"  lexical passes      {self.lexical_capture_passes} "
                 "(XSTest control, corpus captured ONCE per model — the deployment "
                 "probe is plain-fitted, so it is the same probe for every rung)",
@@ -840,6 +862,19 @@ def run_family(
     behavior_records = measure_behavior(
         loaded, encoded_harmful, refusal_judge, harm_judge, measurements.behavior
     )
+    # Measurement #4's negative control (TODO 38): the SAME two judges on the
+    # benign-encoded arm. Without it, "the attack succeeded on this rung" and
+    # "this judge says yes to anything wearing this encoding" are the same
+    # number. Behind `--instruments` because it is the one control that costs
+    # money — the arm is already captured and already generated, so what is paid
+    # for is the judge calls.
+    benign_behavior_records = (
+        measure_behavior(
+            loaded, encoded_harmless, refusal_judge, harm_judge, measurements.behavior
+        )
+        if "behavior_control" in instruments
+        else []
+    )
 
     curve = measure_deployment(
         family,
@@ -1079,6 +1114,29 @@ def run_family(
         n_bins=measurements.probes.length_strata_bins,
     )
 
+    # Measurement #4's control, scored offline from the benign arm's verdicts.
+    behavior_screens: tuple = ()
+    behavior_control_detail: dict = {}
+    if benign_behavior_records:
+        behavior_control = summarize_behavior_control(
+            family=family,
+            jailbroken=[record.jailbroken for record in benign_behavior_records],
+            refused=[record.refused for record in benign_behavior_records],
+            judge_fallback=[record.judge_fallback for record in benign_behavior_records],
+            harmful_attack_success_rate=behavior_summary.attack_success_rate,
+        )
+        behavior_screens = (behavior_control.screen(),)
+        behavior_control_detail = {
+            "benign_arm_asr": behavior_control.benign_attack_success_rate,
+            # ⚠️ NOT a control failure — a RESULT. H5's degenerate outcome
+            # measured directly: a model refusing anything that looks encoded
+            # produces a high (R) count that says nothing about harm. Reported
+            # beside the control, never folded into its verdict.
+            "benign_arm_refusal_rate": behavior_control.benign_refusal_rate,
+            "benign_arm_judge_fallback_rate": behavior_control.benign_fallback_rate,
+            "benign_arm_n": behavior_control.n,
+        }
+
     # The XSTest lexical control, read at the cell this rung's deployment claim
     # is read at. Costs no forward pass here — the corpus was captured once at
     # model level and this is a logistic fit over activations already in hand.
@@ -1165,6 +1223,8 @@ def run_family(
         behavior_module.reading(
             behavior_summary,
             length_null_margin=length_null.margin(behavior_summary.attack_success_rate),
+            controls=behavior_screens,
+            detail=behavior_control_detail,
         ),
         deployment_module.reading(
             curve,
