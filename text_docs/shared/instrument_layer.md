@@ -157,17 +157,27 @@ of **11 rungs on Llama and 10 on Qwen** — the inert cipher band — against th
 **two** rungs §2.2 had to work with. Three things came out of the larger set, and
 the second is a defect in the fix §2.2 landed.
 
-⚠️ **The licensing column of that run is under the RETIRED null.**
-`relicense_probes.py` calls `measure_deployment` without `strata=`, so it drew
-the plain permutation null — not the **length-matched** null settled as the rule
-on 2026-08-06 (`as6/phase1_map.md` §1). The settled rule was threaded into
-`measure_deployment` and into AS-6's sweep, and never into the re-licensing
-script; a job launched from a preset therefore ran the superseded test. **The
-conclusion below is unaffected, because the screen compares AUROCs against
-control rungs and never consults the p-value** — but no licensing count from this
-run may be reported, and AS-5's matched-null re-licensing remains open (TODO).
-*This is the settled-rule-not-threaded failure, and it is the third instance: a
-rule can be adopted, tested, and documented, and still not reach every caller.*
+⚠️ **The licensing column of that run is under the RETIRED null — and the gap
+was wider than first reported (FIXED 2026-08-07).** The length-matched null was
+settled 2026-08-06 as THE licensing rule (`as6/phase1_map.md` §1) and threaded
+into `measure_deployment` and AS-6's sweep the same day. It reached **neither
+`relicense_probes.py` nor `phase0_regime_map.py`** — the main AS-5 entrypoint —
+so *every AS-5 run until 2026-08-07 licensed deployment under the unmatched
+null*, not merely the re-licensing job. **The conclusion above is unaffected,
+because the screen compares AUROCs against control rungs and never consults a
+p-value**, but no licensing COUNT from any of those runs may be reported.
+
+**The fix is structural, not procedural:** `strata` is now a keyword-only
+argument with **no default**, so omitting it is a `TypeError` rather than a
+silently superseded test, and all three production callers build it. Pinned by
+`tests/test_control_floor.py::TestTheSupersededNullCannotBeReachedByOmission` —
+both the signature and the callers, because a later tidy-up restoring `= None`
+would reopen the defect exactly the way it opened the first time.
+
+*This is the settled-rule-not-threaded failure, third instance: a rule can be
+adopted, tested and documented and still not reach every caller. The lesson is
+that "thread it into the callers" is not the fix — **making the omission
+inexpressible** is.*
 
 **(a) Significance is not sufficiency — measured a second time, now within one
 run.** Permutation licensing passes **14/15 rungs on Llama and 14/14 on Qwen**.

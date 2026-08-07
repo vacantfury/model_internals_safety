@@ -34,6 +34,7 @@ from pathlib import Path
 
 from internals_safety.config import load_measurements_config
 from internals_safety.measurements.deployment import measure_deployment
+from internals_safety.measurements.length_null import length_strata
 from internals_safety.measurements.recognition import measure_recognition
 from internals_safety.models.capture import ActivationBatch
 
@@ -163,8 +164,33 @@ def main() -> None:
         encoded_harmful = ActivationBatch.load(harmful_ref.path)
         encoded_harmless = ActivationBatch.load(harmless_ref.path)
 
+        # The length-MATCHED null, rebuilt from the ciphertexts the cache itself
+        # carries. `user_messages` is what the model was actually sent, so the
+        # strata match the tensors being re-licensed rather than a corpus name.
+        #
+        # ⚠️ REFUSE rather than fall back. An older cache with no `user_messages`
+        # cannot support the matched null, and running the unmatched one instead
+        # would silently reproduce the defect this fix exists to close — job
+        # 8995184 licensed 14/15 rungs under exactly that superseded test.
+        if not encoded_harmful.user_messages or not encoded_harmless.user_messages:
+            raise SystemExit(
+                f"{family}: cached batch carries no `user_messages`, so the length-matched "
+                "permutation null cannot be rebuilt. Re-capture this condition — do NOT "
+                "re-license it under the unmatched null."
+            )
+        strata = length_strata(
+            encoded_harmful.user_messages,
+            encoded_harmless.user_messages,
+            config.length_strata_bins,
+        )
         curve = measure_deployment(
-            family, plain_harmful, plain_harmless, encoded_harmful, encoded_harmless, config
+            family,
+            plain_harmful,
+            plain_harmless,
+            encoded_harmful,
+            encoded_harmless,
+            config,
+            strata=strata,
         )
         recognition = measure_recognition(encoded_harmful, encoded_harmless, config)
 

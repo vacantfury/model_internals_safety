@@ -119,7 +119,8 @@ class TestCrossvalScores:
 
 class TestDeploymentReading:
     def read(self, plain_pos, plain_neg, enc_pos, enc_neg):
-        curve = measure_deployment("fam", plain_pos, plain_neg, enc_pos, enc_neg, CONFIG)
+        curve = measure_deployment("fam", plain_pos, plain_neg, enc_pos, enc_neg, CONFIG,
+                                   strata=None)  # synthetic: no texts to stratify by
         return curve, read_deployment_per_prompt(curve, plain_pos, plain_neg, enc_pos, enc_neg, CONFIG)
 
     def test_transferring_content_reads_deployed_for_most_prompts(self, generator):

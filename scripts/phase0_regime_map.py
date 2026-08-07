@@ -101,7 +101,7 @@ from internals_safety.measurements.ability_control import measure_ability_contro
 from internals_safety.measurements.behavior import measure_behavior
 from internals_safety.measurements.deployment import measure_deployment, read_deployment_per_prompt
 from internals_safety.measurements.black_box_baseline import measure_black_box_baseline
-from internals_safety.measurements.length_null import measure_length_null
+from internals_safety.measurements.length_null import length_strata, measure_length_null
 from internals_safety.measurements.recognition import (
     HARMFULNESS_POSITION,
     measure_recognition,
@@ -876,6 +876,17 @@ def run_family(
         else []
     )
 
+    # The length-MATCHED permutation null, from the exact ciphertexts this rung
+    # sent to the model. Settled 2026-08-06 as THE licensing rule and threaded
+    # into AS-6's sweep the same day — and not into here, so every AS-5 run
+    # until 2026-08-07 licensed deployment under the retired unmatched null.
+    # `strata` is a required keyword on `measure_deployment` for exactly that
+    # reason: an omission must not be expressible.
+    strata = length_strata(
+        [item.ciphertext for item in encoded_harmful],
+        [item.ciphertext for item in encoded_harmless],
+        measurements.probes.length_strata_bins,
+    )
     curve = measure_deployment(
         family,
         plain_harmful_batch,
@@ -883,6 +894,7 @@ def run_family(
         encoded_harmful_batch,
         encoded_harmless_batch,
         measurements.probes,
+        strata=strata,
     )
     deployment = read_deployment_per_prompt(
         curve,

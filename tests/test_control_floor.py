@@ -150,3 +150,47 @@ class TestTheWindowCanClose:
         ability = {"genuine": 0.9, "c1": 0.0, "c2": 0.0, "c3": 0.0, "c4": 0.0}
         low, high = sigma_bounds(auroc, ability, max_ability=0.0, genuine=["genuine"])
         assert low >= high    # no admissible sigma exists
+
+
+class TestTheSupersededNullCannotBeReachedByOmission:
+    """Item 59, and it was worse than filed.
+
+    The length-matched permutation null was settled 2026-08-06 as THE licensing
+    rule and threaded into AS-6's sweep the same day. It reached neither
+    `relicense_probes.py` NOR `phase0_regime_map.py` — the main AS-5 entrypoint —
+    so every AS-5 run until 2026-08-07 licensed deployment under the retired
+    unmatched null, and job 8995184 did too.
+
+    The fix is not "remember to pass it". `strata` is keyword-only with NO
+    default, so an omission is a TypeError rather than a silently superseded
+    test. This pins that, because a later tidy-up restoring `= None` would
+    reopen the defect invisibly — which is exactly how it happened the first
+    time.
+    """
+
+    def test_strata_is_keyword_only_and_has_no_default(self):
+        import inspect
+
+        from internals_safety.measurements.deployment import measure_deployment
+
+        parameter = inspect.signature(measure_deployment).parameters["strata"]
+        assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+        assert parameter.default is inspect.Parameter.empty, (
+            "a default on `strata` lets a caller inherit the retired unmatched "
+            "null in silence — the defect item 59 exists to close"
+        )
+
+    def test_every_production_caller_passes_strata_explicitly(self):
+        """A signature check catches omission; this catches a caller that passes
+        `strata=None` where real texts exist. Scripts that measure real rungs
+        must build strata, not opt out of them."""
+        import re
+
+        root = Path(__file__).resolve().parents[1]
+        for name in ("phase0_regime_map", "as6_guard_probe", "relicense_probes"):
+            source = (root / "scripts" / f"{name}.py").read_text()
+            assert "length_strata(" in source, f"{name} does not build length strata"
+            call = re.search(r"measure_deployment\((.*?)\n    \)", source, re.S)
+            assert call and "strata=strata" in call.group(1), (
+                f"{name} calls measure_deployment without the matched null"
+            )

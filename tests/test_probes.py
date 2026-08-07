@@ -251,6 +251,7 @@ class TestRecognitionAndDeployment:
             cluster(3.0, generator),
             cluster(-3.0, generator),
             CONFIG,
+            strata=None,  # synthetic clusters carry no texts to stratify by
         )
         assert curve.deployed
         assert curve.best().transfer_auroc > 0.95
@@ -264,6 +265,7 @@ class TestRecognitionAndDeployment:
             cluster(0.0, generator),
             cluster(0.0, generator),
             CONFIG,
+            strata=None,  # synthetic clusters carry no texts to stratify by
         )
         assert not curve.deployed
 

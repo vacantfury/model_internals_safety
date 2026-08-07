@@ -140,7 +140,8 @@ def measure_deployment(
     encoded_positive: ActivationBatch,
     encoded_negative: ActivationBatch,
     config: ProbeConfig,
-    strata: "np.ndarray | None" = None,
+    *,
+    strata: "np.ndarray | None",
 ) -> DeploymentCurve:
     """Fit the content probe on plain text, read it on the attack condition.
 
