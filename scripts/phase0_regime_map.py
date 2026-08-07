@@ -947,7 +947,20 @@ def run_family(
         # `length_null` object: that one compares a rate against a character-length
         # AUROC, which is not the same scale. Passing it here would satisfy P3
         # with a number that never examined this measurement.
-        ability_module.reading(ability_summary, control=ability_control),
+        # The claim's DIRECTION decides which evidence licenses this reading
+        # (contract, TODO 42). A rung the model cannot decode reads 0.00 against
+        # a control that also reads 0.00, so P2 can never license it — and those
+        # are exactly the rungs that calibrate the deployment noise floor, I1's
+        # control and I3's control. Declared from the same cut that defines an
+        # ability-0 control rung, so the two cannot drift apart.
+        ability_module.reading(
+            ability_summary,
+            control=ability_control,
+            claim=ability_module.claim_direction(
+                ability_summary.recovery_rate, measurements.controls.control_ability_max
+            ),
+            sensitivity_floor=measurements.controls.ability_sensitivity_floor,
+        ),
         # Likewise measurement #4 (TODO 38): the judges never run on the
         # benign-encoded arm, so there is no ASR control to pass.
         behavior_module.reading(

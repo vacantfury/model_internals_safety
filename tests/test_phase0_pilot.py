@@ -362,28 +362,32 @@ class TestMain:
         assert "behavior" in withheld
         assert any("no negative control" in why for why in withheld["behavior"])
 
-    def test_ability_now_carries_its_control_and_is_withheld_on_the_MEASURED_axis(self, run):
-        """TODO 37 closed — and the reason ability is still withheld has changed.
+    def test_an_ability_zero_family_is_reported_as_the_ABSENCE_it_is(self, run):
+        """TODO 42 closed, end to end through a real run record.
 
-        It is no longer "no negative control was run": the mismatched-plaintext
-        control runs on every family. It is now the measured comparison, because
-        the tiny in-process model decodes nothing, so the value sits AT its
-        negative-control floor. That is the asymmetry `ability_control` documents
-        — a specificity control cannot license an ability-0 reading — and it must
-        show up in the run record rather than only in a docstring.
+        **This test previously asserted the opposite**, and the reason it flipped
+        is the whole point of the change. The tiny in-process model decodes
+        nothing, so ability sits AT its negative-control floor — which a
+        specificity control can never license, because a broken scorer produces
+        the identical 0.00. Under the old contract that made the run's ability
+        readings permanently withheld, including on the very rungs that
+        calibrate the deployment noise floor, I1's control and I3's control.
+
+        The reading now declares `claim="null"` and rests on the sensitivity arm
+        instead: the scorer demonstrably fires on this family's character set, so
+        its silence is a measurement.
         """
         record = json.loads((run / "results.json").read_text())
-        withheld = record["withheld"]
-        assert "ability" in withheld
-        assert not any("no negative control" in why for why in withheld["ability"])
-        assert any("on the negative control" in why for why in withheld["ability"])
+        assert "ability" not in record["withheld"]
 
         ability = next(r for r in record["readings"] if r["instrument"] == "ability")
+        assert ability["claim"] == "null"
+        assert ability["value"] == 0.0
+        # Still carries the specificity control — the null path checks it in the
+        # OPPOSITE direction (a value beating it would mean the label is wrong).
         assert ability["control_reading"] == 0.0
-        # The sensitivity arm rides in detail and says the scorer is not broken
-        # on this family's character set — the only evidence that supports an
-        # ability-0 claim at all.
-        assert ability["detail"]["control_identity_rate"] == 1.0
+        assert ability["sensitivity"] == 1.0
+        assert ability["sensitivity_floor"] == 1.0
         assert ability["detail"]["control_scorer_is_functional"] is True
 
     def test_the_record_names_every_activation_cache_it_read(self, run):

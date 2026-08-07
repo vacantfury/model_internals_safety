@@ -149,12 +149,23 @@ P1–P7 into fields:
 | `operating_point: str` | P6 | the band-run incoherence traced to one stated only in a config comment |
 | `selection_inside_null: bool` | P7 | an uncorrected argmax over ~33 cells is a multiple comparison |
 | `licensed: bool \| None` | §1.5 | tri-state; `None` means *this instrument could not read this*, never *absent* |
+| `claim: positive \| null` + `sensitivity` + `sensitivity_floor` | §4.4 | P2/P3/P7 are inflation controls and cannot license an ABSENCE — added 2026-08-06 (TODO 42) |
 
 The load-bearing method is `reportable` — **one place answers "may this number
 appear in a paper"**, and `why_not_reportable()` names every failing axis, so a
 run record can carry a table of what was withheld beside the table of what was
 measured. A withheld cell with no stated reason is how an instrument defect
 hides as a null result.
+
+**`reportable` routes on the claim's direction**, because the two directions need
+different evidence: a positive claim must beat its negative control and clear the
+length null, while a null claim must *not* beat its control and must demonstrate
+the instrument could have fired at all. Full rules and the reasoning in
+`instrument_build_plan.md` §4.4. The one thing to carry here: the direction is
+**declared, never derived from the value** — deriving it would let any instrument
+reading low dodge its own control — and the dodge is closed instead by
+`claim_is_coherent`, which refuses a null claim that clears its specificity
+control as a positive reading mislabelled.
 
 Two pieces carry the weight beyond the fields themselves:
 
@@ -284,8 +295,11 @@ Three consequences worth keeping, each of which cost a fix to learn:
    instruments do not yet emit `Reading`s is not forced to fake them.
 5. ~~Wire the four original measurements to emit `Reading`s~~ — **done
    2026-08-06**, and it immediately found that measurements #1 and #4 have no
-   negative control (TODO 37/38). Both now read non-reportable with the reason
-   named, rather than being quietly quotable.
+   negative control (TODO 37/38). Both read non-reportable with the reason named
+   rather than being quietly quotable — and #1's control has since landed
+   (`ability_control`, §4.4), which in turn exposed that a specificity control
+   cannot license an ABSENCE and produced the contract's claim-direction routing
+   (TODO 42). #4 still has none: the judges never run on the benign-encoded arm.
 6. ~~Wire I1/I2/I3 into the spine~~ — **done 2026-08-06.** I2 runs always (no new
    forward pass); I1 and I3 run only when `--instruments` declares them, because
    both add GPU work and `--dry-run` must price it before the approval gate sees

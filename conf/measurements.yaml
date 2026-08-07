@@ -313,6 +313,22 @@ controls:
   # needs the restatements read by hand.
   control_ability_max: 0.0
 
+  # The sensitivity floor a NULL claim must reach — `Reading.sensitivity_floor`
+  # for measurement #1 (contract, TODO 42). "The model cannot decode this rung"
+  # rests on the scorer having been shown to fire when it SHOULD, because a
+  # broken scorer and a genuine can't-decode produce the identical 0.00.
+  #
+  # ONE, and it is the measurement rather than an aspiration: `identity_rate` is
+  # 1.0 on all 54 cached conditions, so demanding it excludes nothing that exists
+  # today. Below 1.0 would admit a rung whose scorer demonstrably failed on some
+  # prompts — and the ability-0 rungs calibrate three other instruments, so that
+  # failure would propagate into every floor derived from them.
+  #
+  # Tuning path: re-run `measure_ability_control` over every cached condition on
+  # any corpus, cut, or `normalize` change. A condition below 1.0 is a defect
+  # report about the scorer's character handling, not a reason to lower this.
+  ability_sensitivity_floor: 1.0
+
 
 # AS-6's verdict readout — how a guard's answer token is resolved.
 guard_verdict:

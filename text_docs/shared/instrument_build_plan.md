@@ -862,10 +862,52 @@ the scorer where no other rung would reveal it. Measured **1.0 on all 54
 conditions**, so every ability-0 in this repo is a measurement rather than a
 scorer failure.
 
-**Consequence, stated rather than papered over:** `Reading` has no sensitivity
-axis, so ability-0 readings remain non-reportable under P2 with the reason named
-in the run record. Adding that axis is a deliberate contract change and is filed
-as such, not slipped in beside a control build.
+**✅ THE CONTRACT NOW HAS THAT AXIS (2026-08-06, TODO 42) — and it was filed and
+done as its own pass rather than slipped in beside the control build, because it
+changes what may appear in a paper.** `Reading` carries a `claim` direction
+(`positive` | `null`) and a `sensitivity` / `sensitivity_floor` pair mirroring
+`control_reading` / `control_margin`, and `reportable` routes on the direction:
+
+| | positive claim | null claim |
+|---|---|---|
+| P2 specificity | must BEAT the control | must NOT beat it (see below) |
+| P3 length null | required | — |
+| P7 selection | required | — |
+| sensitivity | — | required |
+| `licensed` | must be `True` | `is not None` |
+
+**P2, P3 and P7 drop out of the null path rather than being waived, and the
+reason is one sentence: all three are INFLATION controls.** Each asks whether an
+observed signal is really something else — the control condition, raw length, an
+uncorrected argmax. A null claim has no signal to explain away, so all three are
+vacuous, and the question that replaces them is the opposite one: *could this
+instrument have fired at all?* P7 is the clearest case — a null that survives an
+uncorrected search over the grid is CONSERVATIVE ("even the best layer found
+nothing"), not suspect. Likewise `licensed=False` — no signal above the
+instrument's own null — is **supporting** evidence for an absence, where it is
+disqualifying for a positive; `licensed=None` stays disqualifying on both, since
+"I could not read this" must never become "there is nothing here".
+
+**⚠️ The direction is DECLARED, not derived from the value, and the guard that
+makes that safe is `claim_is_coherent`.** Deriving it — "value at the floor, so
+treat it as a null" — would make `reportable` self-licensing: any instrument
+reading low would automatically dodge its own negative control. So the caller
+declares the direction and the run record carries it, while the dodge is closed
+from the other side: **a null claim that CLEARS its specificity control is
+refused as a positive reading mislabelled.** That is why the null path still
+requires the control to have been run — it is checked in the opposite direction.
+
+For measurement #1 the direction comes from `ability.claim_direction`, which
+reads the same `controls.control_ability_max` cut that decides whether a rung may
+serve as an ability-0 negative control for the other instruments. One home for
+one idea: a separately tuned "counts as a null" cut would be the
+`DEFAULT_LENGTH_BINS` failure again. The floor is
+`controls.ability_sensitivity_floor: 1.0` — the measurement, not an aspiration,
+since `identity_rate` is 1.0 on all 54 cached conditions.
+
+**What this changed in practice:** the rungs that calibrate three other
+instruments are now quotable as the absences they are, instead of being withheld
+by a test structurally unable to license them.
 
 The remaining build items are filed with the instruments that need them.
 

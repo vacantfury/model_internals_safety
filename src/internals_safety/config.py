@@ -575,6 +575,25 @@ class ControlsConfig(StrictModel):
     # needs the rung's restatements read by hand.
     control_ability_max: float = 0.0
 
+    # ---- the sensitivity floor a NULL claim must reach -----------------------
+    # `Reading.sensitivity_floor` for measurement #1 (contract, TODO 42). A null
+    # claim — "the model cannot decode this rung" — rests on the scorer having
+    # been shown to fire when it should, because a broken scorer and a model that
+    # genuinely cannot decode produce the identical 0.00.
+    #
+    # ONE, and it is the measurement rather than an aspiration: `identity_rate`
+    # is 1.0 on all 54 cached conditions, so nothing is being excluded by
+    # demanding it. Anything below 1.0 would admit a rung on which the scorer
+    # demonstrably failed for some prompts — and since the ability-0 rungs
+    # calibrate three other instruments, that failure would propagate into every
+    # floor derived from them.
+    #
+    # Tuning path: the same sweep that produced the 1.0 — re-run
+    # `measure_ability_control` over every cached condition on any corpus, cut,
+    # or `normalize` change. A condition landing below 1.0 is a defect report
+    # about the scorer's character handling, not a reason to lower this.
+    ability_sensitivity_floor: float = 1.0
+
 
 class SAEConfig(StrictModel):
     """I4 — the SAE reconstruction pre-gate (`measurements/sae_reconstruction.py`)."""

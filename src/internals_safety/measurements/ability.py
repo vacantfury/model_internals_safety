@@ -23,7 +23,7 @@ from dataclasses import dataclass
 
 from internals_safety.config import AbilityConfig
 from internals_safety.measurements.ability_control import AbilityControl, zero_count_margin
-from internals_safety.measurements.contract import Kind, Reading
+from internals_safety.measurements.contract import Claim, Kind, Reading
 from internals_safety.encodings.base import EncodedPrompt
 from internals_safety.encodings.recovery import RecoveryScore, score_recovery
 from internals_safety.models.generate import generate
@@ -115,6 +115,25 @@ QUESTION = "can the model recover the plaintext when it is explicitly asked to d
 KIND: Kind = "correlational"
 
 
+def claim_direction(recovery_rate: float, max_ability: float) -> Claim:
+    """Is this condition's reading asserting a decode, or asserting an absence?
+
+    **One home for the concept, deliberately.** `max_ability` is
+    `controls.control_ability_max` — the same cut that decides whether a rung may
+    serve as an ability-0 negative control for the other instruments. A rung that
+    reads no decoding IS the rung making a null claim, so a second, separately
+    tuned cut for "counts as a null" would be the `DEFAULT_LENGTH_BINS` failure
+    again: two copies of one idea, free to drift, with a claim silently meaning
+    different things in different places.
+
+    NaN reads as a positive claim, i.e. the strict route. An unreadable rate is
+    not evidence of absence.
+    """
+    if recovery_rate != recovery_rate:  # NaN
+        return "positive"
+    return "null" if recovery_rate <= max_ability else "positive"
+
+
 def reading(
     summary: FamilyAbility,
     *,
@@ -122,30 +141,37 @@ def reading(
     control_reading: float | None = None,
     control_margin: float | None = None,
     length_null_margin: float | None = None,
+    claim: Claim = "positive",
+    sensitivity: float | None = None,
+    sensitivity_floor: float | None = None,
     detail: dict | None = None,
 ) -> Reading:
     """Measurement #1's condition-level verdict.
 
     **The negative control this measurement lacked is now built** —
     `ability_control.measure_ability_control`, offline over cached text. Pass it
-    as `control` and the three contract axes are filled from it: the free
-    derangement supplies P2, the length-matched derangement supplies P3, and the
-    sensitivity arm rides in `detail`. The explicit `control_reading` /
-    `control_margin` / `length_null_margin` arguments remain for callers that
-    compute their own; `control` wins where both are given.
+    as `control` and every contract axis is filled from it: the free derangement
+    supplies P2, the length-matched derangement supplies P3, and `identity_rate`
+    supplies the sensitivity arm. The explicit `control_reading` /
+    `control_margin` / `length_null_margin` / `sensitivity` arguments remain for
+    callers that compute their own; `control` wins where both are given.
 
-    **Two things a caller must not misread.** The control's bar is the derived
-    rule-of-three bound for this condition's n, not a chosen constant — see
-    `ability_control.zero_count_margin`. And an ability-0 rung will NOT become
-    reportable: its value equals its negative control by construction, so P2
-    cannot license it, and the evidence that supports it is the sensitivity arm
-    (`identity_rate`) instead. That is a real gap in the contract, named rather
-    than papered over.
+    **The ability-0 case is now reportable, and it was not before (TODO 42).** An
+    ability-0 rung's value equals its negative control by construction, so P2 can
+    never license it — which used to mean the rungs that CALIBRATE three other
+    instruments were themselves unreportable. Pass `claim="null"` (see
+    `claim_direction`) and the contract routes to the sensitivity arm instead:
+    the evidence becomes "this scorer demonstrably fires when it should", not
+    "this scorer stayed quiet".
+
+    The control's bar is still the derived rule-of-three bound for this
+    condition's n, not a chosen constant — see `ability_control.zero_count_margin`.
     """
     if control is not None:
         control_reading = control.mismatched_rate
         control_margin = zero_count_margin(control.n)
         length_null_margin = control.length_margin
+        sensitivity = control.identity_rate
         detail = {
             "control_identity_rate": control.identity_rate,
             "control_scorer_is_functional": control.scorer_is_functional,
@@ -157,6 +183,9 @@ def reading(
         instrument="ability",
         kind=KIND,
         value=summary.recovery_rate,
+        claim=claim,
+        sensitivity=sensitivity,
+        sensitivity_floor=sensitivity_floor,
         operating_point=(
             "fraction of prompts recovered under the three-route rule (exact/contains "
             "short-circuit, similarity >= cut with a content-overlap veto, order-blind "

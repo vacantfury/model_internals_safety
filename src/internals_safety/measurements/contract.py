@@ -22,6 +22,44 @@ the wrappers here only assert what they already compute.
 appear in a paper", and it fails CLOSED on every axis: unmeasured, unlicensed,
 loud on controls, or inside the length null all return False. A number that
 cannot say why it is trustworthy is not trustworthy.
+
+**The claim's DIRECTION is part of the contract (added 2026-08-06, TODO 42).**
+The first version asked one question — *does the instrument read loudly where the
+answer is known to be nothing?* — which is **specificity**, and it is the right
+question for a POSITIVE claim and structurally unable to license a NULL one. On
+`tag_block` or `reverse_characters` ability is 0.00 and its negative control is
+0.00, so the measurement is by construction indistinguishable from the control
+and a *broken scorer* produces the identical number.
+
+That was load-bearing rather than pedantic: the ability-0 rungs are the
+calibration for three other instruments — the deployment noise floor (0.656 /
+0.671), I1's control and I3's control all rest on "the model demonstrably cannot
+decode this rung", i.e. on exactly the reading the old contract could not
+license. So `Reading` now carries a `claim` and a `sensitivity` arm, and
+`reportable` routes on the direction:
+
+    positive  value must BEAT its negative control (P2) and clear the length
+              null (P3) — both are guards against a signal that is really
+              something else.
+    null      value must NOT beat its negative control, and the instrument must
+              demonstrate it COULD have fired (sensitivity).
+
+**Why P2 and P3 drop out of the null path rather than being waived.** Both are
+inflation controls: they ask whether an observed signal is really the control
+condition or really length. A null claim has no signal to explain away, so both
+are vacuous — and the question that replaces them is the opposite one, *could
+this instrument have seen anything at all?* Same for P7: selection over a grid
+inflates a maximum, so a null that survives an uncorrected search is CONSERVATIVE
+rather than suspect ("even the best layer found nothing").
+
+**Why `claim` is declared rather than derived from the value.** Deriving it —
+"value at the floor, so treat it as a null" — would make `reportable`
+self-licensing: any instrument reading low would automatically dodge its own
+negative control. The direction is a statement about what the paper asserts, not
+about what the number happens to be, so the caller declares it and the run record
+carries it. The dodge is closed from the other side instead, by
+`claim_is_coherent`: **a null claim that clears its specificity control is a
+positive reading mislabelled**, and is refused.
 """
 
 from __future__ import annotations
@@ -30,6 +68,10 @@ from dataclasses import dataclass, field
 from typing import Literal, Protocol, Sequence, runtime_checkable
 
 Kind = Literal["correlational", "causal"]
+
+# What the reading asserts. "positive" = we measured X; "null" = we measured no X.
+# The two need different evidence, which is the whole reason this type exists.
+Claim = Literal["positive", "null"]
 
 
 @dataclass(frozen=True)
@@ -78,6 +120,28 @@ class Reading:
     # uncorrected search over the grid.
     selection_inside_null: bool = False
 
+    # What this reading ASSERTS. Defaults to "positive" because that is what every
+    # instrument on the roster meant when it was written, and because the positive
+    # path is the strict one — a caller who forgets to think about direction gets
+    # the demanding route, not the permissive one.
+    claim: Claim = "positive"
+
+    # SENSITIVITY — what the instrument reads on a condition where the answer is
+    # known to be SOMETHING. The exact mirror of `control_reading`, which reads
+    # where the answer is known to be nothing.
+    #
+    # For measurement #1 this is `AbilityControl.identity_rate`: the fraction of
+    # prompts on which the scorer fires when the response IS the plaintext. Not
+    # the tautology it looks like — `normalize` NFKC-folds and strips zero-width
+    # characters, so a rung whose text uses an unusual character set could break
+    # the scorer where no other rung would reveal it. For a probe instrument the
+    # analogue is transfer AUROC on a condition known to be readable.
+    sensitivity: float | None = None
+    # The floor `sensitivity` must reach. Beside the reading for the same reason
+    # `control_margin` is: a threshold that lives elsewhere can be changed without
+    # the numbers it licensed being re-derived.
+    sensitivity_floor: float | None = None
+
     # Free-form provenance a reader may need: layer, position, n, p-value.
     detail: dict = field(default_factory=dict)
 
@@ -96,12 +160,52 @@ class Reading:
         return self.length_null_margin > 0.0
 
     @property
+    def clears_sensitivity(self) -> bool:
+        """Could this instrument have fired at all on this condition? Fails closed.
+
+        The arm a NULL claim rests on. NaN fails, as everywhere else in this
+        layer: an unmeasurable sensitivity is not a demonstrated one.
+        """
+        if self.sensitivity is None or self.sensitivity_floor is None:
+            return False
+        if self.sensitivity != self.sensitivity:  # NaN
+            return False
+        return self.sensitivity >= self.sensitivity_floor
+
+    @property
+    def claim_is_coherent(self) -> bool:
+        """Does the declared direction match the evidence?
+
+        **This is what makes a declared `claim` safe.** Without it, labelling a
+        reading `null` would be a free pass out of P2 and P3 — exactly the dodge
+        that deriving the direction from the value would have opened. A null claim
+        that BEATS its own negative control is not a null; it is a positive
+        reading wearing the permissive route's label, and it is refused here.
+        """
+        if self.claim == "positive":
+            return True
+        return not self.clears_controls
+
+    @property
     def reportable(self) -> bool:
         """May this number appear in a paper?
 
-        Fails closed on every axis. Note `licensed is True` rather than a truth
-        test: `None` is unmeasured and must not pass by looking falsy-or-not.
+        Fails closed on every axis, and routes on the claim's direction — see the
+        module docstring for why P2/P3/P7 are inflation controls that a null claim
+        structurally cannot satisfy and does not need.
+
+        Note `licensed is True` on the positive path rather than a truth test:
+        `None` is unmeasured and must not pass by looking falsy-or-not. The null
+        path asks only `is not None`, because there `licensed is False` — no signal
+        above the instrument's own null — is SUPPORTING evidence rather than a
+        disqualification. Unmeasured stays disqualifying on both paths.
         """
+        if self.claim == "null":
+            return (
+                self.licensed is not None
+                and self.claim_is_coherent
+                and self.clears_sensitivity
+            )
         return (
             self.licensed is True
             and self.clears_controls
@@ -113,12 +217,33 @@ class Reading:
         """The failing axes, named. Empty iff `reportable`.
 
         Exists so a run record says WHY a cell was withheld. "Not reportable"
-        with no reason is how an instrument defect hides as a null result.
+        with no reason is how an instrument defect hides as a null result. The
+        reasons are direction-specific: telling a null claim it lacks a
+        specificity margin would send a reader after evidence that cannot exist.
         """
         reasons = []
         if self.licensed is None:
             reasons.append("unmeasured: this instrument could not read this condition")
-        elif self.licensed is False:
+        if self.claim == "null":
+            if not self.claim_is_coherent:
+                reasons.append(
+                    f"declared a null claim but reads {self.value:.3f} against "
+                    f"{self.control_reading:.3f} on the negative control — that is a "
+                    "positive reading mislabelled, not an absence"
+                )
+            if self.sensitivity is None or self.sensitivity_floor is None:
+                reasons.append(
+                    "no sensitivity arm was run: an absence needs evidence the "
+                    "instrument COULD have fired, or a broken instrument reads the same"
+                )
+            elif not self.clears_sensitivity:
+                reasons.append(
+                    f"sensitivity {self.sensitivity:.3f} is below the floor "
+                    f"{self.sensitivity_floor:.3f} — this instrument cannot be shown to "
+                    "fire on this condition, so its silence means nothing"
+                )
+            return reasons
+        if self.licensed is False:
             reasons.append("not licensed: no signal above the instrument's null")
         if self.control_reading is None or self.control_margin is None:
             reasons.append("no negative control was run (P2)")
