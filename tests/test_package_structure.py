@@ -107,16 +107,15 @@ def test_the_contract_is_the_layer_s_sink():
 DECLARED_ORPHANS = {
     # Predates the contract; H4 overlap metric, used from the docs not the spine.
     "probes.overlap",
-    # I4's Instruct-reconstruction pre-gate. Built and tested against SAE test
-    # doubles, but nothing can call it until an SAE LOADER exists — the gate
-    # takes a dictionary and we have no way yet to produce a real one (SAELens /
-    # Llama Scope, TODO 55). Deliberately built first anyway: the build plan's
-    # own sequencing is "pre-gate FIRST, then features", because the pre-gate can
-    # REFUSE the whole instrument and doing the features first would risk
-    # building on a dictionary that does not transfer to Instruct.
-    "measurements.sae_reconstruction",
 }
 
+# `measurements.sae_reconstruction` left this list on 2026-08-06 when
+# `models/sae_loader.py` and `scripts/sae_pregate.py` landed. Its stated reason —
+# "nothing can call it until an SAE LOADER exists" — was discharged by reading the
+# Llama Scope checkpoint format off the artifact rather than adopting `sae-lens`,
+# which resolves to 116 packages (more than this whole repo) and brings a second
+# model-loading framework beside our own capture spine.
+#
 # `measurements.lexical_decorrelation` left this list on 2026-08-06, and its
 # stated reason turned out to be measurably wrong rather than merely discharged.
 # TODO 41 deferred the wiring because it "means capturing a third prompt set PER

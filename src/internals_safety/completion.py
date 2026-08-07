@@ -84,10 +84,12 @@ ROSTER: tuple[Item, ...] = (
     Item(
         "I4",
         "SAE features",
-        ("measurements.sae_reconstruction",),
-        incomplete="the Instruct-reconstruction PRE-GATE is built and tested; the SAE "
-        "loader (SAELens / Llama Scope) and the feature instrument itself are not "
-        "written, and the pre-gate is not reachable from a script without a loader",
+        ("measurements.sae_reconstruction", "models.sae_loader"),
+        incomplete="the pre-gate and the Llama Scope loader are built, tested and "
+        "reachable (scripts/sae_pregate.py); the FEATURE instrument — which features "
+        "distinguish decoded from non-decoded — is not written, and deliberately so: "
+        "the build plan gates it on the pre-gate passing, and the pre-gate needs the "
+        "8B Base arm, which is cluster work",
     ),
     Item("I5", "reply-inversion causal test", ("measurements.reply_inversion",)),
     Item(
