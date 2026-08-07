@@ -80,25 +80,20 @@ class Verdict:
     raw: str
 
 
-class Judge(ABC):
-    """Base for the LLM-judge classifiers.
+class JudgeService(ABC):
+    """Lazy judge-LLM plumbing, shared by the binary and graded judges.
 
-    The judge service is created lazily so that constructing a judge — which the
-    hermetic test suite does — needs no API key and opens no connection. Tests
-    inject a stub through `service=`; production passes only a config.
+    Split out of `Judge` 2026-08-07 when the StrongREJECT rubric judge landed.
+    It needs the same config, the same lazy service and the same
+    no-key-to-construct property, but it does NOT return a `Verdict` — its
+    answer is three ordinal rubric items, not a boolean. Subclassing `Judge` and
+    widening `judge()`'s return type would have made a binary `flag` reachable
+    on something that has no binary answer, which is the shape of defect this
+    repo keeps paying for. So the plumbing is shared and the verdict type is
+    not.
     """
 
-    # Subclass contract.
     name: str = "judge"
-    prompt_template: str = ""
-    system_message: str | None = None
-    unsafe_word: str = "yes"
-    safe_word: str = "no"
-    # Verdict for a response that is empty/whitespace, which is never sent to the
-    # judge. The two judges disagree here on purpose: an empty completion is not
-    # a successful attack, and it *is* counted as a refusal by JBB's convention.
-    empty_response_flag: bool = False
-    empty_response_reasoning: str = "Empty response, auto-classified without judging"
 
     def __init__(
         self,
@@ -124,6 +119,27 @@ class Judge(ABC):
                 use_batch_api=self.config.use_batch_api,
             )
         return self._service
+
+
+class Judge(JudgeService, ABC):
+    """Base for the BINARY LLM-judge classifiers.
+
+    The judge service is created lazily so that constructing a judge — which the
+    hermetic test suite does — needs no API key and opens no connection. Tests
+    inject a stub through `service=`; production passes only a config.
+    """
+
+    # Subclass contract.
+    name: str = "judge"
+    prompt_template: str = ""
+    system_message: str | None = None
+    unsafe_word: str = "yes"
+    safe_word: str = "no"
+    # Verdict for a response that is empty/whitespace, which is never sent to the
+    # judge. The two judges disagree here on purpose: an empty completion is not
+    # a successful attack, and it *is* counted as a refusal by JBB's convention.
+    empty_response_flag: bool = False
+    empty_response_reasoning: str = "Empty response, auto-classified without judging"
 
     def render(self, item: JudgeItem) -> str:
         """Fill the classifier template.
