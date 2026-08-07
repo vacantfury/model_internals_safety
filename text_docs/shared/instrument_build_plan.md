@@ -584,6 +584,36 @@ reconstructs **Instruct** activations acceptably (reconstruction error, variance
 explained, downstream KL). A base-trained SAE applied to Instruct without that
 check produces findings about the wrong model.
 
+**⚠️ THE BASE ARM RENDERS THROUGH A BORROWED TEMPLATE, AND THAT IS AN
+INTERPRETATION HAZARD, NOT A DETAIL (2026-08-07).** `Llama-3.1-8B` (Base) ships
+no chat template, so `conf/models/llama3_1_8b_base.yaml` sets
+`chat_template_from: llama3_1_8b_instruct` and the loader borrows Instruct's.
+That is deliberate — letting the Base arm read bare text while the Instruct arm
+reads a rendered chat prompt would fold a *formatting* difference into the very
+number the pre-gate reports, which is the transfer gap between the two.
+
+The consequence, which must be checked whenever the rendering path changes:
+**the Base arm is only ever as correct as the Instruct template it borrows, so a
+template-side fix has to be validated on BOTH arms.** A Base-only rendering
+regression does not present as a bug — it presents as a *larger transfer gap*,
+i.e. as exactly the finding the pre-gate exists to measure, and it would be read
+as "the dictionary does not transfer to Instruct" when the truth is "the two arms
+were not given the same input".
+
+Not hypothetical: on 2026-08-07 a single trailing space in one XSTest prompt
+(1 of 650) broke prompt rendering **model-dependently** — Llama-3.1's template
+passes content through `| trim`, Qwen2.5's does not — killing two H200 jobs at
+the first capture. Fixed at load (`load_prompts` strips, so `prompt.text` IS
+what the model receives) rather than by loosening the resolver, because length is
+a measured confound in both papers and a stored string differing from the
+rendered one by a character is a defect in its own right. The Base arm would have
+inherited that trim **through a template that is not its own**, which is the
+sharpest form of this hazard.
+
+*Recorded here rather than in `instrument_layer.md`: that file is what the
+instrument has been FOUND to do, and this is a design constraint on a
+measurement not yet run.*
+
 **✅ THE PRE-GATE IS BUILT 2026-08-06 — `measurements/sae_reconstruction.py`.**
 Built FIRST, before any loader or feature code, because the sequencing below
 says so and the reason is that this gate can REFUSE the whole instrument:
