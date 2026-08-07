@@ -70,7 +70,14 @@ ROSTER: tuple[Item, ...] = (
     Item("I1", "decode lens (Patchscopes)", ("measurements.decode_lens", "models.patching")),
     Item("I2", "processing trajectory", ("measurements.trajectory",)),
     Item("I3", "entropy dynamics", ("measurements.entropy_dynamics", "models.lens")),
-    Item("I4", "SAE features", (), "not started; needs SAELens + an Instruct-reconstruction pre-gate"),
+    Item(
+        "I4",
+        "SAE features",
+        ("measurements.sae_reconstruction",),
+        incomplete="the Instruct-reconstruction PRE-GATE is built and tested; the SAE "
+        "loader (SAELens / Llama Scope) and the feature instrument itself are not "
+        "written, and the pre-gate is not reachable from a script without a loader",
+    ),
     Item("I5", "reply-inversion causal test", ("measurements.reply_inversion",)),
     Item(
         "I6",

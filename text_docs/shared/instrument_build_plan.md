@@ -584,6 +584,44 @@ reconstructs **Instruct** activations acceptably (reconstruction error, variance
 explained, downstream KL). A base-trained SAE applied to Instruct without that
 check produces findings about the wrong model.
 
+**✅ THE PRE-GATE IS BUILT 2026-08-06 — `measurements/sae_reconstruction.py`.**
+Built FIRST, before any loader or feature code, because the sequencing below
+says so and the reason is that this gate can REFUSE the whole instrument:
+building features first risks building on a dictionary that does not transfer.
+
+Its foundational paper was read at this build step — **Cunningham et al., ICLR
+2023** (arXiv 2309.08600, 1432c). Two things came from it:
+
+- **The validation triple**, and *which of the three decides*. They report
+  reconstruction loss and proportion of variance unexplained, but their own
+  limitations section says they would rather minimise "the change in model
+  outputs when replacing the activations with our reconstructed vectors,
+  **rather than the reconstruction loss**". So the **downstream term is the
+  gate** here and MSE/variance are diagnostics: a dictionary can post a
+  respectable MSE and still wreck the distribution the model was about to emit.
+- **The negative control.** Their baseline set (random directions, PCA, the
+  neuron basis) becomes a **matched-shape, matched-sparsity random dictionary**
+  run through the identical pipeline. A dense control would be trivially easy to
+  beat, so the control shares the trained dictionary's TopK.
+
+**The bar is relative, the sixth derived floor:** `kl_recovered = 1 - KL(clean ||
+sae) / KL(clean || zero-ablated)` — 1.0 perfect, 0.0 no better than deleting the
+layer, **negative worse than deleting it**, and deliberately not clamped because
+that is a real outcome for an out-of-distribution dictionary. An absolute KL bar
+would mean different things per model, layer and corpus.
+
+**Two tri-state cases it handles:** a layer whose ablation changes nothing has no
+downstream contribution to recover, so the ratio is undefined and the gate reads
+UNMEASURED rather than crediting the dictionary; and `licensed=True` here
+licenses **naming**, never a causal claim — the policy note below is enforced by
+the reading, not just stated.
+
+**What remains for I4:** the SAE **loader** (SAELens / Llama Scope) and the
+feature instrument. The pre-gate takes a two-method `encode`/`decode` protocol,
+so it is testable with no download, no GPU and no 256-checkpoint suite — which
+is exactly why it could be built before the adapter — but nothing can call it
+until a real dictionary can be produced (TODO 55).
+
 **Known risks — this instrument has the worst published track record of the four,
 and the plan treats it accordingly:**
 - **arXiv 2606.18322, *SAE Interventions are Unreliable*** — suppressed behavior

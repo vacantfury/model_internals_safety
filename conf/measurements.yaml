@@ -343,3 +343,29 @@ attribution:
   # so this can be checked against the control's own spread — a bar the control
   # grid also clears is too low on that contrast.
   detection_sd: 2.0
+
+
+# I4 — the SAE reconstruction pre-gate. Nothing in I4 is admissible until this
+# passes, because Llama Scope is trained on Llama-3.1-8B-BASE and our target is
+# INSTRUCT: a base-trained dictionary applied to an instruct-tune fails silently,
+# always returning some reconstruction and some feature activations.
+sae:
+  # Recorded per run — the fact the whole gate is about.
+  trained_on: "PLACEHOLDER - set per SAE suite when the loader lands"
+  # THE GATE: fraction of the layer's downstream KL contribution surviving
+  # substitution of the SAE round trip. 1.0 perfect, 0.0 no better than deleting
+  # the layer, negative worse than deleting it. Relative, not absolute, because
+  # an absolute KL bar means different things per model/layer/corpus.
+  #
+  # PLACEHOLDER. Tuning path is an experiment, not a sweep: run the SAME
+  # dictionary against the model it WAS trained on (Base) and against our target
+  # (Instruct). Base is the ceiling; the bar comes from the transfer gap.
+  min_kl_recovered: 0.80
+  # Diagnostic, not the gate — a dictionary can explain variance and still wreck
+  # the output distribution. PLACEHOLDER, same tuning path.
+  min_variance_explained: 0.75
+  # The random-dictionary control must share the trained dictionary's sparsity;
+  # a dense control reconstructs better for reasons unrelated to learned
+  # features. Tuning path: copy from the loaded suite's own TopK setting.
+  control_k: 32
+  control_expansion: 8

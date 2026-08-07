@@ -100,6 +100,14 @@ DECLARED_ORPHANS = {
     # per rung. That changes what a run costs, so it goes behind --instruments
     # with its own dry-run line rather than in by default (TODO 41).
     "measurements.lexical_decorrelation",
+    # I4's Instruct-reconstruction pre-gate. Built and tested against SAE test
+    # doubles, but nothing can call it until an SAE LOADER exists — the gate
+    # takes a dictionary and we have no way yet to produce a real one (SAELens /
+    # Llama Scope, TODO 55). Deliberately built first anyway: the build plan's
+    # own sequencing is "pre-gate FIRST, then features", because the pre-gate can
+    # REFUSE the whole instrument and doing the features first would risk
+    # building on a dictionary that does not transfer to Instruct.
+    "measurements.sae_reconstruction",
 }
 
 # `measurements.causal_license` and `models.interventions` left this list on

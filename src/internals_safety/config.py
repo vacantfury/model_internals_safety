@@ -576,6 +576,50 @@ class ControlsConfig(StrictModel):
     control_ability_max: float = 0.0
 
 
+class SAEConfig(StrictModel):
+    """I4 — the SAE reconstruction pre-gate (`measurements/sae_reconstruction.py`)."""
+
+    # Which model the dictionary was TRAINED on, recorded per run because it is
+    # the entire reason the pre-gate exists: Llama Scope is trained on
+    # Llama-3.1-8B-Base while our target is Instruct, and a base-trained
+    # dictionary applied to an instruct-tune fails silently — it always returns
+    # some reconstruction and some feature activations.
+    trained_on: str = "PLACEHOLDER — set per SAE suite when the loader lands"
+
+    # The GATE. Fraction of the layer's downstream KL contribution that survives
+    # substituting the SAE round trip: 1.0 perfect, 0.0 no better than deleting
+    # the layer, negative worse than deleting it.
+    #
+    # Relative rather than absolute because an absolute KL bar means different
+    # things per model, layer and corpus — the derived-floor pattern, again.
+    # This is the term the foundational paper says should decide (ICLR 2023,
+    # arXiv 2309.08600: they would rather minimise "the change in model outputs
+    # ... rather than the reconstruction loss").
+    #
+    # PLACEHOLDER value. Tuning path, and it is a real experiment rather than a
+    # sweep: run the SAME dictionary against the model it WAS trained on (Base)
+    # and against our target (Instruct). Base is the ceiling the dictionary can
+    # reach, so the bar is set from the transfer gap, not from taste.
+    min_kl_recovered: float = 0.80
+
+    # Diagnostic bar, not the gate. A dictionary can explain plenty of variance
+    # and still wreck the distribution the model was about to emit, which is why
+    # this cannot stand alone.
+    # PLACEHOLDER. Tuning path: the same Base-vs-Instruct transfer measurement.
+    min_variance_explained: float = 0.75
+
+    # Sparsity of the matched random-dictionary control. It must share the
+    # trained dictionary's sparsity — a DENSE control would reconstruct better
+    # for a reason that has nothing to do with having learned features, which
+    # would make the control trivially easy to beat and the comparison
+    # meaningless.
+    # Tuning path: read off the loaded suite's own TopK setting; Llama Scope
+    # ships TopK SAEs, so this is a property to copy from the checkpoint rather
+    # than choose, once the loader lands.
+    control_k: int = 32
+    control_expansion: int = 8
+
+
 class AttributionConfig(StrictModel):
     """I6's patching attribution — `measurements/attribution.py`."""
 
@@ -627,6 +671,7 @@ class MeasurementsConfig(StrictModel):
     controls: ControlsConfig = ControlsConfig()
     guard_verdict: GuardVerdictConfig = GuardVerdictConfig()
     attribution: AttributionConfig = AttributionConfig()
+    sae: SAEConfig = SAEConfig()
 
 
 class JudgeConfig(StrictModel):
