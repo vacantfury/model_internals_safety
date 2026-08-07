@@ -620,7 +620,7 @@ says so and the reason is that this gate can REFUSE the whole instrument:
 building features first risks building on a dictionary that does not transfer.
 
 Its foundational paper was read at this build step — **Cunningham et al., ICLR
-2023** (arXiv 2309.08600, 1432c). Two things came from it:
+2023** (arXiv 2309.08600, 1432c). Three things came from it:
 
 - **The validation triple**, and *which of the three decides*. They report
   reconstruction loss and proportion of variance unexplained, but their own
@@ -633,6 +633,36 @@ Its foundational paper was read at this build step — **Cunningham et al., ICLR
   neuron basis) becomes a **matched-shape, matched-sparsity random dictionary**
   run through the identical pipeline. A dense control would be trivially easy to
   beat, so the control shares the trained dictionary's TopK.
+- **No threshold can be read off the fidelity/sparsity curve, and they say so.**
+  Appendix B sweeps the sparsity coefficient against proportion-of-variance-
+  unexplained and reports that "the lack of a 'bump' or 'knee' in these plots
+  provides some evidence that there is not a single correct way to decompose
+  activation spaces into a sparse basis." The curve is smooth. *(Added 2026-08-07
+  on the TODO 25 re-read, against the two placeholder knobs below.)*
+
+**What that settles about `min_kl_recovered` and `min_variance_explained`.** Both
+are PLACEHOLDER in `conf/measurements.yaml`, and the question at the pre-gate is
+where their bar comes from. Three candidate sources are now **ruled out**, which
+is worth more than a borrowed number:
+
+1. **A knee in the fidelity/sparsity curve** — the foundational paper measured
+   for one and found none.
+2. **A field-standard absolute value** — there isn't one, and the paper's own
+   headline substitution shows why not: replacing Pythia-70M layer 2 with its
+   reconstruction moves Pile perplexity **25 → 40**, which they file under
+   *limitations*. A 2023-era SAE would fail a 0.80-shaped bar outright. So
+   `0.80` must not be read as inherited from the literature — it is ours, and
+   still unearned.
+3. **A published transfer gap** — Cunningham et al. never apply a dictionary to a
+   model it was not trained on. The transfer question I4 is gated on is not
+   answered anywhere in its own foundational paper.
+
+**So the tuning path already written into the YAML — Base is the ceiling, the bar
+comes from the Base-vs-Instruct gap — is not merely the convenient route; it is
+the only one available.** That is now established rather than assumed, and the
+Base arm is the sole anchor. Corollary for reading its result: a Base number that
+is *poor* cannot be excused by "SAE reconstruction is lossy in general," because
+Base is the fitted-on case and the paper offers no baseline permitting it.
 
 **The bar is relative, the sixth derived floor:** `kl_recovered = 1 - KL(clean ||
 sae) / KL(clean || zero-ablated)` — 1.0 perfect, 0.0 no better than deleting the

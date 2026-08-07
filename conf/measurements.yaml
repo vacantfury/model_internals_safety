@@ -397,6 +397,12 @@ sae:
   # PLACEHOLDER. Tuning path is an experiment, not a sweep: run the SAME
   # dictionary against the model it WAS trained on (Base) and against our target
   # (Instruct). Base is the ceiling; the bar comes from the transfer gap.
+  #
+  # 0.80 is OURS and unearned — do not read it as inherited from the literature.
+  # Checked 2026-08-07 against I4's foundational paper (2309.08600, ICLR, 1432c):
+  # it reports no knee in the fidelity/sparsity curve, no absolute standard, and
+  # no cross-model transfer experiment at all, so the experiment above is the ONLY
+  # available anchor rather than merely the convenient one. Build plan §3.4.
   min_kl_recovered: 0.80
   # Diagnostic, not the gate — a dictionary can explain variance and still wreck
   # the output distribution. PLACEHOLDER, same tuning path.
