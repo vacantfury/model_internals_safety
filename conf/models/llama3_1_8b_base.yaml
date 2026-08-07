@@ -1,0 +1,42 @@
+# I4's pre-gate reference arm — the model Llama Scope's dictionaries were
+# actually fitted on (`fnlp/Llama3_1-8B-Base-LXR-8x`).
+#
+# It is NOT a target of either paper. A base checkpoint has no instruction
+# tuning and therefore no refusal behaviour, so none of the four measurements
+# are defined over it. Its only job is to answer "does this dictionary
+# reconstruct the model it was trained on" — which is simultaneously the check
+# on `models/sae_loader.py`, since a dictionary cannot fail to transfer to its
+# own training distribution.
+name: llama3_1_8b_base
+hf_id: meta-llama/Llama-3.1-8B
+dtype: auto
+device: auto
+trust_remote_code: false
+system_prompt: null
+capture_batch_size: 8
+
+# Read from the checkpoint's own config.json — same 32 blocks as the Instruct
+# sibling, which is what makes a layer-for-layer dictionary comparison meaningful.
+n_layers: 32
+
+# Base ships no chat template. Borrowing the Instruct sibling's is what holds
+# the input text fixed across the pre-gate's two arms so the MODEL is the only
+# variable; rendering Base on bare text instead would fold a formatting
+# difference into the reported transfer gap. `attach` enforces the two
+# preconditions (no template of its own, matching vocab).
+chat_template_from: llama3_1_8b_instruct
+
+capture:
+  site: resid_pre
+  layers: all
+  positions:
+    - instruction_final
+    - last
+
+# Present only because ModelConfig requires them. NOT verified against this
+# checkpoint's tokenizer and NOT meaningful for a base model — nothing here
+# refuses or complies, and no causal or behavioural instrument runs on this arm.
+refusal_openings:
+  - "I"
+compliance_openings:
+  - "Sure"

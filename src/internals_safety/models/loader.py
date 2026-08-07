@@ -23,7 +23,7 @@ from typing import Iterable, Sequence
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizerBase
 
-from internals_safety.config import ModelConfig, PositionName
+from internals_safety.config import ModelConfig, PositionName, load_model_config
 
 # Attribute paths to the decoder-layer ModuleList, tried in order. Covers the
 # Llama/Qwen/Mistral/Gemma family (model.layers) plus the older GPT-2/NeoX and
@@ -174,6 +174,42 @@ def attach(
     tokenizer.padding_side = "left"
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
+
+    # **Borrowing a chat template is how a BASE model becomes comparable to its
+    # Instruct sibling, and it is a measurement decision, not plumbing.**
+    #
+    # I4's pre-gate runs one Llama Scope dictionary against the model it was
+    # trained on (Llama-3.1-8B-Base) and against our target (Instruct). Base
+    # ships no chat template, so `render_chat` fails closed and the arm cannot
+    # run at all. The tempting fix — let the Base arm see bare text — silently
+    # makes the comparison meaningless: the "transfer gap" would then bundle a
+    # formatting difference in with the model difference, and formatting moves
+    # residual activations at exactly the positions we read.
+    #
+    # So both arms see the SAME rendered text and the model is the only variable.
+    # Sound here specifically because Base and Instruct are the same checkpoint
+    # family with the same tokenizer — never a licence to render one model's
+    # prompts through an unrelated model's template.
+    if config.chat_template_from is not None:
+        if tokenizer.chat_template is not None:
+            raise ValueError(
+                f"{config.name} declares chat_template_from={config.chat_template_from!r} but its "
+                "own tokenizer already ships a template; overwriting a real template with a "
+                "borrowed one would silently change what every prior run measured"
+            )
+        donor_config = load_model_config(config.chat_template_from)
+        donor = AutoTokenizer.from_pretrained(
+            donor_config.hf_id, trust_remote_code=donor_config.trust_remote_code
+        )
+        if donor.chat_template is None:
+            raise ValueError(f"donor {config.chat_template_from} has no chat template to lend")
+        if donor.vocab_size != tokenizer.vocab_size:
+            raise ValueError(
+                f"donor {config.chat_template_from} has vocab {donor.vocab_size} against "
+                f"{config.name}'s {tokenizer.vocab_size}; a borrowed template is only meaningful "
+                "between checkpoints that tokenise it identically"
+            )
+        tokenizer.chat_template = donor.chat_template
 
     loaded = LoadedModel(
         config=config,

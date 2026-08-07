@@ -1,0 +1,38 @@
+# I1 has only ever been verified against a tiny in-process model. This is its
+# first contact with real weights, and it is deliberately shaped as a control
+# run rather than a measurement run: the two can't-decode rungs are included
+# BECAUSE they must come back empty.
+#
+# `tag_block` and `reverse_characters` both measured ability 0.00 on both models
+# — exactly invertible yet unreadable, and on `reverse_characters` Llama simply
+# restates "The quick brown fox jumps over the lazy dog". Whatever the lens
+# reads there is by construction not decoded content, so it is the floor. That
+# is the same free-negative-control trick the deployment recalibration used to
+# derive 0.656 / 0.671, applied one instrument over.
+entrypoint: phase0_regime_map
+description: >-
+  I1's Patchscopes decode measurement on real 8B weights — three sound rungs
+  as the positive arm, two can't-decode rungs as the noise floor.
+
+gates: >-
+  Whether the (B)/(D) split can be taken off the operating point entirely. I1
+  asks whether plaintext tokens become predictable from intermediate residual
+  states, which is a different question from "does a transferred content probe
+  fire" and carries its own negative control. If the lens separates the sound
+  rungs from the can't-decode floor, it replaces the transferred probe as the
+  deployment instrument for both papers and `min_control_margin` is derived from
+  that gap; if it does not, the transferred probe stays and I1 is reported as a
+  null — which the build plan already warns is NOT proof of no decoding.
+
+target: llama3_1_8b_instruct
+families: [zero_width, homoglyph, fullwidth, tag_block, reverse_characters]
+n_prompts: 100
+instruments: [decode_lens, entropy_dynamics, lexical]
+run_name: lens-real
+
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "03:00:00"

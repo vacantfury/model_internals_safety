@@ -1,0 +1,30 @@
+# The second arm. Submit ONLY after the Base arm has been read — see
+# `sae_pregate_base.yaml` for why the ordering carries the loader's correctness.
+#
+# Bonus this arm buys for the other paper: Llama Guard 3 8B is itself a
+# fine-tune of the same base, so a transfer result here is evidence about
+# AS-6's guard as well as AS-5's target. One validation, two papers.
+entrypoint: sae_pregate
+description: >-
+  The same dictionaries against our actual target, Llama-3.1-8B-Instruct.
+  The Base-to-Instruct gap is the quantity of interest.
+
+gates: >-
+  Whether the I4 FEATURE instrument gets written. The build plan gates it on
+  this pre-gate passing, so a large transfer gap ends I4 here rather than after
+  a feature analysis built on a dictionary that does not describe our model —
+  and it also sets the two SAE knobs from the gap rather than from the
+  literature-shaped 0.80 / 0.75 currently sitting in measurements.yaml.
+
+target: llama3_1_8b_instruct
+sae_layers: [17, 19, 21]
+
+n_prompts: 100
+run_name: pregate-instruct
+
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "01:00:00"

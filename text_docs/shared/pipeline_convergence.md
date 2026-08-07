@@ -31,20 +31,66 @@ Read from the sibling's **actual pipeline**, not its docs: `dispatch.py`,
 | tracker | none, deliberately deferred | MLflow (`mlflow_run_id` in every record) | **do not adopt** |
 | cost gate | `--dry-run` + `scripts/cost_model.py` | dispatcher prints the split plan, submits nothing without `--submit` | **already aligned in spirit** |
 
-**The preset question is the one genuinely contested item, and it is his call.**
-Their presets exist because their unit of work is a *matrix* — model × defense ×
-encoding × benchmark — where a command line becomes unreadable. Ours is one model
-× a rung list, which argparse expresses fine.
+**The preset question was the one genuinely contested item. SETTLED 2026-08-07
+(owner: "go"), and the deciding evidence came from the cluster, not the argument.**
 
-But there is an argument FOR presets here that has nothing to do with
-ergonomics: **the experiment-run approval gate.** A preset YAML is a reviewable
-artifact that can be committed, diffed, and pointed at in the approval request;
-a shell command in a chat message is not. Given this repo's own rule that a run
-must be a GATE and must be costed before launch, "here is the preset I am asking
-you to approve" is a better object than "here is the flag string I will type".
+The original case was the **experiment-run approval gate**: a preset YAML is a
+reviewable artifact that can be committed, diffed, and pointed at in the
+approval request; a shell command in a chat message is not. The counter-case was
+that their presets exist because their unit of work is a *matrix* — model ×
+defense × encoding × benchmark — where a command line becomes unreadable, while
+ours is one model × a rung list, which argparse expresses fine.
 
-*Recommendation: adopt presets for CLUSTER runs only*, keeping argparse for local
-work. Cost: ~half a day. Not started — it is a workflow change, not a defect fix.
+**What settled it: the flag strings were never in chat either.** The cluster
+carried THREE launchers — `phase0.sbatch`, `as6_phase1.sbatch`,
+`relicense.sbatch` — and two of them existed only there: authored on the
+cluster, never brought back, absent from the laptop and absent from git.
+`relicense.sbatch` hardcodes a fifteen-element family array, two absolute
+`results.json` paths, and array-index arithmetic over two bash arrays, in a file
+nobody can review, diff, or reproduce from the repo. Every new experiment was
+spawning another one. The run declaration was already being written down — just
+somewhere unversioned, on one machine.
+
+**Shipped:** `conf/experiment/*.yaml` (six presets) + one generic
+`ops/run.sbatch` + `scripts/submit.py`, dry-run by default. Three
+experiment-specific launchers collapse to one. Four properties are load-bearing:
+
+- **The schema is CLOSED.** `tests/test_presets.py` asserts no preset field
+  shares a name with any `measurements.yaml` knob, and `StrictModel` forbids
+  unknown keys. A preset declares WHICH RUN, never HOW an instrument reads —
+  otherwise a run ships a number with no registered tuning path, which is the
+  magic-number problem re-entering through the launcher.
+- **`gates:` is a REQUIRED field.** The owner's 2026-08-06 rule — a run must be
+  a GATE, not a measurement — was prose, and prose is enforced by memory. Now
+  the loader refuses to build a job until "what would I build differently
+  depending on the result?" is answered in writing, in a committed file, where
+  it can be disagreed with before the GPU is allocated.
+- **Command construction is Python, not bash.** `ops/run.sbatch` calls
+  `submit.py --resolve <index>` and executes what it is handed. The array-index
+  arithmetic that used to live in bash is `PresetConfig.tasks`, which is tested.
+- **`cost_model.py --preset <name>`** costs exactly what will be submitted.
+  Before this it priced the full 19-rung ladder at the pilot's corpus size, so
+  the gate's dollar figure described a different run than the one being approved.
+
+**`ops/` stays gitignored, and that is now the correct line rather than a
+compromise.** The family sync standard splits code by git and the ops layer by
+rsync; the split this refactor makes is the same one stated in experiment terms
+— **committed = WHAT the experiment is (`conf/experiment/`), gitignored = WHERE
+it runs (`ops/run.sbatch`: scratch paths, venv, `HF_HOME`, secret sourcing).**
+The original defect was never that a launcher was gitignored, it was that the
+*declaration* was inside it. `run.sbatch` now carries no experiment at all, so
+it is pure environment and belongs on the rsync side. Do not "fix" this by
+committing it — a committed launcher is how cluster-specific detail creeps back
+into a public repo.
+
+**Three defects surfaced by writing the presets down**, each of which would
+otherwise have been discovered after a queue wait: two presets read the
+deployment probe without declaring its required `lexical` control (every
+deployment reading would have been non-reportable); two asked for `n_prompts:
+200` against a 100-per-class corpus, `--n-prompts` being per class while the
+band-run write-up's "200 prompts" is the total; and the Base arm could not run
+at all, because `render_chat` fails closed on a checkpoint with no chat template.
+All three are now tests or config.
 
 **`dispatch.py` becomes relevant the moment the xc-cluster question is settled.**
 It already implements exactly the routing that a NURC+xc split would need. If
@@ -155,11 +201,13 @@ xc-cluster question is settled.
 | 4 | collision-proof run dirs (`_<ts>_<jobid>`) | (c) | 30 min | silent overwrite is a live data-loss path |
 | 5 | `upstream_ref` + `results_sha256` | (b) | 1 h | the re-scoring scripts need it now |
 | 6 | `primary_metric` | (b) | 15 min | cheap, and the contract makes it meaningful |
-| 7 | presets for cluster runs | (a) | ~half a day | **owner decision — a workflow change** |
+| 7 | presets for cluster runs | (a) | ~half a day | ✅ **DONE 2026-08-07** — see §a |
 | 8 | port `dispatch.py` | (a) | — | **blocked on the xc-cluster decision** |
 
-Items 1–6 are clear wins that remove nothing. **7 and 8 are his**, and 8 is
-downstream of a decision he has not made.
+Items 1–7 are done. **8 is downstream of a decision he has not made** — and it
+matters less now than when this table was written: `submit.py` already owns the
+preset→resources→sbatch path, so porting `dispatch.py` would only add the
+multi-cluster ROUTING, which is precisely the part the xc decision governs.
 
 **A family convention that emerges from this belongs in the science handbook,
 not in one repo's CLAUDE.md** — specifically the run-record schema (items 1, 2,

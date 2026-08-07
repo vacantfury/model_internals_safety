@@ -1,0 +1,41 @@
+# **This runs BEFORE the Instruct arm, and the ordering is not optional.**
+#
+# Llama Scope's dictionaries are trained on Llama-3.1-8B-*Base*; our target is
+# Instruct. The pre-gate exists to test that transfer — but the Base arm doubles
+# as a check on `models/sae_loader.py` itself: a dictionary CANNOT fail to
+# transfer to the model it was fitted on, so poor Base reconstruction means the
+# loader is wrong, not the dictionary. Reading the Instruct arm first would
+# attribute our own bug to the science.
+#
+# Three traps the loader was written against, any of which reads as "does not
+# transfer": the checkpoint's `hook_resid_post` vs our `resid_pre` (off by one
+# layer), dataset-wise normalisation to sqrt(d_model) (a ~5.9x scale factor),
+# and `act_fn: jumprelu` despite a `top_k: 50` leftover in the same file.
+entrypoint: sae_pregate
+description: >-
+  Llama Scope dictionaries against the Base model they were trained on — the
+  reconstruction ceiling, and the loader's own correctness check.
+
+gates: >-
+  Whether I4 is built at all. If Base reconstruction is poor the loader is
+  wrong and no SAE work proceeds until it is fixed; if it is good, the number
+  becomes the ceiling against which the Instruct arm's transfer gap is read,
+  which is what sets `min_kl_recovered` and `min_variance_explained` — two of
+  the six placeholder knobs no reported number may currently depend on.
+
+target: llama3_1_8b_base
+
+# LLAMA SCOPE's indices, which are ours minus one (`LlamaScopeSAE.our_layer`).
+# 17/19/21 here = our resid_pre 18/20/22 — the `instruction_final` cluster that
+# zero_width, homoglyph and fullwidth independently select on both models.
+sae_layers: [17, 19, 21]
+
+n_prompts: 100
+run_name: pregate-base
+
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "01:00:00"

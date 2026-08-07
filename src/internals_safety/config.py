@@ -60,6 +60,14 @@ class ModelConfig(StrictModel):
     capture_batch_size: int = 8
     capture: CaptureConfig = CaptureConfig()
 
+    # Another model config whose chat template this one borrows. Only a BASE
+    # checkpoint should ever set it, and only to its own Instruct sibling: the
+    # point is to make the two comparable by holding the input text fixed so the
+    # MODEL is the single variable (I4's pre-gate). `attach` refuses to overwrite
+    # a template the checkpoint already ships, and refuses a donor whose vocab
+    # differs. See `models/loader.attach` for the full reasoning.
+    chat_template_from: str | None = None
+
     # Transformer blocks in the checkpoint — `num_hidden_layers` from its own
     # config.json. A FACT about the model, not a tunable: declared here because
     # the pre-run cost estimate has to price layer-proportional instruments
@@ -787,3 +795,215 @@ def load_judge_config(conf_dir: Path = CONF_DIR) -> JudgeConfig:
 
 def load_pilot_config(conf_dir: Path = CONF_DIR) -> PilotConfig:
     return PilotConfig(**load_yaml(conf_dir / "pilot.yaml"))
+
+
+# ---------------------------------------------------------------------------
+# Cluster run presets
+# ---------------------------------------------------------------------------
+#
+# **Why these exist, in one sentence: the experiment declaration was already
+# being written down — into gitignored bash, on one machine.**
+#
+# Measured 2026-08-07. The cluster carried three launchers: `phase0.sbatch`,
+# `as6_phase1.sbatch`, `relicense.sbatch`. TWO OF THE THREE existed only there —
+# authored on the cluster, never brought back, absent from the laptop and absent
+# from git. `relicense.sbatch` hardcodes a fifteen-element family array and two
+# absolute `results.json` paths inside a file nobody can review, diff, or
+# reproduce from the repo. Every new experiment was spawning another one.
+#
+# That is the argument, and it is not ergonomics. `pipeline_convergence.md` §a
+# argued presets from the **approval gate** — a preset YAML is a reviewable
+# committed artifact where a flag string in a chat message is not — and the
+# cluster then supplied the evidence: the flag strings were not even in chat,
+# they were in unversioned bash.
+#
+# **The schema is CLOSED, and that is the load-bearing property.** `StrictModel`
+# forbids unknown keys, and `tests/test_presets.py` asserts that no field here
+# shares a name with any knob in `conf/measurements.yaml`. A preset declares
+# WHICH RUN — target, corpus, scope, resources. It may never declare HOW an
+# instrument reads, because `measurements.yaml` owns every tunable together with
+# its tuning path and a config-discipline test enforcing that pairing. A preset
+# that could set `reading_percentile` would let a run carry a number nobody
+# registered — the magic-number problem re-entering through the launcher, which
+# is exactly the door this repo spent 2026-08-06 closing.
+
+
+class ResourceConfig(StrictModel):
+    """The SLURM ask. Part of the preset because the resources ARE the cost.
+
+    The approval gate wants GPU count + type, money, and wall-clock. Two of
+    those three are these fields, so splitting them into a separate sbatch file
+    would mean the reviewable artifact does not state what is being approved.
+    """
+
+    partition: str
+    # None = a CPU job. Not a default: a run that holds no GPU and a run that
+    # holds an H200 differ by the most expensive resource on the cluster, so the
+    # preset says which, explicitly, every time.
+    gres: str | None = None
+    cpus: int = 1
+    mem: str = "32G"
+    # HH:MM:SS. A ceiling, not an estimate — the estimate is `--dry-run`.
+    time: str
+
+    @model_validator(mode="after")
+    def _check_walltime(self) -> "ResourceConfig":
+        parts = self.time.split(":")
+        if len(parts) != 3 or not all(part.isdigit() for part in parts):
+            raise ValueError(f"time must be HH:MM:SS, got {self.time!r}")
+        hours = int(parts[0])
+        # NURC's `normal` QOS caps a job at 8h and the pilot was KILLED at that
+        # wall having written nothing recoverable. Refusing here is cheaper than
+        # discovering it at submit time, and far cheaper than at hour eight.
+        if hours > 8:
+            raise ValueError(
+                f"{self.time} exceeds the 8h wall of the `normal` QOS; split the run "
+                "across jobs by --families instead (see CLAUDE.md, compute options)"
+            )
+        return self
+
+    @property
+    def is_gpu_job(self) -> bool:
+        return self.gres is not None
+
+
+Entrypoint = Literal[
+    "phase0_regime_map",
+    "as6_guard_probe",
+    "sae_pregate",
+    "relicense_probes",
+]
+
+# Which optional preset fields each entrypoint actually consumes. A field set on
+# a preset whose entrypoint ignores it is an ERROR rather than a no-op: a
+# silently-dropped `instruments: [decode_lens]` would produce a run that looks
+# approved for I1 and did not run it.
+_CONSUMES: dict[str, frozenset[str]] = {
+    "phase0_regime_map": frozenset({"target", "families", "n_prompts", "instruments"}),
+    "as6_guard_probe": frozenset({"target", "families", "n_prompts", "instruments"}),
+    "sae_pregate": frozenset({"target", "n_prompts", "sae_layers"}),
+    "relicense_probes": frozenset({"targets", "families", "source_runs"}),
+}
+
+
+class PresetConfig(StrictModel):
+    """One entry of `conf/experiment/*.yaml` — a complete run declaration."""
+
+    entrypoint: Entrypoint
+    # Prose, for the human reading the approval request.
+    description: str
+
+    # **Required, and the reason it is required is a defect report.** Owner,
+    # 2026-08-06: a run must be a GATE, not a measurement, until the instrument
+    # roster is complete — "the test, applied BEFORE launch: what would I build
+    # differently depending on the result?" On 2026-08-05 two runs launched that
+    # gated nothing, and cost thirteen instrument-repair commits downstream.
+    #
+    # A rule that lives only in prose is a rule enforced by memory. Making this
+    # a required field means the launcher CANNOT construct a job until the
+    # question has been answered in writing, in a committed file, where the
+    # answer can be disagreed with before the GPU is allocated rather than after.
+    gates: str
+
+    target: str | None = None
+    targets: list[str] = Field(default_factory=list)
+    families: Literal["all"] | list[str] | None = None
+    n_prompts: int | None = None
+    instruments: list[str] = Field(default_factory=list)
+    sae_layers: list[int] = Field(default_factory=list)
+    # model name -> the run directory whose results.json this run re-reads.
+    source_runs: dict[str, str] = Field(default_factory=dict)
+    run_name: str | None = None
+
+    resources: ResourceConfig
+
+    @model_validator(mode="after")
+    def _check_fields_are_consumed(self) -> "PresetConfig":
+        consumed = _CONSUMES[self.entrypoint]
+        set_but_ignored = [
+            name
+            for name in ("target", "targets", "families", "n_prompts", "instruments",
+                         "sae_layers", "source_runs")
+            if name not in consumed and getattr(self, name)
+        ]
+        if set_but_ignored:
+            raise ValueError(
+                f"entrypoint {self.entrypoint!r} ignores {set_but_ignored}; a field the "
+                "run would silently drop must not appear in the artifact that was approved"
+            )
+        if "target" in consumed and not self.target:
+            raise ValueError(f"entrypoint {self.entrypoint!r} needs `target`")
+        if "targets" in consumed and not self.targets:
+            raise ValueError(f"entrypoint {self.entrypoint!r} needs `targets`")
+        if not self.gates.strip():
+            raise ValueError("`gates` must state what this run's result would change")
+        return self
+
+    def tasks(self, outputs_dir: str | Path) -> list[list[str]]:
+        """One argv per SLURM array task — the whole command, built in Python.
+
+        **Bash never constructs a command line here.** `ops/run.sbatch` asks this
+        function what to run and executes what it is handed, so the argv is
+        covered by tests and by the same config validation as everything else.
+        The alternative is what `relicense.sbatch` did: array-index arithmetic
+        over two bash arrays, on the cluster, unversioned.
+        """
+        outputs = Path(outputs_dir)
+        if self.entrypoint == "relicense_probes":
+            rows: list[list[str]] = []
+            families = self.families if isinstance(self.families, list) else []
+            for model in self.targets:
+                source = self.source_runs.get(model)
+                if source is None:
+                    raise ValueError(f"preset names target {model!r} with no source_runs entry")
+                for family in families:
+                    rows.append([
+                        "scripts/relicense_probes.py",
+                        "--activations", str(outputs / "activations" / model),
+                        "--results", str(outputs / "runs" / "phase0" / model / source / "results.json"),
+                        "--families", family,
+                        "--out", str(outputs / "relicense" / f"{model}__{family}.json"),
+                    ])
+            return rows
+
+        base = [f"scripts/{self.entrypoint}.py"]
+        if self.entrypoint == "as6_guard_probe":
+            base += ["--guard", str(self.target)]
+        else:
+            base += ["--model", str(self.target)]
+        if self.n_prompts is not None:
+            base += ["--n-prompts", str(self.n_prompts)]
+        if isinstance(self.families, list):
+            base += ["--families", *self.families]
+        if self.instruments:
+            base += ["--instruments", *self.instruments]
+
+        # `sae_pregate` takes ONE layer per invocation, so a three-layer preset
+        # is three array tasks rather than one command with a repeated flag —
+        # which argparse would silently collapse to the last value, running one
+        # layer and reporting a run that was approved for three.
+        if self.sae_layers:
+            rows = []
+            for layer in self.sae_layers:
+                argv = list(base) + ["--sae-layer", str(layer)]
+                argv += ["--run-name", f"{self.run_name or 'pregate'}-L{layer}"]
+                rows.append(argv + ["--outputs-dir", str(outputs)])
+            return rows
+
+        argv = list(base)
+        if self.run_name:
+            argv += ["--run-name", self.run_name]
+        return [argv + ["--outputs-dir", str(outputs)]]
+
+
+def load_preset(name: str, conf_dir: Path = CONF_DIR) -> PresetConfig:
+    """Load `conf/experiment/<name>.yaml`."""
+    path = conf_dir / "experiment" / f"{name}.yaml"
+    if not path.exists():
+        raise FileNotFoundError(f"no preset {path}; available: {list_presets(conf_dir)}")
+    return PresetConfig(**load_yaml(path))
+
+
+def list_presets(conf_dir: Path = CONF_DIR) -> list[str]:
+    directory = conf_dir / "experiment"
+    return sorted(p.stem for p in directory.glob("*.yaml")) if directory.exists() else []

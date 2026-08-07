@@ -1,0 +1,28 @@
+# The preset every campaign starts with. Not a measurement — a check that the
+# checkout, the venv, the weights cache and the secret injection all still work
+# after a scratch purge or a 46-commit pull.
+#
+# It exists because the failure it catches is expensive in exactly one direction:
+# a broken environment discovered at minute 3 costs 30 minutes, and the same
+# breakage discovered inside an 8h job costs the slot and the queue wait.
+entrypoint: phase0_regime_map
+description: >-
+  One rung, eight prompts, on the model whose weights are already cached.
+  Validates the environment end to end — capture, probe fit, generation, judge.
+
+gates: >-
+  Whether any other preset in this directory may be submitted at all. A red
+  smoke run means the environment is broken and every downstream cost estimate
+  is meaningless; a green one licenses the batch.
+
+target: llama3_1_8b_instruct
+families: [zero_width]
+n_prompts: 8
+run_name: smoke
+
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "00:30:00"

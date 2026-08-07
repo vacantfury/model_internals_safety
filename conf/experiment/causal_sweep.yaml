@@ -1,0 +1,37 @@
+# The intervention run — the only preset in this directory that WRITES to the
+# model rather than reading it, which is why it is priced separately and why
+# `--dry-run` must be read before it is submitted: the negative control (a
+# matched-norm random direction) is a second sweep, and a cost estimate that
+# omits it is wrong by roughly half.
+#
+# It runs on the three SOUND rungs only. `reverse_words` is deliberately absent:
+# it permutes word order while leaving words lexically intact, so a content
+# probe fires without any decoding — the layer index proves it, reading at L3-L5
+# rather than the L18-L22 cluster the genuine rungs select. It is a control, not
+# a substrate.
+entrypoint: phase0_regime_map
+description: >-
+  Directional ablation and activation addition on the three rungs where the
+  deployment probe is sound, against a matched-norm random-direction null.
+
+gates: >-
+  Whether the (B) cell is a CAUSAL claim or stays correlational. Move B's stated
+  contribution is the (B)/(D) split, and that split currently rests on a
+  threshold choice — no (B)-vs-(D) number from the band run may appear in a
+  paper as a point estimate. If the intervention moves behaviour and the random
+  direction does not, the split becomes causal and phase 1 is an intervention
+  paper; if it does not, phase 1 is a measurement paper and the causal toolkit
+  is cited as a negative result. Different papers, different builds.
+
+target: llama3_1_8b_instruct
+families: [zero_width, homoglyph, fullwidth]
+n_prompts: 100
+instruments: [causal_license, behavior_control, lexical]
+run_name: causal-sweep
+
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "04:00:00"

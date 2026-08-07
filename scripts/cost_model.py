@@ -36,6 +36,7 @@ from internals_safety.config import (
     load_measurements_config,
     load_model_config,
     load_pilot_config,
+    load_preset,
 )
 from internals_safety.cost import (
     census_phase0,
@@ -74,7 +75,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     pilot = load_pilot_config()
     cost_config = load_cost_config()
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--model", required=True, help=f"conf/models/<name>.yaml; pilot set: {pilot.models}")
+    parser.add_argument("--model", default=None, help=f"conf/models/<name>.yaml; pilot set: {pilot.models}")
+    parser.add_argument(
+        "--preset",
+        default=None,
+        help="cost exactly what conf/experiment/<name>.yaml declares, filling in --model, "
+        "--families and --n-prompts from it. Without this the estimate prices the FULL "
+        "ladder at the pilot's corpus size, which is not what a scoped preset submits — "
+        "an approval gate reading a number for a different run is worse than no number.",
+    )
     parser.add_argument(
         "--hardware",
         default=DEFAULT_HARDWARE,
@@ -90,6 +99,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--per-family", action="store_true", help="show the token inflation per rung")
     args = parser.parse_args(argv)
+
+    if args.preset:
+        preset = load_preset(args.preset)
+        for flag, value in (("--model", args.model), ("--families", args.families)):
+            if value is not None:
+                raise SystemExit(f"{flag} and --preset both set; the preset IS the declaration")
+        args.model = preset.target
+        if isinstance(preset.families, list):
+            args.families = preset.families
+        if preset.n_prompts is not None:
+            args.n_prompts = preset.n_prompts
+        print(f"costing preset {args.preset!r}\n")
+    if not args.model:
+        raise SystemExit("--model or --preset is required")
 
     model_config = load_model_config(args.model)
     measurements = load_measurements_config()

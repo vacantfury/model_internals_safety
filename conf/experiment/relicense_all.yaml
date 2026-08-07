@@ -1,0 +1,54 @@
+# The cheapest job in the batch and the one that clears the most: five TODO
+# items, no GPU, no model, no judge, $0. It re-reads activations already sitting
+# on scratch under the CURRENT licensing instrument.
+#
+# **Single CPU by MEASUREMENT, not frugality.** Probe fits are 140x4096
+# problems where multi-threaded BLAS spends its time synchronising: 118 ms/fit
+# at one thread against 3,680 ms at eight (`probes/linear.py::single_threaded_blas`).
+# The serial eight-CPU version of this job hit its wall having produced nothing.
+entrypoint: relicense_probes
+description: >-
+  Re-license every deployment probe under the permutation test and the
+  control-calibrated floor, one array task per (model, rung).
+
+gates: >-
+  Whether the AS-5 regime map is two rungs or more. `hex` sits at transfer AUROC
+  0.691, a hair under the retired 0.70 cut, and 13 of 15 Llama rungs currently
+  read (U) — unmeasured — on flags that predate permutation licensing. If hex
+  and unicode_escape re-license, the natural decode gradient on Llama becomes
+  reportable and phase 1 does not need to manufacture one; if they do not, the
+  map stays at two rungs and phase 1 must build its substrate deliberately.
+  Either answer changes what gets built next, which is the test.
+
+targets:
+  - llama3_1_8b_instruct
+  - qwen2_5_7b_instruct
+
+# The pilot ladder. The band run's four surface rungs are re-read by their own
+# run record and are not re-licensed here.
+families:
+  - base64
+  - base32
+  - hex
+  - binary
+  - ascii_decimal
+  - unicode_escape
+  - rot13
+  - caesar3
+  - caesar7
+  - atbash
+  - vigenere
+  - morse
+  - reverse_characters
+  - reverse_words
+  - zero_width
+
+source_runs:
+  llama3_1_8b_instruct: phase0-20260802
+  qwen2_5_7b_instruct: phase0-20260802-tail
+
+resources:
+  partition: short
+  cpus: 1
+  mem: 32G
+  time: "03:00:00"

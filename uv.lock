@@ -754,6 +754,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "accelerate" },
+    { name = "huggingface-hub" },
     { name = "json-repair" },
     { name = "llm-utils" },
     { name = "numpy" },
@@ -761,6 +762,7 @@ dependencies = [
     { name = "protobuf" },
     { name = "pydantic" },
     { name = "pyyaml" },
+    { name = "safetensors" },
     { name = "scikit-learn" },
     { name = "sentencepiece" },
     { name = "threadpoolctl" },
@@ -777,6 +779,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "accelerate", specifier = ">=1.0,<2" },
+    { name = "huggingface-hub", specifier = ">=1.26.0" },
     { name = "json-repair", specifier = ">=0.56,<1" },
     { name = "llm-utils", git = "https://github.com/vacantfury/llm_utils.git?rev=v5.0.0" },
     { name = "numpy", specifier = ">=2.0,<3" },
@@ -784,6 +787,7 @@ requires-dist = [
     { name = "protobuf", specifier = ">=4,<7" },
     { name = "pydantic", specifier = ">=2.10,<3" },
     { name = "pyyaml", specifier = ">=6.0,<7" },
+    { name = "safetensors", specifier = ">=0.8.0" },
     { name = "scikit-learn", specifier = ">=1.5,<2" },
     { name = "sentencepiece", specifier = ">=0.2,<1" },
     { name = "threadpoolctl", specifier = ">=3.1,<4" },

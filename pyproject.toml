@@ -31,6 +31,13 @@ dependencies = [
     # neither package. Undeclared, that is a cluster job failing at minute one.
     "sentencepiece>=0.2,<1",
     "protobuf>=4,<7",
+    # Imported DIRECTLY by models/sae_loader.py (`load_file`, `hf_hub_download`).
+    # Both already arrived transitively through transformers, which is exactly
+    # why they were missing: it works until transformers drops one. Same rule as
+    # threadpoolctl above — a package we import is declared, never inherited.
+    # Adding them resolved 103 packages, unchanged, so this costs nothing.
+    "safetensors>=0.8.0",
+    "huggingface-hub>=1.26.0",
 ]
 
 [dependency-groups]
