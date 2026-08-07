@@ -616,8 +616,9 @@ UNMEASURED rather than crediting the dictionary; and `licensed=True` here
 licenses **naming**, never a causal claim — the policy note below is enforced by
 the reading, not just stated.
 
-**What remains for I4:** the SAE **loader** (SAELens / Llama Scope) and the
-feature instrument. The pre-gate takes a two-method `encode`/`decode` protocol,
+**What remains for I4** *(updated 2026-08-07)*: the **feature instrument** only.
+The loader landed 2026-08-06 as `models/sae_loader.py` — **not SAELens**, and the
+reversal is recorded at the SAELens entry below rather than silently. The pre-gate takes a two-method `encode`/`decode` protocol,
 so it is testable with no download, no GPU and no 256-checkpoint suite — which
 is exactly why it could be built before the adapter — but nothing can call it
 until a real dictionary can be produced (TODO 55).
@@ -1084,13 +1085,29 @@ Two exceptions worth taking as *references*, not dependencies:
   support for Llama-3.1-8B and Qwen-2.5-7B, our exact models. Read its handling of
   per-layer normalisation before writing ours.
 - **SAELens** (`decoderesearch/SAELens`) — the standard loader for Llama Scope /
-  Qwen-Scope checkpoints. Likely a real dependency for I4, since hand-rolling SAE
-  loading is the reinvention the global standard forbids.
+  Qwen-Scope checkpoints. ⚠️ **REJECTED 2026-08-06 after measuring it, and this
+  entry's original judgment ("likely a real dependency, since hand-rolling SAE
+  loading is the reinvention the global standard forbids") was overturned by the
+  measurement, not by taste.** `sae-lens` resolves to **116 packages — more than
+  this entire repo's 103** — and pulls in `transformer-lens`, a SECOND
+  model-loading framework beside our own capture spine, plus `wandb`,
+  `sentry-sdk`, `plotly`, `statsmodels` and `nltk`. The global law's own stated
+  exception is a concrete reason against, and a second home for the thing I0
+  already owns is one. What was left is not a reimplementation: a Llama Scope
+  checkpoint is **four tensors and a JSON**, and encode/decode are the two matrix
+  products they define — `models/sae_loader.py`, 15 tests. Reading the real
+  artifact instead of the library also caught three traps that would each have
+  silently corrupted the pre-gate (hook_resid_POST vs our resid_pre, dataset-wise
+  normalisation, jumprelu-not-TopK); adopting the library would have hidden all
+  three behind an API and left us unable to tell a transfer failure from a
+  loading bug.
 - `davidbau/logitlenskit` exists for the NNsight path — noted, not chosen.
 
 *(Global law: prefer mature tools over reinventing. The judgment here is that the
-mature tool for capture is the one we already have, while the mature tool for SAE
-loading is SAELens and should be used.)*
+mature tool for capture is the one we already have — and, ~~for SAE loading,
+SAELens~~ **superseded 2026-08-06**, that the two methods I4 needs do not justify
+a 116-package dependency carrying a rival model framework. The law's exception —
+a concrete reason against — was met and stated.)*
 
 ---
 

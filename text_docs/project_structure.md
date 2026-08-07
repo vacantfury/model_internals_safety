@@ -154,7 +154,7 @@ Steps 1–4 are the phase-0 pilot's full dependency set and are complete, and `s
 
 1. ~~Primary claim band~~ — **settled 2026-08-02 (owner): exactly-invertible band carries the primary claims; semantic band is the labelled extended check.** See §3, including the consequent priority on widening the deterministic band.
 2. **Codename** for this paper. The series ID is **AS-5**, alias **E** (paper-ID standard owner-ratified 2026-08-03; the letter was reassigned 2026-08-02 from the dead "Smuggled Actions", which carries no series ID — dead papers are unnumbered; registry of record = science `portfolio.md`). No codename settled yet — optional, and cheap to defer to S2.
-3. Deferred until the pilot reveals actual run shapes: whether any experiment-orchestration layer is needed at all, and whether runs get tracked (MLflow or otherwise). Not decided now, deliberately.
+3. ~~Deferred until the pilot reveals actual run shapes: whether any experiment-orchestration layer is needed at all, and whether runs get tracked (MLflow or otherwise).~~ — **SETTLED 2026-08-07, and the two halves went opposite ways.** *Orchestration: YES, minimal.* `conf/experiment/*.yaml` presets + one generic `ops/run.sbatch` + `scripts/submit.py` (dry-run by default). Not adopted for ergonomics — the deciding evidence was that the cluster carried three launchers, **two of which existed only there**, never in git and never on the laptop, one hardcoding a fifteen-element family array and array-index arithmetic over two bash arrays. The run declaration was already being written down, just somewhere unreviewable. No framework: a pydantic model, a YAML directory, and a submitter that prints. *Tracking: NO.* MLflow was weighed against the sibling's actual use and refused — our `results.json` already carries a stronger provenance record than a tracker run id (env lock, corpus digest, activation paths, and the readings/withheld contract), and a tracker would add a service to keep alive for a linkage we do not need. Full reasoning: `text_docs/shared/pipeline_convergence.md` §a and §b.
 4. **NEW (opened at build step 2): does the ladder share one canonical corpus?** Some rungs are exactly invertible only over a restricted alphabet — Morse carries no case, so its reference is the uppercased, table-filtered prompt. Composing every rung's projection would impose that on all fifteen rungs to satisfy one, and case is exactly what the cipher rungs act on; so projections are currently **per rung**, and each cell is scored against its own reference. That is sound per cell but means rungs no longer see byte-identical prompts. `registry.canonicalization_report` quantifies the drift per rung. The alternative — restrict the shared corpus up front — is a *corpus* decision and belongs in S3, not in the encoder layer.
 5. **NEW (opened at build step 3): LLM-judge HarmBench, or the released classifier weights?** The sibling's HarmBench evaluator — copied here — is the **LLM-judge form**: HarmBench's canonical `LLAMA2_CLS_PROMPT` sent to an API model (gpt-5-mini), not the released HarmBench-Llama-2-13b-cls checkpoint. That was forced in the sibling, which never opens a model. It is *not* forced here: this repo already puts 7–9B models on a GPU, so running the released classifier locally is a real option — free per judged sample, and immune to judge-model drift and deprecation (the current judge model has an announced shutdown date). Against it: every recorded ASR number in the family comes from the LLM-judge form, so switching costs cross-paper comparability, and a 13B classifier competes for the same GPU as the experiment. **Not decided.** The cheap resolution is to run both over the phase-0 pilot's saved responses and report their agreement — a judge-agreement number belongs in the paper regardless, and it turns this from a choice into a measurement. Deferred to S3.
 
@@ -253,3 +253,46 @@ Built to close S2(c) — the family's experiment-run approval gate (owner 2026-0
 **One defect found and fixed while costing the judge path.** `llm_utils` auto-routes a job to the provider's native batch API when its estimated cost clears $1.00, and it estimates output as `max_tokens` per request. Ours is a deliberately generous 16,384, so the estimate lands at $3.30 per family and **every judge call would have gone to the batch queue on a ~40× overestimate of a short JSON verdict**. The judges are called synchronously inside `run_family` with the model resident on the GPU, so batch latency (poll interval 30s, timeout 3600s, per call, 30 calls per run) would be charged to the job's wall-clock allocation and could exhaust the 8-hour partition limit while the GPU sat idle polling. `conf/judges.yaml` now pins `use_batch_api: false`. This cannot move a verdict — batch and realtime are the same model at the same temperature on the same prompts, a delivery channel rather than an instrument — and the whole judge bill is single-digit dollars, so the 50% batch discount does not buy back the risk. The knob's tuning path is named: a large offline re-judge that holds no GPU is exactly when to flip it.
 
 **Phases 1–3 are projections, and say so.** Phase 0 is costed from measured tokens; the later phases are the phase-0 census times a per-phase multiple declared in `conf/cost.yaml`, plus a fine-tune count for phase 3. They are planning figures for the S3 design doc, each re-derived from real numbers once the phase before it has run.
+
+---
+
+## 13. Config-and-launcher record (2026-08-07)
+
+**What changed in `conf/`, recorded here because §4 is a founding proposal and
+this doc's convention is to log deviations rather than rewrite it** (§8 already
+does this for the `encodings.yaml` shape).
+
+`conf/experiment/*.yaml` is **new** — six committed run declarations, the answer
+to §7.3's orchestration half. `conf/pilot.yaml` is **renamed `conf/corpus.yaml`**:
+the name said "one experiment" while the content is the contrast pair every run
+of both papers reads, and `scripts/as6_guard_probe.py` — not the pilot, and the
+other paper — was calling `load_pilot_config()` to find it. `PilotConfig` →
+`CorpusConfig`, and the run record's `config.pilot` → `config.corpus` with
+`SCHEMA_VERSION` bumped 1 → 2.
+
+**§4's proposed `probes.yaml` and `training.yaml` were never built** and should
+not be read as owed: probe knobs live in `conf/measurements.yaml` under the
+instrument that uses them, and there is no training layer yet because phase 1 has
+not started. `conf/guards/` and `conf/cost.yaml` were unforeseen at §4 and exist.
+
+**The layout that actually holds**, superseding §4's `conf/` block:
+
+```
+conf/
+  corpus.yaml         # the contrast pair + default run scope
+  measurements.yaml   # every instrument knob, each with its tuning path
+  encodings.yaml      # the ladder, keyed by family (§8: one file, not a dir)
+  judges.yaml         # judge model ids
+  cost.yaml           # hardware throughput assumptions for the approval gate
+  models/*.yaml       # per-model facts (AS-5 targets + the SAE pre-gate's Base arm)
+  guards/*.yaml       # per-guard facts (AS-6's objects of study)
+  experiment/*.yaml   # committed run declarations — closed schema, no knobs
+```
+
+**`scripts/` was NOT reorganised**, and that was decided rather than skipped —
+`pipeline_architecture.md` §5.3. Eleven files hold three kinds (entrypoint /
+analysis / tooling); the only distinction with consequences is which are
+launchable, and that is typed as `config.Entrypoint` and tested. What the
+investigation did fix is a silent trap: `completion.reachable_modules` globbed
+`scripts/*.py` non-recursively, so any future subdirectory would have turned its
+modules into reported orphans without raising.
