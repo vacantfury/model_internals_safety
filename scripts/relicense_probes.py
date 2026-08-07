@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 from internals_safety.config import load_measurements_config
@@ -37,16 +38,71 @@ from internals_safety.measurements.recognition import measure_recognition
 from internals_safety.models.capture import ActivationBatch
 
 
-def find_batch(activations: Path, prefix: str) -> Path | None:
-    """Cached files are `<condition>-<digest>.pt`; the digest is not reproducible
-    here (it hashes the capture request), so match on the condition prefix."""
+@dataclass(frozen=True)
+class Resolved:
+    """A cache file plus HOW it was found. The route is recorded in the output
+    because a licensing decision resting on a guessed cache and one resting on
+    the run record's own statement are not the same claim."""
+
+    path: Path
+    route: str  # "record" | "unique"
+
+
+def resolve_batch(activations: Path, prefix: str, recorded: str | None) -> Resolved | None:
+    """Find a cached batch, preferring what the run record NAMES.
+
+    **The record is authoritative and the glob is the fallback — that ordering is
+    the fix for TODO item 21** (2026-08-07). Cached files are `<condition>-<digest>.pt`
+    and the digest hashes the capture request, so it is not reproducible here;
+    the original implementation could therefore only prefix-match, and it refused
+    outright when more than one file matched. That refusal was correct and it
+    blocked all 15 Qwen rungs: the head run was killed at the 8h wall and the
+    tail run re-captured, leaving two `plain-harmful`, two `plain-harmless` and
+    two `base64` captures with nothing to tell them apart.
+
+    But `results.json` records `activations_path` — the run naming its own
+    caches, which is the authoritative link the glob was standing in for.
+    Measured 2026-08-07: on Qwen exactly THREE conditions are duplicated, not the
+    whole set, so preferring the record recovers 14 of 15 rungs and leaves only
+    `base64` genuinely undecidable.
+
+    Falls back to a glob ONLY when it is unambiguous, and still refuses when it
+    is not — an unrecorded, duplicated capture is exactly the case where guessing
+    would put a licensing decision on an unknown tensor.
+    """
+    if recorded:
+        named = Path(recorded)
+        if named.exists():
+            return Resolved(named, "record")
+        # The record stores absolute paths from the machine that wrote it; a
+        # cache reachable under a different mount is still the same file, and
+        # the digest in the NAME is what identifies it.
+        relocated = activations / named.name
+        if relocated.exists():
+            return Resolved(relocated, "record")
+
     matches = sorted(activations.glob(f"{prefix}-*.pt"))
     if len(matches) > 1:
         raise SystemExit(
-            f"ambiguous cache for {prefix!r}: {[m.name for m in matches]}. "
-            "Refusing to guess which capture a licensing decision is based on."
+            f"ambiguous cache for {prefix!r}: {[m.name for m in matches]}, and the run "
+            "record does not name one. Refusing to guess which capture a licensing "
+            "decision is based on — re-capture this condition, or point --results at "
+            "the record that wrote it."
         )
-    return matches[0] if matches else None
+    return Resolved(matches[0], "unique") if matches else None
+
+
+def recorded_paths(results_path: Path) -> dict:
+    """`activations_path` from the run record, or `{}` on an older record.
+
+    Empty is a legitimate answer, not an error: the Qwen HEAD run wrote no
+    `results.json` at all — the 8h wall killed it first — so nine of its rungs
+    have caches on disk that no record names. Those still resolve, by unique
+    glob, and their route says so.
+    """
+    record = json.loads(results_path.read_text())
+    paths = record.get("activations_path")
+    return paths if isinstance(paths, dict) else {}
 
 
 def old_licensing(results_path: Path) -> dict[str, dict]:
@@ -64,13 +120,19 @@ def main() -> None:
 
     config = load_measurements_config().probes
     previous = old_licensing(args.results)
+    recorded = recorded_paths(args.results)
+    per_family_recorded = recorded.get("per_family", {})
 
-    plain_harmful_path = find_batch(args.activations, "plain-harmful")
-    plain_harmless_path = find_batch(args.activations, "plain-harmless")
-    if not plain_harmful_path or not plain_harmless_path:
+    plain_harmful_ref = resolve_batch(args.activations, "plain-harmful", recorded.get("plain_harmful"))
+    plain_harmless_ref = resolve_batch(args.activations, "plain-harmless", recorded.get("plain_harmless"))
+    if not plain_harmful_ref or not plain_harmless_ref:
         raise SystemExit(f"missing plain-condition caches under {args.activations}")
-    plain_harmful = ActivationBatch.load(plain_harmful_path)
-    plain_harmless = ActivationBatch.load(plain_harmless_path)
+    plain_harmful = ActivationBatch.load(plain_harmful_ref.path)
+    plain_harmless = ActivationBatch.load(plain_harmless_ref.path)
+    print(
+        f"plain contrast set: {plain_harmful_ref.path.name} / {plain_harmless_ref.path.name} "
+        f"(via {plain_harmful_ref.route})\n"
+    )
 
     families = args.families or sorted(
         p.name.split("-")[2]
@@ -88,13 +150,18 @@ def main() -> None:
 
     rows = []
     for family in families:
-        encoded_harmful_path = find_batch(args.activations, f"encoded-harmful-{family}")
-        encoded_harmless_path = find_batch(args.activations, f"encoded-harmless-{family}")
-        if not encoded_harmful_path or not encoded_harmless_path:
+        family_record = per_family_recorded.get(family, {})
+        harmful_ref = resolve_batch(
+            args.activations, f"encoded-harmful-{family}", family_record.get("encoded_harmful")
+        )
+        harmless_ref = resolve_batch(
+            args.activations, f"encoded-harmless-{family}", family_record.get("encoded_harmless")
+        )
+        if not harmful_ref or not harmless_ref:
             print(f"{family:<20} (no cached activations — skipped)")
             continue
-        encoded_harmful = ActivationBatch.load(encoded_harmful_path)
-        encoded_harmless = ActivationBatch.load(encoded_harmless_path)
+        encoded_harmful = ActivationBatch.load(harmful_ref.path)
+        encoded_harmless = ActivationBatch.load(harmless_ref.path)
 
         curve = measure_deployment(
             family, plain_harmful, plain_harmless, encoded_harmful, encoded_harmless, config
@@ -136,6 +203,12 @@ def main() -> None:
                 "recognition_licensed_old": rec_old,
                 "recognition_licensed_new": rec_new,
                 "recognition_p_value": recognition.p_value,
+                # Provenance of the tensors this row rests on. "record" means the
+                # run named its own cache; "unique" means only one file matched
+                # and nothing contradicted it. A reader can tell the two apart.
+                "encoded_harmful_cache": harmful_ref.path.name,
+                "encoded_harmless_cache": harmless_ref.path.name,
+                "cache_route": harmful_ref.route,
             }
         )
 
@@ -155,7 +228,14 @@ def main() -> None:
     if lost:
         print(f"  LOST:   {', '.join(lost)}")
 
+    by_route: dict[str, int] = {}
+    for row in rows:
+        by_route[row["cache_route"]] = by_route.get(row["cache_route"], 0) + 1
+    if by_route:
+        print("  cache resolution: " + ", ".join(f"{n} via {route}" for route, n in sorted(by_route.items())))
+
     if args.out:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(rows, indent=2) + "\n")
         print(f"\nwrote {args.out}")
 

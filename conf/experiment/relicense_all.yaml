@@ -43,9 +43,20 @@ families:
   - reverse_words
   - zero_width
 
+# The record each model's caches are resolved FROM. Llama's covers all 15
+# families; Qwen's tail run covers 6, because its head run was killed at the 8h
+# wall before writing any record at all. The other 9 Qwen rungs resolve by unique
+# glob and their route is recorded per row as `unique` rather than `record`.
 source_runs:
   llama3_1_8b_instruct: phase0-20260802
   qwen2_5_7b_instruct: phase0-20260802-tail
+
+# ⚠️ EXPECTED: exactly ONE of the 30 tasks fails — Qwen `base64`. It has two
+# cached captures and no record naming either, so `resolve_batch` refuses rather
+# than put a licensing decision on an unknown tensor. That refusal is the
+# instrument working; the rung needs a re-capture, not a guess. Not worked around
+# here, because a per-model family exclusion would add schema for one cell and
+# hide the fact that one rung is unmeasurable.
 
 resources:
   partition: short
