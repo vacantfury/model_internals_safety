@@ -89,10 +89,17 @@ def main(argv: list[str] | None = None) -> int:
         print("    before Base passes attributes our bug to the science.")
         return 0
 
-    if not args.allow_dirty:
-        guard_working_tree()
-
+    # Device FIRST: the guard needs it to decide whether this run is
+    # result-bearing, which is the whole basis on which it raises rather than
+    # warns. Called unconditionally with `allow_dirty` passed through, matching
+    # `phase0_regime_map.py` and `as6_guard_probe.py` — the `if not
+    # args.allow_dirty` wrapper that stood here was wrong twice over: it dropped
+    # the required `device` argument (a TypeError that killed all three tasks of
+    # job 8995805 in 20 seconds), and it made `--allow-dirty` skip the guard
+    # ENTIRELY rather than downgrade it to a warning, so no diff would have been
+    # recorded alongside the results.
     device = resolve_device(model_config.device, allow_cpu_in_job=args.allow_cpu)
+    guard_working_tree(str(device), allow_dirty=args.allow_dirty)
     print(f"loading {model_config.hf_id} on {device} ...", flush=True)
     loaded = load_model(model_config)
 
