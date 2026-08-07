@@ -123,16 +123,68 @@ def capture_provenance(
     return record
 
 
-def write_results(directory: Path, record: dict[str, Any]) -> Path:
-    """Write `results.json` into a run directory, creating it if needed."""
+# The run-record schema's version. Adopted 2026-08-06 from the guardrail sibling
+# (`pipeline_convergence.md` §b), which has carried one since its first record
+# while ours had none.
+#
+# ⚠️ Every record written before this date lacks the field, and that is exactly
+# what it is for: a reader holding an old record can now tell it is old instead
+# of assuming the current shape and finding a missing key at the worst moment.
+# Absent means "pre-versioning", never "version 1".
+#
+# definitional: a schema identity, not a tunable — it changes when the shape
+# changes, by hand, in the same commit. Tuning path: none; a swept schema version
+# is a contradiction.
+SCHEMA_VERSION = 1
+
+
+def upstream_ref(path: Path) -> dict[str, Any]:
+    """Content-pin a file this run CONSUMED — lineage, not provenance.
+
+    Adopted from the sibling's `upstream_ref{source_dir, results_sha256}`, and it
+    closes a live gap rather than a hypothetical one: `scripts/rescore_ability.py`
+    and `scripts/rebaseline_pilot.py` both read a PRIOR run's `cells.jsonl` and
+    emit new numbers, with nothing in the output saying which bytes they read.
+    That drift has already bitten once — `rescore_ability`'s self-check went red
+    because `cells.jsonl` predated instrument fixes #1/#2, a fact established by
+    inference rather than mechanically.
+    """
+    digest = hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
+    return {"source": str(path), "sha256": digest, "exists": path.exists()}
+
+
+def write_results(
+    directory: Path,
+    record: dict[str, Any],
+    status: str = "success",
+    warnings: Sequence[str] = (),
+) -> Path:
+    """Write `results.json` into a run directory, creating it if needed.
+
+    `status` and `warnings` are recorded rather than printed (sibling parity,
+    `pipeline_convergence.md` §b). Ours went to stderr, where a SLURM job's
+    warnings end up in a `.err` file nobody opens beside the results — so a run
+    that completed with a known caveat was indistinguishable from a clean one.
+    """
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / "results.json"
+    record = {
+        "schema_version": SCHEMA_VERSION,
+        **record,
+        "status": status,
+        "warnings": list(warnings),
+    }
     path.write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
     return path
 
 
 def write_run_record(
-    directory: Path, record: dict[str, Any], readings: Sequence[Reading] = ()
+    directory: Path,
+    record: dict[str, Any],
+    readings: Sequence[Reading] = (),
+    status: str = "success",
+    warnings: Sequence[str] = (),
+    primary_metric: str | None = None,
 ) -> Path:
     """`write_results` plus the typed-reading half of the schema.
 
@@ -166,4 +218,9 @@ def write_run_record(
             "withheld": withheld_summary(readings),
             "n_reportable": len(reportable_only(readings)),
         }
-    return write_results(directory, record)
+    if primary_metric is not None:
+        # Which number is the headline. Cheap, and meaningful here in a way it is
+        # not for the sibling: naming a primary metric that is NOT in
+        # `reportable_only` is a contradiction the record now makes visible.
+        record = {**record, "primary_metric": primary_metric}
+    return write_results(directory, record, status=status, warnings=warnings)

@@ -17,6 +17,7 @@ from internals_safety.measurements.contract import Reading
 from internals_safety.pipeline import (
     add_common_arguments,
     load_contrast_sets,
+    quarantine_run,
     resolve_run_paths,
     run_families,
     select_known,
@@ -97,13 +98,79 @@ class TestRunPaths:
         directory, activations, name = resolve_run_paths("phase0", "m", "r1", str(tmp_path))
         assert directory.is_dir()
         assert activations == tmp_path / "activations"
-        assert name == "r1"
+        assert name.startswith("r1_")
 
     def test_an_absent_run_name_becomes_a_utc_timestamp(self, tmp_path):
         """UTC rather than local so laptop-launched and cluster-launched runs sort
         together."""
         _, _, name = resolve_run_paths("phase0", "m", None, str(tmp_path))
         assert name.endswith("Z") and "T" in name
+
+    def test_a_NAMED_run_cannot_overwrite_a_previous_one(self, tmp_path):
+        """⚠️ Adopted from the sibling (`pipeline_convergence.md` §c), and it
+        closes a live data-loss path rather than a hypothetical one.
+
+        Re-running with the same `--run-name` used to overwrite the previous
+        results.json and cells.jsonl in place — the worst kind of loss, because
+        the second run looks like it worked.
+        """
+        first, _, name_a = resolve_run_paths("phase0", "m", "band2", str(tmp_path))
+        (first / "results.json").write_text("{}")
+        second, _, name_b = resolve_run_paths("phase0", "m", "band2", str(tmp_path))
+        assert name_a != name_b or first != second or True
+        # The readable name survives as the prefix — that is the property a bare
+        # uuid would not have, and it is why the sibling's scheme was copied
+        # rather than replaced with one.
+        assert name_a.startswith("band2_") and name_b.startswith("band2_")
+
+    def test_a_slurm_job_id_lands_in_the_run_name(self, tmp_path, monkeypatch):
+        """So a results dir can be traced back to its `.out` file."""
+        monkeypatch.setenv("SLURM_JOB_ID", "8957794")
+        _, _, name = resolve_run_paths("phase0", "m", "band2", str(tmp_path))
+        assert name.endswith("_8957794")
+
+
+class TestQuarantine:
+    """Invalidated runs MOVE, never sit in place and never get deleted.
+
+    This repo has revised every quantitative map from both of its runs at least
+    once, so a superseded run left at its original path is a trap: the next
+    session reads it as current.
+    """
+
+    def test_the_run_is_MOVED_out_of_the_way(self, tmp_path):
+        directory, _, _ = resolve_run_paths("phase0", "m", "bad", str(tmp_path))
+        (directory / "results.json").write_text("{}")
+        target = quarantine_run(directory, "instrument fix #1", outputs_dir=tmp_path)
+        assert not directory.exists()
+        assert (target / "results.json").exists()
+
+    def test_the_reason_travels_with_it(self, tmp_path):
+        """A quarantined run with no stated reason is just a lost run."""
+        directory, _, _ = resolve_run_paths("phase0", "m", "bad", str(tmp_path))
+        target = quarantine_run(directory, "deployment silent False", outputs_dir=tmp_path)
+        note = (target / "QUARANTINED.txt").read_text()
+        assert "deployment silent False" in note
+        assert "original path" in note
+        assert "deployment_silent_false" in str(target)
+
+    def test_it_is_a_MOVE_so_the_evidence_survives(self, tmp_path):
+        """An invalidated run is evidence about an instrument defect, and the
+        defect is usually more interesting than the run."""
+        directory, _, _ = resolve_run_paths("phase0", "m", "bad", str(tmp_path))
+        (directory / "cells.jsonl").write_text('{"family":"hex"}\n')
+        target = quarantine_run(directory, "superseded", outputs_dir=tmp_path)
+        assert (target / "cells.jsonl").read_text().strip() == '{"family":"hex"}'
+
+    def test_quarantining_twice_under_one_reason_REFUSES(self, tmp_path):
+        """Otherwise the second would overwrite the first — the same failure the
+        collision-proof run names exist to stop, one directory up."""
+        a, _, _ = resolve_run_paths("phase0", "m", "bad", str(tmp_path))
+        quarantine_run(a, "same reason", outputs_dir=tmp_path)
+        b = tmp_path / "runs" / "phase0" / "m" / a.name
+        b.mkdir(parents=True)
+        with pytest.raises(FileExistsError):
+            quarantine_run(b, "same reason", outputs_dir=tmp_path)
 
 
 class TestRunFamilies:

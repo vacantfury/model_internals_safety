@@ -27,6 +27,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import shutil
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -102,12 +104,69 @@ def resolve_run_paths(
 
     The run name defaults to a UTC timestamp rather than a local one so runs
     launched from a laptop and from the cluster sort together.
+
+    **⚠️ A named run is made collision-proof by appending a timestamp and the
+    SLURM job id** (sibling parity, `pipeline_convergence.md` §c — their run dirs
+    carry `_<ts>_<jobid>` and cannot collide). Before this, re-running with the
+    same `--run-name` SILENTLY OVERWROTE the previous results.json and
+    cells.jsonl. That is a data-loss path this repo had simply not hit yet, and
+    it is the worst kind: the second run looks like it worked.
+
+    The readable name is KEPT as the prefix — `band2-20260805_20260806T1412Z_8957794`
+    still sorts and greps by what it is, which is the property the sibling's
+    scheme has and a bare uuid would not.
     """
     outputs = Path(outputs_dir) if outputs_dir else OUTPUTS_DIR
-    resolved = run_name or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    if run_name:
+        job = os.environ.get("SLURM_JOB_ID")
+        resolved = f"{run_name}_{stamp}" + (f"_{job}" if job else "")
+    else:
+        resolved = stamp
     directory = run_dir(phase, name, resolved, runs_dir=outputs / "runs")
     directory.mkdir(parents=True, exist_ok=True)
     return directory, outputs / "activations", resolved
+
+
+def quarantine_run(directory: Path, reason: str, outputs_dir: Path | None = None) -> Path:
+    """MOVE an invalidated run under `outputs/_quarantine/<reason>_<date>/`.
+
+    Adopted from the sibling, which has `_quarantine/oracle_leak_20260805`,
+    `_quarantine/figstep_incomplete_20260805` and five more
+    (`pipeline_convergence.md` §c).
+
+    **This repo needs it more than they do.** Every quantitative map from both of
+    our runs has been revised at least once, and the pilot's `cells.jsonl` is
+    currently superseded-but-in-place with that fact recorded only in prose. A
+    run that has been invalidated and still sits at its original path is a trap
+    for the next session, which will read it as current.
+
+    MOVED, never deleted: an invalidated run is evidence about an instrument
+    defect, and the defect is usually more interesting than the run.
+    """
+    outputs = outputs_dir if outputs_dir is not None else OUTPUTS_DIR
+    slug = re.sub(r"[^a-z0-9]+", "_", reason.lower()).strip("_")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
+    target = outputs / "_quarantine" / f"{slug}_{stamp}" / directory.name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        raise FileExistsError(
+            f"{target} already exists — quarantining twice under one reason on one "
+            "day would overwrite the first, which is the failure this exists to stop"
+        )
+    shutil.move(str(directory), str(target))
+    (target / "QUARANTINED.txt").write_text(
+        "\n".join(
+            [
+                f"reason: {reason}",
+                f"quarantined: {stamp}",
+                f"original path: {directory}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return target
 
 
 def run_families(

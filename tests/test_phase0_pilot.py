@@ -62,6 +62,20 @@ def load_script():
     return module
 
 
+def run_directory(tmp_path, model: str, run_name: str):
+    """Locate a run dir by its readable PREFIX.
+
+    Run names carry a timestamp (and a SLURM job id on the cluster) since
+    2026-08-06, so a collision cannot silently overwrite a previous run —
+    `pipeline_convergence.md` §c. Tests therefore find the directory rather than
+    constructing its name, which is also what a human does.
+    """
+    parent = tmp_path / "runs" / "phase0" / model
+    matches = sorted(d for d in parent.iterdir() if d.name.startswith(run_name))
+    assert matches, f"no run dir starting with {run_name!r} in {parent}"
+    return matches[-1]
+
+
 @pytest.fixture(scope="module")
 def pilot():
     return load_script()
@@ -318,7 +332,7 @@ class TestMain:
             ]
         )
         assert exit_code == 0
-        return tmp_path / "runs" / "phase0" / "qwen2_5_0_5b_instruct" / "unit"
+        return run_directory(tmp_path, "qwen2_5_0_5b_instruct", "unit")
 
     def test_writes_the_canonical_run_record(self, run):
         record = json.loads((run / "results.json").read_text())
@@ -583,7 +597,7 @@ class TestDeclaredInstrumentRoster:
         ]) == 0
 
         record = json.loads(
-            (tmp_path / "runs" / "phase0" / "qwen2_5_0_5b_instruct" / "instruments"
+            (run_directory(tmp_path, "qwen2_5_0_5b_instruct", "instruments")
              / "results.json").read_text()
         )
         instruments = {reading["instrument"] for reading in record["readings"]}
@@ -632,7 +646,7 @@ class TestTheCausalGateIsWired:
             "--outputs-dir", str(tmp_path),
         ])
         assert exit_code == 0
-        return tmp_path / "runs" / "phase0" / "qwen2_5_0_5b_instruct" / "causal"
+        return run_directory(tmp_path, "qwen2_5_0_5b_instruct", "causal")
 
     def test_exactly_one_causal_reading_is_emitted_for_two_families(self, run):
         """The structural point. A rung-level instrument would emit two."""
@@ -706,7 +720,7 @@ class TestReplyInversionIsWired:
             "--outputs-dir", str(tmp_path),
         ])
         assert exit_code == 0
-        return tmp_path / "runs" / "phase0" / "qwen2_5_0_5b_instruct" / "inversion"
+        return run_directory(tmp_path, "qwen2_5_0_5b_instruct", "inversion")
 
     def test_the_reading_reaches_the_run_record(self, run):
         readings = json.loads((run / "results.json").read_text())["readings"]
@@ -775,7 +789,7 @@ class TestLexicalControlIsWired:
             "--outputs-dir", str(tmp_path),
         ])
         assert exit_code == 0
-        return tmp_path / "runs" / "phase0" / "qwen2_5_0_5b_instruct" / "lexical"
+        return run_directory(tmp_path, "qwen2_5_0_5b_instruct", "lexical")
 
     def _deployment(self, run):
         readings = json.loads((run / "results.json").read_text())["readings"]
@@ -897,7 +911,7 @@ class TestBehaviorControlIsWired:
         if instruments:
             argv += ["--instruments", instruments]
         assert pilot.main(argv) == 0
-        record = tmp_path / "runs" / "phase0" / "qwen2_5_0_5b_instruct" / name / "results.json"
+        record = run_directory(tmp_path, "qwen2_5_0_5b_instruct", name) / "results.json"
         return json.loads(record.read_text())
 
     @pytest.fixture
