@@ -249,7 +249,21 @@ def measure_reconstruction(
                 f"shape — a dictionary that reduces over the batch is reconstructing "
                 f"the corpus, not the activation."
             )
-        return reconstruction.to(dtype=hidden.dtype), features
+        # DEVICE as well as dtype — the round trip returns on the CALLER's
+        # device, whatever device the dictionary itself lives on.
+        #
+        # This completes the invariant the seam fix started (2026-08-07):
+        # `encode`/`decode` move activations TO the dictionary, because its
+        # weights are ~134M params and the batch is not; `round_trip` brings the
+        # result BACK, because everything downstream here is deliberately CPU
+        # (`capture_only` does `.detach().float().cpu()`, logits are `.cpu()`).
+        #
+        # Fixing only the first half is what killed job 9006846: encode then
+        # succeeded on a CUDA dictionary and returned a CUDA reconstruction into
+        # a CPU pipeline, so `hidden - reconstruction` raised one line later.
+        # Every test passed throughout, because they all use a CPU dictionary
+        # and the two halves are only distinguishable when it is not.
+        return reconstruction.to(device=hidden.device, dtype=hidden.dtype), features
 
     for start in range(0, len(rendered), batch_size):
         chunk = rendered[start : start + batch_size]

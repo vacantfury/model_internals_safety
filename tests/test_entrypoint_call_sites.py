@@ -168,3 +168,48 @@ class TestDictionarySeamsCoerceDevice:
         )
         control.weights = control.weights.to(device)
         assert control.encode(torch.zeros(3, 8)).device.type == device
+
+
+@pytest.mark.skipif(second_device() is None, reason="needs a non-CPU device")
+def test_measure_reconstruction_runs_with_an_OFF_DEVICE_dictionary(tiny_model):
+    """The end-to-end path the cluster actually runs: CPU pipeline, GPU dictionary.
+
+    THE test that was missing. Three separate device defects reached the queue
+    in `sae_pregate` (jobs 8995805, 9006556, 9006846) and every unit test passed
+    through all of them, because they all place the dictionary on CPU — where
+    the two halves of the invariant are indistinguishable:
+
+        encode/decode  -> move activations TO the dictionary (weights stay put)
+        round_trip     -> bring the result BACK to the caller
+
+    Fixing only the first half turned an error inside `encode` into an error one
+    line later at `hidden - reconstruction`. Only an off-device dictionary can
+    tell the difference, so this test uses one.
+    """
+    import torch
+
+    from internals_safety.config import SAEConfig
+    from internals_safety.measurements.sae_reconstruction import (
+        RandomDictionary,
+        measure_reconstruction,
+    )
+
+    device = second_device()
+    dictionary = RandomDictionary(
+        d_model=tiny_model.model.config.hidden_size,
+        n_features=32,
+        k=4,
+        generator=torch.Generator().manual_seed(0),
+    )
+    dictionary.weights = dictionary.weights.to(device)   # the cluster's shape
+
+    quality = measure_reconstruction(
+        tiny_model,
+        dictionary,
+        ["the cat sat", "a dog ran"],
+        layer=1,
+        config=SAEConfig(trained_on="t", min_kl_recovered=0.8, min_variance_explained=0.75),
+        batch_size=2,
+    )
+    assert quality.n_prompts == 2
+    assert quality.variance_explained == quality.variance_explained   # not NaN
