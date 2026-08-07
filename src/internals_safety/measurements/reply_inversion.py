@@ -63,7 +63,7 @@ import torch
 from internals_safety.measurements.causal_license import matched_norm_random_direction
 from internals_safety.measurements.contract import Kind, Reading
 from internals_safety.models.interventions import add_direction
-from internals_safety.models.loader import LoadedModel
+from internals_safety.models.loader import LoadedModel, render_chat
 from internals_safety.probes.directions import Direction
 
 # P1 — checked across the roster by `assert_distinct_questions`.
@@ -100,13 +100,37 @@ class InversionBatch:
 def build_inversion_batch(
     loaded: LoadedModel, prompts: Sequence[str], question: str = INVERSION_QUESTION
 ) -> InversionBatch:
-    """Append the inversion question and mark where the original prompt ends.
+    """Render prompt + inversion question through the CHAT TEMPLATE, and mark
+    where the original prompt ends inside the rendered sequence.
 
-    Tokenised per row and padded here rather than tokenising the concatenation
-    in one call, because the boundary index is what the mask needs and a batched
-    tokeniser call does not report it. The cost is one extra tokenisation of each
-    prompt — microseconds, against a measurement that would otherwise steer the
-    wrong span.
+    **⚠️ This rendered nothing until 2026-08-06 (TODO 53), and the defect was
+    load-bearing.** It tokenised the bare instruction — no chat template, no BOS
+    — while every direction it steers with is fitted on rendered-prompt
+    activations (`capture_or_load` renders before capturing). So the measurement
+    steered a direction from one distribution through a forward pass in another,
+    and refusal/judgment is largely a *chat-format behaviour* — precisely the
+    quantity it reads. `causal.py` had the identical defect and was fixed the
+    same day; this one waited because the fix had a design question.
+
+    **The design question, and the authority that settles it.** Zhao et al.
+    (arXiv 2507.11878, NeurIPS 2025) *append* the inversion question to the user
+    prompt and steer "before the inversion question" — one user turn containing
+    both, with a boundary inside it. Not a second turn, and not an assistant
+    prefix: either would put template tokens between the prompt and the question
+    and change what "before" means. So the render is
+    `render_chat(prompt + question)`, matching their construction.
+
+    **Finding the boundary in the RENDERED sequence, which is the part the
+    template makes non-obvious.** The mask needs the last token of the original
+    prompt, but a template puts tokens on both sides of it. Taken here as the
+    common token prefix of `render_chat(prompt)` and `render_chat(prompt +
+    question)`: those agree through `[template prefix][prompt]` and diverge
+    exactly where the question begins.
+
+    That also handles a BPE merge across the join in the SAFE direction. If the
+    prompt's last token merges with the question's first characters, the merged
+    token is not shared, so it falls on the question side and is left unsteered —
+    steering slightly less rather than steering the question itself.
     """
     if not prompts:
         raise ValueError("no prompts supplied")
@@ -114,10 +138,21 @@ def build_inversion_batch(
     rows: list[list[int]] = []
     boundaries: list[int] = []
     for prompt in prompts:
-        prompt_ids = loaded.tokenizer.encode(prompt, add_special_tokens=False)
-        question_ids = loaded.tokenizer.encode(question, add_special_tokens=False)
-        rows.append(list(prompt_ids) + list(question_ids))
-        boundaries.append(len(prompt_ids))
+        full = loaded.tokenizer.encode(
+            render_chat(loaded.tokenizer, prompt + question, loaded.config.system_prompt),
+            add_special_tokens=False,
+        )
+        prompt_only = loaded.tokenizer.encode(
+            render_chat(loaded.tokenizer, prompt, loaded.config.system_prompt),
+            add_special_tokens=False,
+        )
+        shared = 0
+        for left, right in zip(full, prompt_only):
+            if left != right:
+                break
+            shared += 1
+        rows.append(list(full))
+        boundaries.append(shared)
 
     width = max(len(row) for row in rows)
     pad_id = loaded.tokenizer.pad_token_id

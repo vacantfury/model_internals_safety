@@ -7,7 +7,9 @@ import math
 import pytest
 import torch
 
+from internals_safety.models.loader import render_chat
 from internals_safety.measurements.reply_inversion import (
+    INVERSION_QUESTION,
     AFFIRMATIVE,
     INVERSION_QUESTION,
     NEGATIVE,
@@ -49,11 +51,55 @@ def direction_at(width: int, layer: int, position: str, index: int = 0) -> Direc
 
 
 class TestTheInversionBatch:
-    def test_the_prompt_mask_marks_the_original_prompt_and_not_the_question(self, tiny_model):
+    def test_the_batch_is_RENDERED_through_the_chat_template(self, tiny_model):
+        """⚠️ TODO 53. This tokenised the bare instruction until 2026-08-06 —
+        no template, no BOS — while every direction it steers with is fitted on
+        rendered-prompt activations. It steered a direction from one
+        distribution through a forward pass in another, and refusal/judgment is
+        largely a chat-format behaviour, which is the quantity it reads.
+        """
+        batch = build_inversion_batch(tiny_model, PROMPTS)
+        bare = tiny_model.tokenizer.encode(
+            PROMPTS[0] + INVERSION_QUESTION, add_special_tokens=False
+        )
+        row = batch.input_ids[0][batch.attention_mask[0].bool()]
+        assert len(row) > len(bare), "rendered sequence must carry the template's tokens"
+
+    def test_the_prompt_mask_ends_where_the_QUESTION_begins(self, tiny_model):
+        """The mask is the boundary inside the rendered sequence, taken as the
+        common token prefix of render(prompt) and render(prompt + question).
+
+        It therefore covers `[template prefix][prompt]` and NOT the question —
+        which is what "steer before the inversion question" means once a chat
+        template puts tokens on both sides of the join. Asserted against the
+        rendering rather than against a bare token count, because the bare count
+        is exactly what the defect used.
+        """
         batch = build_inversion_batch(tiny_model, PROMPTS)
         for row in range(len(PROMPTS)):
-            prompt_len = len(tiny_model.tokenizer.encode(PROMPTS[row], add_special_tokens=False))
-            assert int(batch.prompt_mask[row].sum()) == prompt_len
+            rendered_prompt_only = tiny_model.tokenizer.encode(
+                render_chat(tiny_model.tokenizer, PROMPTS[row], tiny_model.config.system_prompt),
+                add_special_tokens=False,
+            )
+            covered = int(batch.prompt_mask[row].sum())
+            # Never more than render(prompt) — that would steer the question.
+            assert covered <= len(rendered_prompt_only)
+            # And strictly more than the bare prompt, i.e. the template prefix
+            # is inside the steered span, where "before the question" puts it.
+            bare = len(tiny_model.tokenizer.encode(PROMPTS[row], add_special_tokens=False))
+            assert covered > bare
+
+    def test_a_merge_across_the_join_falls_on_the_QUESTION_side(self, tiny_model):
+        """The safe direction. If the prompt's last token merges with the
+        question's first characters the merged token is not shared, so it is
+        left unsteered — steering slightly less rather than steering the
+        question itself."""
+        batch = build_inversion_batch(tiny_model, ["decode this"], question="XYZ?")
+        rendered_prompt_only = tiny_model.tokenizer.encode(
+            render_chat(tiny_model.tokenizer, "decode this", tiny_model.config.system_prompt),
+            add_special_tokens=False,
+        )
+        assert int(batch.prompt_mask[0].sum()) <= len(rendered_prompt_only)
 
     def test_padding_is_LEFT_so_the_final_position_is_a_real_token_everywhere(self, tiny_model):
         """The answer is read at the last position. Right padding would read it
