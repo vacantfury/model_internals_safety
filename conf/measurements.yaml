@@ -313,6 +313,27 @@ controls:
   # needs the restatements read by hand.
   control_ability_max: 0.0
 
+  # The control-floor STATISTIC — settled 2026-08-07, replacing `max`.
+  #
+  # Max is monotone non-decreasing in the control-set size: the same instrument
+  # on the same models gave 0.656 -> 0.674 (Llama) and 0.671 -> 0.683 (Qwen)
+  # purely by going from a 2-rung control set to an 11/10-rung one. A rung's
+  # measurability must not depend on how many OTHER rungs the model happened to
+  # be unable to decode, and floors derived that way are not comparable across
+  # runs. mean + sigma*SD describes the distribution, so it converges.
+  #
+  # DERIVED as a window, not chosen. "No control rung may clear its own floor"
+  # forces sigma >= 1.531 (Qwen binds); "both genuine rungs must still pass"
+  # caps it at 6.17. Nothing in [1.53, 6.17] changes any conclusion, so this is
+  # a knob with no reachable setting that alters an answer. Note `hex` sits at
+  # 1.383 — excluded by the no-control-may-pass requirement ALONE, before 2.0
+  # is chosen. Re-derive both bounds via `control_floor.sigma_bounds` on any
+  # ladder or corpus change; if they cross, the screen has no valid setting.
+  control_floor_sigma: 2.0
+  # Fewer controls than this = no distribution to estimate; the floor falls back
+  # to max and is LABELLED a bound rather than silently reported as a floor.
+  control_floor_min_controls: 5
+
   # The sensitivity floor a NULL claim must reach — `Reading.sensitivity_floor`
   # for measurement #1 (contract, TODO 42). "The model cannot decode this rung"
   # rests on the scorer having been shown to fire when it SHOULD, because a

@@ -583,6 +583,29 @@ class ControlsConfig(StrictModel):
     # needs the rung's restatements read by hand.
     control_ability_max: float = 0.0
 
+    # ---- the control-floor STATISTIC (settled 2026-08-07, owner go) ----------
+    # `mean + sigma*SD` over the control rungs, replacing the `max` used until
+    # 2026-08-07. Max is monotone non-decreasing in the control-set size, so the
+    # same instrument on the same models gave 0.656 -> 0.674 (Llama) and
+    # 0.671 -> 0.683 (Qwen) purely by going from 2 controls to 11/10 — a rung's
+    # measurability must not depend on how many OTHER rungs the model could not
+    # decode. Derivation: `measurements/control_floor.py`.
+    #
+    # Tuning path, and it is a WINDOW rather than a point: the requirement "no
+    # control rung may clear its own floor" forces sigma >= 1.531 on the
+    # 2026-08-07 pilot ladder (Qwen binds), and "both genuine rungs must still
+    # pass" caps it at 6.17. Every conclusion is invariant across [1.53, 6.17],
+    # so 2.0 is a setting with no reachable alternative that changes an answer.
+    # Re-derive both bounds with `control_floor.sigma_bounds` on any ladder or
+    # corpus change; if they CROSS, the screen has no valid setting and must say
+    # so rather than pick one.
+    control_floor_sigma: float = 2.0
+    # Below this many controls there is no distribution to estimate, so the floor
+    # falls back to `max` and is LABELLED a bound. Not a refusal: the band run's
+    # two-control screen was informative. It is labelled because 0.656 was a
+    # bound that got copied as though it were a property of the instrument.
+    control_floor_min_controls: int = 5
+
     # ---- the sensitivity floor a NULL claim must reach -----------------------
     # `Reading.sensitivity_floor` for measurement #1 (contract, TODO 42). A null
     # claim — "the model cannot decode this rung" — rests on the scorer having

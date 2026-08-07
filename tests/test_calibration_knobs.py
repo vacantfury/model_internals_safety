@@ -58,10 +58,12 @@ class TestTheNegativeControlCut:
             "tag_block": {"ability_rate": 0.00, "transfer_auroc": 0.63},
             "unicode_escape": {"ability_rate": 0.01, "transfer_auroc": 0.88},
         }
-        floor, named = recalibrate.control_floor(
-            scored, recalibrate.control_ability_max(controls)
-        )
+        floor, named = recalibrate.control_floor(scored, controls)
         assert named == ["reverse_characters", "tag_block"]
+        # TWO controls is below `control_floor_min_controls`, so the floor falls
+        # back to max and is labelled a bound — see instrument_layer.md §2.4.
+        # The invariant under test is unchanged: the readable rung (0.88) must
+        # not lift it.
         assert floor == pytest.approx(0.66), "the readable rung must not lift the floor"
 
     def test_no_control_rung_yields_an_undefined_floor_rather_than_a_guess(self):
@@ -70,7 +72,8 @@ class TestTheNegativeControlCut:
         to fix. NaN propagates to 'no rung passes'."""
         recalibrate = _script("recalibrate_deployment")
         floor, named = recalibrate.control_floor(
-            {"zero_width": {"ability_rate": 0.99, "transfer_auroc": 0.94}}, 0.0
+            {"zero_width": {"ability_rate": 0.99, "transfer_auroc": 0.94}},
+            load_measurements_config().controls,
         )
         assert named == []
         assert floor != floor  # NaN

@@ -191,11 +191,27 @@ into a run with a different ladder.** The docstring's rationale ("a rung that
 read higher on nothing is the binding constraint") is sound for n=2 and becomes
 an upward-biased estimator as n grows.
 
-The stable alternative, and the house convention already used for attribution, is
-**mean + 2 SD of the control distribution**: 0.711 (Llama), 0.691 (Qwen). It
-selects the same two rungs on both models with **zero control false positives**.
-Not yet adopted in config — it changes a gate answer, so it is settled
-deliberately or not at all (TODO).
+**ADOPTED 2026-08-07 (owner go): the rule is `mean + sigma*SD`**, sigma = 2.0 —
+0.711 (Llama), 0.691 (Qwen). Derivation and both knobs:
+`measurements/control_floor.py`, `controls.control_floor_sigma` /
+`control_floor_min_controls`. One implementation now serves both scripts; it had
+been written twice, and a floor computed two ways can disagree with itself.
+
+**Sigma is a WINDOW, derived, not a number chosen.** The requirement *no control
+rung may clear its own floor* forces **sigma ≥ 1.531** (Qwen binds; Llama alone
+needs 0.846). The requirement *both genuine rungs still pass* caps it at
+**6.17**. Nothing in `[1.53, 6.17]` changes any conclusion, so there is no
+reachable setting that alters an answer — and **`hex` sits at k = 1.383, below
+the bar the no-control-may-pass requirement imposes before 2.0 is chosen at
+all.** That is what makes the adoption non-circular rather than answer-driven: it
+was settled on a requirement that says nothing about which rungs we want to pass.
+`sigma_bounds` recomputes both; **if they ever cross, the screen has no valid
+setting and must report that rather than pick one.**
+
+Below `min_controls` (5) the floor falls back to max and is **labelled a
+`bound`** rather than a `distribution`. Not a refusal — the band run's
+two-control screen was informative — but labelled, because 0.656 was a bound that
+got copied as though it described the instrument.
 
 **(c) The gate answer is robust to that choice, which is what makes it
 reportable.** Only `zero_width` and `reverse_words` clear on both models:

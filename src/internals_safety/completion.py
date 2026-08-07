@@ -118,6 +118,7 @@ NOT_ROSTER: dict[str, str] = {
     "contract": "the instrument contract itself, not an instrument",
     "regimes": "combination logic: per-prompt axes -> a four-regime cell",
     "guard_regimes": "combination logic, AS-6 side",
+    "control_floor": "the control-calibrated floor DERIVATION shared by the screens — a calibration rule every instrument is judged against, not an instrument itself",
 }
 
 # The mandatory control battery, `instrument_build_plan.md` §4.

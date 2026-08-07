@@ -48,6 +48,7 @@ from pathlib import Path
 import numpy as np
 
 from internals_safety.config import load_measurements_config
+from internals_safety.measurements.control_floor import derive as derive_control_floor
 from internals_safety.measurements.regimes import Regime, assign_regime, build_regime_map
 from internals_safety.models.capture import ActivationBatch
 from internals_safety.probes.linear import probe_transfer_detail, reading_threshold
@@ -118,21 +119,35 @@ def rescore(results: dict, summaries: list[dict], config) -> dict[str, dict]:
     return out
 
 
-def control_floor(scored: dict[str, dict], max_ability: float) -> tuple[float, list[str]]:
-    """The surface-feature noise floor: max transfer AUROC over can't-decode rungs.
+def control_floor(scored: dict[str, dict], controls_config) -> tuple[float, list[str]]:
+    """The surface-feature noise floor, via the shared derivation.
 
-    MAX, not mean: the floor has to bound what surface features alone achieved,
-    and a rung that read higher on nothing is the binding constraint.
+    **The statistic changed 2026-08-07 (owner go): `mean + sigma*SD`, not
+    `max`.** Max is monotone non-decreasing in the control-set size, so it made a
+    rung's measurability depend on how many OTHER rungs the model could not
+    decode. Full argument, and why sigma=2.0 is a window rather than a choice:
+    `measurements/control_floor.py`.
 
-    An empty control set returns NaN, which propagates to "no rung passes" —
-    fail-closed, and the right direction: with no floor there is nothing to
-    judge a reading against, and inventing one would be the whole defect this
-    script exists to fix.
+    This function is now a thin adapter kept for its callers' shape. An empty
+    control set still yields NaN, which propagates to "no rung passes" — with no
+    floor there is nothing to judge a reading against, and inventing one is the
+    defect this script exists to fix.
     """
-    controls = [f for f, s in scored.items() if s["ability_rate"] <= max_ability]
-    if not controls:
+    floor = derive_control_floor(
+        {f: s["transfer_auroc"] for f, s in scored.items()},
+        {f: s["ability_rate"] for f, s in scored.items()},
+        max_ability=controls_config.control_ability_max,
+        sigma=controls_config.control_floor_sigma,
+        min_controls=controls_config.control_floor_min_controls,
+    )
+    if floor.value is None:
         return float("nan"), []
-    return max(scored[f]["transfer_auroc"] for f in controls), sorted(controls)
+    if floor.kind == "bound":
+        # Loud: this is the weaker statistic, and the band run's 0.656 was
+        # exactly such a bound reported as though it described the instrument.
+        print(f"  !! only {floor.n} control rung(s) — floor is a BOUND (max), not a "
+              f"distribution; do not carry it to another run")
+    return floor.value, list(floor.controls)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -164,7 +179,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\n{'='*86}\n{model}   ({run_dir})\n{'='*86}", flush=True)
 
         scored = rescore(results, summaries, config)
-        floor, controls = control_floor(scored, max_ability)
+        floor, controls = control_floor(scored, measurements.controls)
         print(f"negative control rungs (ability <= {max_ability}): {controls}")
         if not controls:
             # Loud, and it does not widen the cut to find one. The floor is the
