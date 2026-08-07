@@ -75,6 +75,49 @@ Claim = Literal["positive", "null"]
 
 
 @dataclass(frozen=True)
+class Screen:
+    """One negative control, with its own statistic and its own floor.
+
+    **Why a screen carries its OWN observed value rather than reusing
+    `Reading.value` (TODO 57).** The controls in build plan §4 are independent
+    screens against different confounds, and they are not all measured on the
+    same quantity. The ability-0 floor and the permuted-label control are read on
+    the instrument's own statistic; the XSTest lexical screen is read on a
+    *pooled paired AUROC over a different corpus*. A single `control_reading`
+    float could only ever express the first kind, which is why the vocabulary
+    screen had nowhere to go and ended up in `detail`.
+    """
+
+    name: str
+    # What this screen measured — its own statistic, not necessarily the
+    # instrument's headline number.
+    observed: float
+    # What `observed` must beat for the screen to clear.
+    floor: float
+    # How far it must beat it. Kept beside the screen for the same reason
+    # `control_margin` is: a threshold living elsewhere can move without the
+    # numbers it licensed being re-derived.
+    #
+    # definitional: ZERO is "clear the floor, by nothing in particular" — the
+    # neutral element of the comparison, not a calibrated bar. Every screen that
+    # wants a real margin passes its own from YAML (the lexical screen passes
+    # `controls.lexical_min_margin`), and a screen whose floor already carries
+    # the strictness needs no second knob. Tuning path: per screen, at the screen
+    # — a global default here would silently loosen or tighten every one of them
+    # at once, which is exactly the coupling the battery exists to avoid.
+    margin: float = 0.0
+    # What this screen rules out, in a reviewer's words.
+    defeats: str = ""
+
+    @property
+    def clears(self) -> bool:
+        """Fails CLOSED on NaN — an uncomputed screen never passes."""
+        if self.observed != self.observed or self.floor != self.floor:  # NaN
+            return False
+        return (self.observed - self.floor) >= self.margin
+
+
+@dataclass(frozen=True)
 class Reading:
     """One instrument's verdict on one condition, with its evidence attached."""
 
@@ -105,10 +148,30 @@ class Reading:
     # known to be nothing — the can't-decode rungs, whose ability is 0.00 on
     # both models. None means no control was run, which `reportable` treats as
     # disqualifying rather than as a pass.
+    #
+    # This pair is the PRIMARY screen, read on the instrument's own statistic.
+    # Additional screens go in `controls` below.
     control_reading: float | None = None
     # The margin the control reading must be beaten by. Kept beside the reading
     # so a stale threshold cannot silently re-license an old number.
     control_margin: float | None = None
+
+    # ADDITIONAL screens (TODO 57). The battery in build plan §4 is four
+    # independent controls and §4 is explicit that "every instrument runs all of
+    # these" — but the contract had ONE slot, so the second screen onward had
+    # nowhere to live and rode in `detail`, where `reportable` cannot see it.
+    # The consequence was that `reportable` verified one screen while the
+    # paper's claim rested on four, and WHICH one differed per instrument.
+    controls: tuple[Screen, ...] = ()
+    # Screens this instrument's claim DEPENDS on. A required screen that is
+    # absent disqualifies, exactly as a missing primary control does — the
+    # tri-state discipline applied to the battery: not run is never passed.
+    #
+    # Declared per reading rather than global, because the battery is not
+    # uniform: the lexical screen is meaningless for an instrument that never
+    # touches a harm probe, and demanding it everywhere would train readers to
+    # ignore the requirement.
+    required_controls: tuple[str, ...] = ()
 
     # P3. How far `value` clears the length null. None means the null was not
     # computed — again disqualifying, not passing. Character length separates
@@ -146,11 +209,31 @@ class Reading:
     detail: dict = field(default_factory=dict)
 
     @property
+    def missing_controls(self) -> tuple[str, ...]:
+        """Required screens with no result attached. Absent is never passed."""
+        present = {screen.name for screen in self.controls}
+        return tuple(name for name in self.required_controls if name not in present)
+
+    @property
+    def failed_controls(self) -> tuple[str, ...]:
+        """Screens that ran and did not clear."""
+        return tuple(screen.name for screen in self.controls if not screen.clears)
+
+    @property
     def clears_controls(self) -> bool:
-        """P2 — read loudly where the answer is known to be nothing? Fails closed."""
+        """P2 — every screen this claim rests on, not just the first one.
+
+        Three conditions, each failing closed: the primary screen ran and was
+        beaten by the stated margin; every ADDITIONAL screen that ran cleared;
+        and every REQUIRED screen actually ran. The third is the one TODO 57
+        added — before it, a claim could be reported having silently skipped
+        three of the four controls the build plan calls mandatory.
+        """
         if self.control_reading is None or self.control_margin is None:
             return False
-        return (self.value - self.control_reading) >= self.control_margin
+        if (self.value - self.control_reading) < self.control_margin:
+            return False
+        return not self.failed_controls and not self.missing_controls
 
     @property
     def clears_length_null(self) -> bool:
@@ -247,10 +330,22 @@ class Reading:
             reasons.append("not licensed: no signal above the instrument's null")
         if self.control_reading is None or self.control_margin is None:
             reasons.append("no negative control was run (P2)")
-        elif not self.clears_controls:
+        elif (self.value - self.control_reading) < self.control_margin:
             reasons.append(
                 f"reads {self.value:.3f} against {self.control_reading:.3f} on the "
                 f"negative control, margin {self.control_margin:.3f} (P2)"
+            )
+        for screen in self.controls:
+            if not screen.clears:
+                reasons.append(
+                    f"control {screen.name!r} did not clear: {screen.observed:.3f} "
+                    f"against floor {screen.floor:.3f} + margin {screen.margin:.3f}"
+                    + (f" — it rules out {screen.defeats}" if screen.defeats else "")
+                )
+        for name in self.missing_controls:
+            reasons.append(
+                f"required control {name!r} was NOT RUN — this claim depends on it, "
+                "and a control that did not run is not a control that passed"
             )
         if self.length_null_margin is None:
             reasons.append("no length null was computed (P3)")

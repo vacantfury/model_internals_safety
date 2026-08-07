@@ -31,7 +31,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from internals_safety.config import ProbeConfig
-from internals_safety.measurements.contract import Kind, Reading
+from internals_safety.measurements.contract import Kind, Reading, Screen
 
 if TYPE_CHECKING:  # pragma: no cover
     import numpy as np
@@ -332,10 +332,25 @@ QUESTION = "was the decoded content present in the residual stream during the at
 KIND: Kind = "correlational"
 
 
+# Screens this measurement's claim depends on, beyond the primary
+# format-decorrelation control. Named here rather than at the call site so a
+# runner cannot quietly drop one by not passing it.
+#
+# ⚠️ `lexical_vocabulary` is REQUIRED, and the consequence is deliberate: a run
+# that does not declare `--instruments lexical` produces NON-REPORTABLE
+# deployment readings, with "required control was NOT RUN" as the stated reason.
+# That is the honest reading of build plan §4 ("every instrument runs all of
+# these") applied to the axis both papers hinge on. In JBB, alarming words and
+# actual harm are perfectly confounded, so nothing else in the battery can tell a
+# probe reading intent from one reading vocabulary.
+REQUIRED_CONTROLS = ("lexical_vocabulary",)
+
+
 def reading(
     curve: DeploymentCurve,
     *,
     length_null_margin: float | None = None,
+    controls: tuple[Screen, ...] = (),
     detail: dict | None = None,
 ) -> Reading:
     """Measurement #2's condition-level verdict.
@@ -375,6 +390,8 @@ def reading(
         licensed=None if observed != observed else curve.deployed,
         control_reading=best.control_auroc if best else None,
         control_margin=0.0 if best else None,
+        controls=controls,
+        required_controls=REQUIRED_CONTROLS,
         length_null_margin=length_null_margin,
         selection_inside_null=True,
         detail={

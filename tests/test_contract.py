@@ -15,6 +15,7 @@ from internals_safety.measurements.contract import (
     Instrument,
     Kind,
     Reading,
+    Screen,
     assert_distinct_questions,
     gate_per_prompt,
     reportable_only,
@@ -236,6 +237,74 @@ class TestNullClaims:
         """The granularity join must respect the new path too, or the rungs this
         change licensed would still be dropped one level down."""
         assert gate_per_prompt(null_reading(), [False, False]) == [False, False]
+
+
+class TestTheControlBattery:
+    """TODO 57 — four independent screens, one contract.
+
+    `Reading` had ONE control slot while build plan §4 lists four independent
+    screens and says "every instrument runs all of these". The consequence was
+    that `reportable` verified one screen while the claim rested on four, and
+    WHICH one differed per instrument: deployment's slot held a permuted-label
+    control, ability's a mismatched-pairing control, and the XSTest vocabulary
+    screen had nowhere to go at all.
+    """
+
+    def test_a_screen_carries_its_OWN_statistic_not_the_readings(self):
+        """The reason a float could not hold it. The lexical screen is measured
+        on a pooled paired AUROC over a DIFFERENT corpus, so 'value minus
+        control' was never the right arithmetic for it."""
+        screen = Screen(name="lexical_vocabulary", observed=0.80, floor=0.619, margin=0.10)
+        assert screen.clears
+        assert screen.observed != reading().value
+
+    def test_a_screen_that_does_not_clear_blocks_the_reading(self):
+        screen = Screen(name="lexical_vocabulary", observed=0.62, floor=0.619, margin=0.10)
+        blocked = reading(controls=(screen,))
+        assert not blocked.reportable
+        assert blocked.failed_controls == ("lexical_vocabulary",)
+
+    def test_a_screen_names_what_it_rules_out_in_the_failure_reason(self):
+        """A failed control that does not say what it was screening leaves a
+        reader unable to judge whether the claim can be rescued."""
+        screen = Screen(
+            name="lexical_vocabulary", observed=0.10, floor=0.619, margin=0.10,
+            defeats="a probe reading harm-adjacent VOCABULARY rather than harm",
+        )
+        why = " ".join(reading(controls=(screen,)).why_not_reportable())
+        assert "VOCABULARY" in why
+
+    def test_a_NaN_screen_fails_closed(self):
+        """An uncomputed screen never passes — the rule everywhere in this layer."""
+        assert not Screen(name="x", observed=float("nan"), floor=0.5).clears
+
+    # ---- the part TODO 57 actually added --------------------------------
+
+    def test_a_REQUIRED_screen_that_never_RAN_disqualifies(self):
+        """⚠️ The whole point. Before this, a claim could be reported having
+        silently skipped three of the four controls the build plan calls
+        mandatory — because absence looked exactly like 'not applicable'."""
+        skipped = reading(required_controls=("lexical_vocabulary",))
+        assert skipped.missing_controls == ("lexical_vocabulary",)
+        assert not skipped.reportable
+        assert any("NOT RUN" in why for why in skipped.why_not_reportable())
+
+    def test_running_the_required_screen_restores_reportability(self):
+        """The requirement must be satisfiable, or it is just a permanent veto."""
+        screen = Screen(name="lexical_vocabulary", observed=0.80, floor=0.619, margin=0.10)
+        assert reading(controls=(screen,), required_controls=("lexical_vocabulary",)).reportable
+
+    def test_an_unrequired_screen_still_has_to_clear_if_it_RAN(self):
+        """Asymmetric on purpose: not declaring a screen required means you need
+        not run it, never that you may ignore what it said when you did."""
+        screen = Screen(name="extra", observed=0.10, floor=0.619)
+        assert not reading(controls=(screen,), required_controls=()).reportable
+
+    def test_the_primary_slot_still_fails_closed_on_its_own(self):
+        """The additional screens are additions, not a replacement — a reading
+        with a perfect battery and no primary control is still refused."""
+        screen = Screen(name="lexical_vocabulary", observed=0.99, floor=0.619)
+        assert not reading(control_reading=None, controls=(screen,)).reportable
 
 
 class TestOperatingPoint:

@@ -127,7 +127,7 @@ from internals_safety.measurements.causal_license import (
     matched_norm_random_direction,
     random_direction_null,
 )
-from internals_safety.measurements.contract import Reading
+from internals_safety.measurements.contract import Reading, Screen
 from internals_safety.measurements.lexical_decorrelation import (
     LexicalDecorrelation,
     measure_lexical_decorrelation,
@@ -1090,6 +1090,7 @@ def run_family(
     # question rather than settled here — the lesson from TODO 42 is that a
     # contract change does not get slipped in beside a control build.
     lexical_detail: dict = {}
+    lexical_screens: tuple = ()
     if xstest is not None:
         best = curve.best()
         lexical = run_lexical_control(
@@ -1126,6 +1127,19 @@ def run_family(
             "lexical_n_pairs": len(lexical.pairs),
             "lexical_cell": {"layer": best.layer, "position": best.position},
         }
+        # The screen itself, which `reportable` CAN see (TODO 57). Its statistic
+        # is the pooled paired AUROC on XSTest — a different quantity from
+        # deployment's headline transfer AUROC, which is exactly why a single
+        # `control_reading` float could not hold it.
+        lexical_screens = (
+            Screen(
+                name="lexical_vocabulary",
+                observed=lexical.pooled_auroc,
+                floor=measurements.controls.vocabulary_reader_floor,
+                margin=measurements.controls.lexical_min_margin,
+                defeats="a probe reading harm-adjacent VOCABULARY rather than harm",
+            ),
+        )
 
     readings = [
         # P3 comes from the control's length-matched arm, NOT from the shared
@@ -1153,7 +1167,10 @@ def run_family(
             length_null_margin=length_null.margin(behavior_summary.attack_success_rate),
         ),
         deployment_module.reading(
-            curve, length_null_margin=length_margin, detail=lexical_detail
+            curve,
+            length_null_margin=length_margin,
+            controls=lexical_screens,
+            detail=lexical_detail,
         ),
         recognition_module.reading(
             recognition_result,
