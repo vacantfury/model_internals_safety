@@ -95,11 +95,6 @@ def test_the_contract_is_the_layer_s_sink():
 DECLARED_ORPHANS = {
     # Predates the contract; H4 overlap metric, used from the docs not the spine.
     "probes.overlap",
-    # The XSTest control. Pure scoring, fully tested — but wiring it needs the
-    # probe READ on XSTest activations, which means capturing a third prompt set
-    # per rung. That changes what a run costs, so it goes behind --instruments
-    # with its own dry-run line rather than in by default (TODO 41).
-    "measurements.lexical_decorrelation",
     # I4's Instruct-reconstruction pre-gate. Built and tested against SAE test
     # doubles, but nothing can call it until an SAE LOADER exists — the gate
     # takes a dictionary and we have no way yet to produce a real one (SAELens /
@@ -110,6 +105,16 @@ DECLARED_ORPHANS = {
     "measurements.sae_reconstruction",
 }
 
+# `measurements.lexical_decorrelation` left this list on 2026-08-06, and its
+# stated reason turned out to be measurably wrong rather than merely discharged.
+# TODO 41 deferred the wiring because it "means capturing a third prompt set PER
+# RUNG — 450 more forward passes per (model, rung)". The probe it controls is
+# fitted on the PLAIN contrast sets (`measure_deployment`: "the probe is never
+# refitted on the encoded condition"), so it is the same probe for every rung and
+# XSTest is plain text: one capture serves the whole ladder. 450 passes, not
+# 450 x n_families. The per-rung part is a logistic fit over activations already
+# in hand, which costs no GPU at all.
+#
 # `measurements.causal_license` and `models.interventions` left this list on
 # 2026-08-06 when `measurements/causal.py` and `run_causal_gate` landed. Their
 # stated reason for being orphans — "gated on the matched-norm random-direction

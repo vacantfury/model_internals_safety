@@ -39,6 +39,17 @@ PACKAGE_ROOT = Path(__file__).resolve().parent
 SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 CONF_DIR = PROJECT_ROOT / "conf"
 
+# A config key: `name: value` in YAML, `name: type = value` in a dataclass. One
+# pattern for both, because at the point that matters they are the same shape.
+_KEY = re.compile(r"^\s*([a-z_][a-z0-9_]*)\s*:")
+# How far below a marker to look for the key it annotates. Comment blocks here
+# run long — the ability-0 cut's is 24 lines — but a marker separated from its
+# key by more than this is unreadable to a human too.
+# plumbing: a scan window in the build-status REPORT; reaches no measurement, and
+# a marker it fails to resolve is reported under a `file:line` key rather than
+# dropped, so widening or narrowing it cannot silently lose a knob.
+_KEY_SEARCH_LINES = 30
+
 
 @dataclass(frozen=True)
 class Item:
@@ -210,8 +221,23 @@ def status_of(item: Item, present: set[str], reachable: set[str]) -> ItemStatus:
     )
 
 
-def placeholder_knobs() -> list[str]:
-    """Config values still marked PLACEHOLDER, with their file and line.
+def _knob_key_below(lines: list[str], start: int) -> str | None:
+    """The config key a PLACEHOLDER marker at `start` is talking about.
+
+    A marker sits in the comment block above its key, so the key is the next
+    assignment line. Both surfaces are scanned with one rule because both are
+    `name: value` at the point that matters — YAML mappings and annotated
+    dataclass fields alike.
+    """
+    for line in lines[start : start + _KEY_SEARCH_LINES]:
+        match = _KEY.match(line)
+        if match:
+            return match.group(1)
+    return None
+
+
+def placeholder_knobs() -> dict[str, list[str]]:
+    """Untuned config knobs, keyed by name, each with every place it is marked.
 
     Derived by reading the files rather than tracked in a list, so a knob that
     gets tuned stops being reported the moment its marker is removed — and one
@@ -223,19 +249,37 @@ def placeholder_knobs() -> list[str]:
     `response_placeholder`). A check that over-reports is as useless as one that
     under-reports, because both end in the reader ignoring it.
 
+    **Keyed by KNOB, not by marker, for exactly that reason (fixed 2026-08-06).**
+    The second version reported 11 when there were 6: every knob is marked twice
+    — once on the live YAML value and once on its fail-safe mirror in `config.py`
+    — so counting markers inflated the headline ~2x. That is the same
+    over-reporting defect as the case-insensitive match, one level subtler,
+    caught by the owner asking whether the build was done. The mirrors are still
+    LISTED under their knob, because a knob marked in one surface and not the
+    other is a marking inconsistency worth seeing.
+
     Known limit, stated rather than hidden: this counts MARKED knobs. An untuned
     value nobody marked is invisible here, and the defence against that is the
     tuning-path law at the point a knob is introduced, not this function.
     """
-    found: list[str] = []
+    found: dict[str, list[str]] = {}
     marker = re.compile(r"\bPLACEHOLDER\b")
     sources = sorted(CONF_DIR.glob("*.yaml")) + [PACKAGE_ROOT / "config.py"]
     for path in sources:
         if not path.exists():
             continue
-        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-            if marker.search(line):
-                found.append(f"{path.relative_to(PROJECT_ROOT)}:{number}")
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for number, line in enumerate(lines, start=1):
+            if not marker.search(line):
+                continue
+            # `number` is 1-based and the key search starts at the NEXT line,
+            # which is `lines[number]` 0-based — the marker's own line included
+            # only when it IS the assignment (`trained_on: "PLACEHOLDER ..."`).
+            key = _KEY.match(line)
+            name = key.group(1) if key else _knob_key_below(lines, number)
+            found.setdefault(name or f"{path.name}:{number}", []).append(
+                f"{path.relative_to(PROJECT_ROOT)}:{number}"
+            )
     return found
 
 
@@ -243,7 +287,9 @@ def placeholder_knobs() -> list[str]:
 class BuildStatus:
     roster: tuple[ItemStatus, ...]
     controls: tuple[ItemStatus, ...]
-    placeholders: tuple[str, ...]
+    # knob name -> every file:line marking it. Keyed by KNOB so the count is a
+    # count of things needing tuning, not of comments mentioning them.
+    placeholders: dict[str, list[str]]
 
     @property
     def outstanding(self) -> list[str]:
@@ -274,5 +320,5 @@ def build_status() -> BuildStatus:
     return BuildStatus(
         roster=tuple(status_of(item, present, reachable) for item in ROSTER),
         controls=tuple(status_of(item, present, reachable) for item in CONTROLS),
-        placeholders=tuple(placeholder_knobs()),
+        placeholders=placeholder_knobs(),
     )

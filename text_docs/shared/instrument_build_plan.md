@@ -801,7 +801,7 @@ Every instrument runs all of these. Not optional, not per-instrument judgment.
 | **Length-matched permutation strata** (`a1ae5f7`) | length leaking into the licensing null | built |
 | **Format decorrelation** (harmful-encoded vs benign-encoded through the identical pipeline) | "looks encoded" | built, structural |
 | **Lexical transparency screen** | probes firing on words that were never hidden (`reverse_words`) | validated as a diagnostic; make it a gate |
-| **Lexical decorrelation — XSTest** (scary-but-benign) | firing on alarming vocabulary rather than harm | **BUILT 2026-08-06** — see §4.3; off by default, needs a third capture |
+| **Lexical decorrelation — XSTest** (scary-but-benign) | firing on alarming vocabulary rather than harm | **BUILT AND WIRED 2026-08-06** — see §4.3; behind `--instruments lexical`, 450 passes MODEL-level |
 | **Black-box baseline** (P4) | an internals claim a surface classifier would have made | **BUILT AND MEASURED WEAK 2026-08-06** — see §4.2 |
 | **Matched-norm random direction** | steering "working" because you perturbed anything | **BUILT 2026-08-06** — `causal_license.matched_norm_random_direction` + `random_direction_null` |
 | **Control task / selectivity** (Hewitt-Liang style) | probe capacity memorising rather than reading | **BUILT AND MEASURED DEGENERATE 2026-08-06** — see §4.1 |
@@ -993,9 +993,41 @@ cut, this). The pattern is now explicit enough to state as a rule: *a threshold
 on a quantity whose scale depends on the corpus must be derived from that corpus,
 and the derivation is usually one cheap adversarial baseline away.*
 
-Not wired into a run by default: reading the probe on XSTest means capturing a
-third prompt set per rung, which changes what a run costs. It goes behind
-`--instruments` with its own dry-run line.
+**✅ WIRED 2026-08-06 (TODO 41) — and the wiring refuted the cost claim that had
+deferred it.** This paragraph previously read: *"reading the probe on XSTest
+means capturing a third prompt set per rung, which changes what a run costs."*
+That is wrong for the probe it controls. `measure_deployment` fits on the PLAIN
+contrast sets and never refits on the encoded condition, so **it is the same
+probe for every rung**, and XSTest is plain text — one capture serves the whole
+ladder. On the 15-rung pilot: **450 forward passes, not 6,750.** What is per-rung
+is the *scoring*, a logistic fit over activations already in hand, which costs no
+GPU at all. It still goes behind `--instruments` with its own `--dry-run` line,
+because 450 passes is not nothing; it is no longer cluster-scale work.
+
+Two decisions in `run_lexical_control` that would be silently wrong the other
+way. **The cell:** read at the (layer, position) the deployment reading
+SELECTED, not at a fresh argmax — a control evaluated somewhere other than where
+the claim is made says nothing about the claim. **The threshold:** the percentile
+operating point comes from the PLAIN negative class, because XSTest prompts are
+plain text and `reading_threshold`'s own rule is that the cut comes from the
+negative class *in the same condition*; borrowing the encoded condition's cut
+would compare across conditions.
+
+**⚠️ It rides in `Reading.detail`, NOT in `control_reading` — deliberately.** The
+battery has four independent screens and the contract has ONE control slot,
+already occupied by deployment's permuted-label control. Writing a vocabulary
+screen into that slot would replace one control with another and misreport which
+confound was ruled out. The contract question that raises is FILED rather than
+settled here, which is TODO 42's lesson applied: a contract change does not get
+slipped in beside a control build.
+
+**One tri-state defect found while wiring it.** `paired_separation` skips a
+contrast type whose scores are all identical — a saturated probe produces exactly
+that — after which `pooled_auroc` is NaN and `reads_vocabulary` fails CLOSED to
+`True`. A reader seeing `lexical_reads_vocabulary: true` would conclude the probe
+reads vocabulary when the truth is that the control could not be computed. The
+run record now carries `lexical_n_pairs`, which is what separates the two. Same
+defect class as the deployment `False`, three instruments on.
 
 ### 4.1 Control-task selectivity does not transfer to this setting (measured 2026-08-06)
 
@@ -1093,14 +1125,23 @@ Two things it deliberately does NOT do:
   The defence against an untuned value nobody marked is the tuning-path law at
   the moment a knob is introduced, not this script.
 
-Two defects in its own first version, both caught by running it and both worth
-keeping as the shape of the failure: the placeholder match was case-insensitive
-and reported 12 knobs, 5 of them prose about *string* placeholders — **a check
-that over-reports gets ignored exactly like one that under-reports**; and I6 read
-as "wired" from module reachability while its own note said patching-based
+**Three defects in its own early versions, all caught by running it, and two of
+them are the SAME defect.** (1) The placeholder match was case-insensitive and
+reported 12 knobs, 5 of them prose about *string* placeholders. (2) I6 read as
+"wired" from module reachability while its own note said patching-based
 attribution was unwritten, so incompleteness is now DECLARED and dominates every
-derived signal. **A completion check that can report done when it is not done is
-worse than no check.**
+derived signal — *a completion check that can report done when it is not done is
+worse than no check.* (3) **The count was of MARKERS, not of knobs**, so it
+reported 11 where there were 6: every tunable is marked twice, once on the live
+YAML value and once on its fail-safe mirror in `config.py`. Found 2026-08-06 when
+the owner asked whether the build was done and the headline number had to be
+checked before being repeated.
+
+(1) and (3) are one lesson twice: **a check that over-reports gets ignored
+exactly like one that under-reports.** The report is now keyed by config KEY,
+with every place it is marked listed underneath — which also made visible that
+`decode_lens.min_control_margin` is marked in the YAML but not on its code
+mirror, a marking inconsistency nothing else would have surfaced.
 
 ---
 

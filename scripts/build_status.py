@@ -40,9 +40,11 @@ def main() -> int:
         unwired = f"  — not reachable from any script" if entry.state == "built-not-wired" else ""
         print(f"  [{SYMBOL[entry.state]}] {entry.item.key:<16} {entry.item.what:<28}{unwired}")
 
-    print(f"\nPLACEHOLDER KNOBS               ({len(status.placeholders)})")
-    for location in status.placeholders:
-        print(f"  {location}")
+    print(f"\nPLACEHOLDER KNOBS               ({len(status.placeholders)} untuned)")
+    for name, locations in sorted(status.placeholders.items()):
+        # Locations after the first are the fail-safe code mirror of a live YAML
+        # value, listed rather than counted — one knob, marked twice.
+        print(f"  {name:<26} {'  '.join(locations)}")
 
     if status.complete:
         print("\nBUILD COMPLETE.")

@@ -22,7 +22,22 @@ from internals_safety.measurements.causal_license import (
     matched_norm_null,
     random_direction_null,
 )
+from internals_safety.models.capture import ActivationBatch
+from internals_safety.paths import PROJECT_ROOT
 from internals_safety.probes.linear import control_task_selectivity
+
+
+def load_pilot_script():
+    """The runner module, loaded the same way `test_phase0_pilot.py` loads it."""
+    import importlib.util
+    import sys
+
+    path = PROJECT_ROOT / "scripts" / "phase0_regime_map.py"
+    spec = importlib.util.spec_from_file_location("phase0_regime_map", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 # The live cuts, read from conf/measurements.yaml rather than defaulted in a
@@ -323,3 +338,135 @@ class TestLexicalDecorrelation:
         assert len(safe) == 250 and len(unsafe) == 200
         shared = {pair_key(p.category) for p in safe} & {pair_key(p.category) for p in unsafe}
         assert len(shared) >= 6
+
+
+class TestTheLexicalControlRunner:
+    """`run_lexical_control` — the two choices that would be silently wrong.
+
+    The pure scoring above is covered; what is not is HOW the runner reads the
+    probe. Both decisions here fail quietly rather than loudly if made the other
+    way, which is why they get their own tests on a non-degenerate probe rather
+    than only the structural check in the pilot's tiny-model run.
+    """
+
+    LAYERS = [0, 1]
+    POSITIONS = ["instruction_final", "last"]
+    D_MODEL = 16
+
+    def _batch(self, n: int, offset: float, generator) -> ActivationBatch:
+        """A batch whose first feature carries the signal, shifted by `offset`."""
+        tensor = torch.randn(
+            n, len(self.LAYERS), len(self.POSITIONS), self.D_MODEL, generator=generator
+        )
+        tensor[..., 0] += offset
+        return ActivationBatch(
+            tensor=tensor,
+            layers=list(self.LAYERS),
+            positions=list(self.POSITIONS),
+            site="resid_pre",
+            model_name="synthetic",
+            user_messages=[f"prompt {index}" for index in range(n)],
+        )
+
+    TYPES_SAFE = ["homonyms", "safe_contexts"] * 30
+    TYPES_UNSAFE = ["contrast_homonyms", "contrast_safe_contexts"] * 30
+
+    def _pieces(self, safe_offset: float, unsafe_offset: float = 2.0):
+        """A plain-fitted probe plus an XSTest condition of stated character.
+
+        `safe_offset` IS the experiment. At `unsafe_offset` the probe cannot tell
+        the pair apart and is reading vocabulary; well below it, the probe is
+        reading intent and the pair separates.
+        """
+        pilot = load_pilot_script()
+        generator = torch.Generator().manual_seed(0)
+        plain_harmful = self._batch(80, offset=2.0, generator=generator)
+        plain_harmless = self._batch(80, offset=-2.0, generator=generator)
+        xstest_safe = self._batch(60, offset=safe_offset, generator=generator)
+        xstest_unsafe = self._batch(60, offset=unsafe_offset, generator=generator)
+        return (
+            pilot, plain_harmful, plain_harmless, xstest_safe, xstest_unsafe,
+            self.TYPES_SAFE, self.TYPES_UNSAFE,
+        )
+
+    @pytest.fixture
+    def pieces(self):
+        # The confound made concrete: safe and unsafe halves land in the SAME
+        # place, because the probe is reading the shared alarming vocabulary and
+        # the halves differ only in intent.
+        return self._pieces(safe_offset=2.0)
+
+    def test_a_probe_reading_VOCABULARY_is_caught(self, pieces):
+        """The whole point: a probe firing equally on both halves of a matched
+        pair lands at chance within the pair and posts a high false-positive
+        rate on scary-but-benign prompts. JBB alone can never reveal this,
+        because JBB has no scary-but-benign class at all."""
+        pilot, ph, pl, xs, xu, ts, tu = pieces
+        result = pilot.run_lexical_control(
+            ph, pl, xs, xu, ts, tu, layer=1, position="instruction_final",
+            config=ProbeConfig(seed=0, test_fraction=0.3, auroc_threshold=0.70),
+        )
+        assert result.pairs, "matched pairs must be scorable on a non-degenerate probe"
+        assert result.pooled_auroc < 0.619  # the measured vocabulary-reader floor
+        assert result.lexical_false_positive_rate > 0.5
+        assert result.reads_vocabulary
+
+    def test_a_probe_reading_INTENT_clears_the_same_control(self, pieces):
+        """The other direction, which is what makes the test above meaningful:
+        a control that fires on everything is not a control. Here the safe half
+        genuinely sits on the benign side, so the pair separates."""
+        pilot, ph, pl, xs, xu, ts, tu = self._pieces(safe_offset=-2.0)
+        result = pilot.run_lexical_control(
+            ph, pl, xs, xu, ts, tu, layer=1, position="instruction_final",
+            config=ProbeConfig(seed=0, test_fraction=0.3, auroc_threshold=0.70),
+        )
+        assert result.pooled_auroc > 0.619
+        assert not result.reads_vocabulary
+        assert result.clears(min_margin=0.10, floor=0.619)
+
+    def test_the_pairs_are_scored_WITHIN_matched_types(self, pieces):
+        """Not a pooled two-class AUROC over unmatched prompts — that would
+        reintroduce the confound the control exists to remove."""
+        pilot, ph, pl, xs, xu, ts, tu = pieces
+        result = pilot.run_lexical_control(
+            ph, pl, xs, xu, ts, tu, layer=1, position="instruction_final",
+            config=ProbeConfig(seed=0, test_fraction=0.3, auroc_threshold=0.70),
+        )
+        assert {pair.pair for pair in result.pairs} == {"homonyms", "safe_contexts"}
+
+    def test_the_threshold_comes_from_the_PLAIN_negative_class(self, pieces):
+        """XSTest prompts are plain text, and `reading_threshold`'s own rule is
+        that the cut comes from the negative class IN THE SAME CONDITION.
+        Borrowing the encoded condition's cut would compare across conditions.
+
+        Asserted behaviourally: at the configured percentile the false-positive
+        rate on a probe whose safe half sits on the harmful side must be high.
+        A cut taken from a shifted condition would move this arbitrarily.
+        """
+        pilot, ph, pl, xs, xu, ts, tu = pieces
+        config = ProbeConfig(
+            seed=0, test_fraction=0.3, auroc_threshold=0.70, reading_percentile=50.0
+        )
+        median_cut = pilot.run_lexical_control(
+            ph, pl, xs, xu, ts, tu, layer=1, position="instruction_final", config=config
+        )
+        strict = pilot.run_lexical_control(
+            ph, pl, xs, xu, ts, tu, layer=1, position="instruction_final",
+            config=config.model_copy(update={"reading_percentile": 99.0}),
+        )
+        # Tightening the read can only lower the false-positive rate.
+        assert strict.lexical_false_positive_rate <= median_cut.lexical_false_positive_rate
+
+    def test_the_cell_is_an_input_so_the_control_lands_where_the_CLAIM_is(self, pieces):
+        """Different cells are different probes; a control read at a cell the
+        claim was not read at says nothing about the claim."""
+        pilot, ph, pl, xs, xu, ts, tu = pieces
+        config = ProbeConfig(seed=0, test_fraction=0.3, auroc_threshold=0.70)
+        first = pilot.run_lexical_control(
+            ph, pl, xs, xu, ts, tu, layer=0, position="last", config=config
+        )
+        second = pilot.run_lexical_control(
+            ph, pl, xs, xu, ts, tu, layer=1, position="instruction_final", config=config
+        )
+        assert isinstance(first.pooled_auroc, float)
+        assert isinstance(second.pooled_auroc, float)

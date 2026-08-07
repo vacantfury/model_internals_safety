@@ -735,3 +735,131 @@ class TestReplyInversionIsWired:
         )
         assert plan.inversion_forward_passes == 3 * 10
         assert "I5 reply inversion" in plan.describe(MEASUREMENTS)
+
+
+class TestLexicalControlIsWired:
+    """TODO 41 — the XSTest vocabulary screen, running inside a real run.
+
+    **The wiring exposed that the item's own cost claim was wrong.** TODO 41
+    deferred this as "450 more forward passes per (model, rung)", i.e. a run-cost
+    change needing the approval gate. Measured: the probe it controls is fitted
+    on the PLAIN contrast sets and is therefore identical for every rung, and
+    XSTest is plain text — so the corpus is captured ONCE per model. On the
+    15-rung pilot that is 450 passes rather than 6,750.
+
+    Driven through the tiny in-process model and stub judges; no download, no
+    API call, no spend.
+    """
+
+    @pytest.fixture
+    def run(self, pilot, tiny_model, monkeypatch, tmp_path):
+        monkeypatch.setattr(pilot, "load_model", lambda config: tiny_model)
+        monkeypatch.setattr(
+            pilot,
+            "RefusalJudge",
+            lambda config: RefusalJudge(config, service=StubService(default=yes_verdict())),
+        )
+        monkeypatch.setattr(
+            pilot,
+            "HarmBenchJudge",
+            lambda config: HarmBenchJudge(config, service=StubService(default=no_verdict())),
+        )
+        exit_code = pilot.main([
+            "--model", "qwen2_5_0_5b_instruct",
+            "--families", "base64", "rot13",
+            "--n-prompts", "4",
+            "--run-name", "lexical",
+            "--allow-dirty",
+            "--allow-cpu",
+            "--instruments", "lexical",
+            "--outputs-dir", str(tmp_path),
+        ])
+        assert exit_code == 0
+        return tmp_path / "runs" / "phase0" / "qwen2_5_0_5b_instruct" / "lexical"
+
+    def _deployment(self, run):
+        readings = json.loads((run / "results.json").read_text())["readings"]
+        return [r for r in readings if r["instrument"] == "deployment"]
+
+    def test_the_control_reaches_every_family_s_deployment_reading(self, run):
+        """It is a screen on the PROBE, and deployment is the probe's reading."""
+        for reading in self._deployment(run):
+            assert "lexical_pooled_auroc" in reading["detail"]
+            assert "lexical_false_positive_rate" in reading["detail"]
+
+    def test_the_control_is_read_at_the_cell_the_CLAIM_is_read_at(self, run):
+        """A control evaluated somewhere other than where the claim is made says
+        nothing about the claim. The cell travels with the number so a reader can
+        check that rather than trust it."""
+        for reading in self._deployment(run):
+            cell = reading["detail"]["lexical_cell"]
+            assert isinstance(cell["layer"], int) and cell["position"]
+
+    def test_the_per_pair_breakdown_survives_into_the_record(self, run):
+        """The pooled number can hide one tightly-matched family failing, and
+        that is the family that matters — so the pairs are recorded, not just
+        their mean."""
+        detail = self._deployment(run)[0]["detail"]
+        assert detail["lexical_n_pairs"] == len(detail["lexical_pairs"])
+        assert all(0.0 <= auroc <= 1.0 for auroc in detail["lexical_pairs"].values())
+
+    def test_ZERO_scorable_pairs_is_distinguishable_from_a_failed_control(self, run):
+        """⚠️ Found by this test failing on the tiny model, and it is the repo's
+        recurring defect one instrument further on.
+
+        `paired_separation` skips a contrast type whose scores are all identical
+        — a saturated probe produces exactly that — and then `pooled_auroc` is
+        NaN and `reads_vocabulary` fails CLOSED to True. A reader seeing
+        `lexical_reads_vocabulary: true` would conclude the probe reads
+        vocabulary, when the truth is that the control could not be computed.
+        `lexical_n_pairs` is what separates the two.
+        """
+        detail = self._deployment(run)[0]["detail"]
+        assert "lexical_n_pairs" in detail
+        if detail["lexical_n_pairs"] == 0:
+            assert detail["lexical_reads_vocabulary"] is True  # failed closed...
+            assert detail["lexical_clears"] is False  # ...and never cleared
+
+    def test_the_floor_travels_with_the_verdict(self, run):
+        """A verdict without its threshold cannot be re-checked, and this floor
+        is MEASURED (a real vocabulary reader scores 0.619) rather than chosen."""
+        detail = self._deployment(run)[0]["detail"]
+        assert detail["lexical_floor"] == pytest.approx(0.619)
+        assert isinstance(detail["lexical_reads_vocabulary"], bool)
+
+    def test_it_does_NOT_displace_the_control_already_in_the_contract_slot(self, run):
+        """⚠️ Deliberate, and the reason is TODO 42's lesson.
+
+        The battery has four independent screens and `Reading` has ONE control
+        slot, already occupied: deployment puts its permuted-label control
+        (`best.control_auroc`) there. A vocabulary screen written into that slot
+        would silently replace one control with another and misreport which
+        confound was ruled out. So the lexical numbers ride in `detail` and the
+        contract question is filed rather than slipped in beside a control build.
+        """
+        for reading in self._deployment(run):
+            assert reading["control_reading"] is not None
+            assert reading["control_reading"] != reading["detail"]["lexical_pooled_auroc"]
+
+    def test_the_corpus_is_captured_ONCE_not_once_per_rung(self, run, tmp_path):
+        """The finding that made this ordinary wiring instead of cluster work.
+
+        Two families ran; if the capture were per-rung there would be two XSTest
+        caches per class rather than one.
+        """
+        caches = list((tmp_path / "activations").rglob("*xstest-safe*"))
+        assert len(caches) == 1, [path.name for path in caches]
+
+    def test_the_control_is_OFF_by_default_so_it_cannot_reprice_a_run(self, pilot):
+        config = load_model_config("qwen2_5_0_5b_instruct")
+        assert pilot.build_plan(config, ["base64"], n_prompts=10).lexical_capture_passes == 0
+
+    def test_the_dry_run_prices_the_capture_model_level_not_per_family(self, pilot):
+        """Pins the corrected cost shape: adding rungs must not move this number."""
+        config = load_model_config("qwen2_5_0_5b_instruct")
+        one = pilot.build_plan(config, ["base64"], n_prompts=10, instruments=["lexical"])
+        many = pilot.build_plan(
+            config, ["base64", "rot13", "hex"], n_prompts=10, instruments=["lexical"]
+        )
+        assert one.lexical_capture_passes == 450
+        assert many.lexical_capture_passes == one.lexical_capture_passes

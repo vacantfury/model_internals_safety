@@ -71,19 +71,52 @@ def test_a_declared_incompleteness_can_never_read_as_wired():
     assert status.state == "partial"
 
 
+def _locations() -> list[str]:
+    return [where for places in placeholder_knobs().values() for where in places]
+
+
 def test_placeholder_detection_is_case_sensitive():
     """It matched case-insensitively first and reported twelve knobs, five of
     which were prose about STRING placeholders (`{prompt}`,
     `response_placeholder`). A check that over-reports gets ignored."""
-    for location in placeholder_knobs():
+    for location in _locations():
         assert "config.py:93" not in location  # `response_placeholder`
         assert "config.py:147" not in location  # "{prompt} placeholder"
 
 
 def test_placeholder_knobs_are_reported_with_a_file_and_line():
-    for location in placeholder_knobs():
+    for location in _locations():
         path, _, line = location.rpartition(":")
         assert path and line.isdigit()
+
+
+def test_a_knob_marked_in_BOTH_surfaces_counts_once():
+    """⚠️ The same over-report defect as the case-insensitive match, one level
+    subtler — and it survived until the owner asked whether the build was done.
+
+    Every tunable is marked twice: once on the live YAML value and once on its
+    fail-safe mirror in `config.py`. Counting MARKERS reported 11 where there
+    were 6, inflating the headline ~2x. Both places are still listed under the
+    knob, because a knob marked in one surface and not the other is a marking
+    inconsistency worth seeing — but it is ONE thing needing tuning.
+    """
+    knobs = placeholder_knobs()
+    mirrored = {name: places for name, places in knobs.items() if len(places) > 1}
+    assert mirrored, "expected at least one knob marked in both YAML and config.py"
+    for name, places in mirrored.items():
+        assert len({place.split(":")[0] for place in places}) == len(places), (
+            f"{name} is marked twice in the SAME file — that is a duplicate marker, "
+            "not a YAML value and its code mirror"
+        )
+    assert len(knobs) < len(_locations())
+
+
+def test_every_placeholder_resolves_to_a_config_KEY_not_a_line_number():
+    """The fallback key is `file:line`, which is what a marker orphaned from its
+    assignment produces. None should exist; if one does, the marker is floating
+    in prose and the report cannot say what needs tuning."""
+    unresolved = [name for name in placeholder_knobs() if ":" in name]
+    assert unresolved == [], f"markers with no key beneath them: {unresolved}"
 
 
 def test_the_build_is_not_complete_and_says_which_items_are_open():
