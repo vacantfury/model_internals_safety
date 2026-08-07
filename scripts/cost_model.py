@@ -80,8 +80,13 @@ _PHASE0_SHAPED = frozenset({"phase0_regime_map"})
 # its zero judge spend, and a second copy here would be the same two-sources-of-
 # truth defect one level up. `relicense_probes` has no dry-run because it has
 # nothing to census — no model, no generation, no API.
+# `--sae-layer` is passed explicitly even though the pass count does not depend
+# on it: the script's dry-run echoes the layer back, and defaulting it would
+# print a census header naming a layer the preset does not run — the same
+# describes-a-different-run defect this whole dispatch exists to close.
 _COST_ELSEWHERE: dict[str, str | None] = {
-    "sae_pregate": "./run python scripts/sae_pregate.py --model {target} --n-prompts {n_prompts} --dry-run",
+    "sae_pregate": "./run python scripts/sae_pregate.py --model {target} "
+    "--n-prompts {n_prompts} --sae-layer {first_layer} --dry-run",
     "as6_guard_probe": "./run python scripts/as6_guard_probe.py --guard {target} --dry-run",
     "relicense_probes": None,
 }
@@ -124,9 +129,13 @@ def report_declared_cost(name: str, preset, outputs_dir: str) -> int:
         print("census: it loads no model, generates no tokens and calls no API. The")
         print("ceiling above IS the wall-clock ask.")
     else:
-        command = census.format(target=target, n_prompts=preset.n_prompts or 100)
+        command = census.format(
+            target=target,
+            n_prompts=preset.n_prompts or 100,
+            first_layer=preset.sae_layers[0] if preset.sae_layers else 15,
+        )
         print("The phase-0 census does not describe this run. For the forward-pass")
-        print("count, ask the entrypoint that owns it:")
+        print(f"count, ask the entrypoint that owns it (PER TASK — there are {n_tasks}):")
         print(f"\n    {command}\n")
     return 0
 
