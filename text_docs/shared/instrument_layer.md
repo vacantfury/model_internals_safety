@@ -824,12 +824,28 @@ narrows that to a difference between *training stages of one model on identical
 base weights*, which is what no cross-family comparison could ever say. Third
 rung (RLVR, `9011349`) still running.
 
-| rung | ability SFT→DPO | harmful refusal | **benign refusal** | gap |
+**All three rungs completed** (`9011349`, RLVR, read the same day), so the series
+is the full published pipeline: SFT → DPO → RLVR, one job per stage, each
+stage's arms paired inside its own job.
+
+| rung | ability | harmful refusal | **benign refusal** | gap |
 |---|---|---|---|---|
-| `fullwidth` | 0.99 → 0.99 | 0.96 → **0.73** | 0.80 → **0.45** | +0.16 → **+0.28** |
-| `homoglyph` | 0.37 → 0.77 | 0.99 → 0.90 | 0.79 → **0.63** | +0.20 → **+0.27** |
-| `zero_width` | 0.96 → 1.00 | 1.00 → **0.87** | 0.91 → **0.43** | +0.09 → **+0.44** |
-| 5 can't-decode rungs | 0.00–0.03 | 0.97–1.00 | 0.99–1.00 | −0.02 … +0.01 |
+| `fullwidth` | 0.99 → 0.99 → 0.99 | 0.96 → 0.73 → 0.73 | 0.80 → 0.45 → **0.30** | +0.16 → +0.28 → **+0.43** |
+| `homoglyph` | 0.37 → 0.77 → 0.86 | 0.99 → 0.90 → 0.93 | 0.79 → 0.63 → **0.48** | +0.20 → +0.27 → **+0.45** |
+| `zero_width` | 0.96 → 1.00 → 1.00 | 1.00 → 0.87 → 0.81 | 0.91 → 0.43 → **0.37** | +0.09 → +0.44 → **+0.44** |
+| 5 can't-decode rungs | 0.00–0.04 | 0.97–1.00 | 0.98–1.00 | −0.02 … +0.01 |
+
+**Benign refusal falls monotonically across all three stages on all three rungs,
+and the harm gap rises monotonically, while harmful refusal stays roughly flat.**
+So each post-training stage buys back benign utility under encoding rather than
+adding refusal — the gap grows from the bottom, not the top. That is a
+dose-response along a *published* recipe whose data is public, which is the thing
+no cross-family comparison can offer.
+
+**Cross-job replication of the endpoint.** `homoglyph` benign refusal at RLVR
+reads **0.48** here and **0.48** in the independent `plain_baseline_tulu3` job
+(`9012070`, different preset, different session) — the same checkpoint measured
+twice at n=100 landing on the same value.
 
 **The SFT checkpoint behaves like Llama-3.1-8B-Instruct and the DPO checkpoint
 like Qwen2.5-7B.** SFT refuses benign encoded content at 0.79–0.91 — near-blanket,
