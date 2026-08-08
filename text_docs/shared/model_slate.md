@@ -159,10 +159,51 @@ comparison the arm exists to make.
 Fourth entry in this repo's tokenizer-surprise ledger, after WildGuard's missing
 template, Llama Guard 3's stray leading space, and Mistral v0.3's literal `<s>`
 (double-BOS under `add_special_tokens=True`). **The fix follows the repo's own
-rule — make the omission inexpressible**: the loader asserts that a rendered
-template emits BOS when the tokenizer declares one, and a model config must
-declare the exception explicitly with a verified reason. Threading a flag into
-callers is what failed three times already.
+rule — make the omission inexpressible**: `models/loader.verify_bos_convention`
+refuses to attach any checkpoint whose tokenizer declares a BOS token its
+template never emits, until `prepend_bos_to_chat_template` decides. Threading a
+flag into callers is what failed three times already.
 
 Gemma-2-9b-it emits `<bos>` in its template string (`'<bos><start_of_turn>user\n…'`),
 so it matches the Llama/Mistral pattern and needs no exception.
+
+### 3.1 ✅ Settled by the artifact — Tülu runs WITH BOS
+
+The first reading of the missing BOS was *"AI2's template produces none, so
+BOS-less is fidelity to the authors' setup."* **That was wrong**, and the
+deciding evidence is one level below the template, in the checkpoints' own
+`tokenizer.json`:
+
+| checkpoint | `post_processor` |
+|---|---|
+| `allenai/Llama-3.1-Tulu-3-8B-SFT` | `Sequence[ByteLevel, TemplateProcessing single=['<\|begin_of_text\|>', 'A']]` |
+| `meta-llama/Llama-3.1-8B-Instruct` | `Sequence[ByteLevel, TemplateProcessing single=['<\|begin_of_text\|>', 'A']]` |
+
+**Identical.** AI2 did not disable BOS — they kept Llama-3.1's post-processor
+unchanged and simply did not DUPLICATE the token in the chat template, which is
+exactly why Llama's template emits one and theirs does not. The tokenizer's own
+contract still says prepend it. So a BOS-less Tülu run is **our
+`add_special_tokens=False` convention stripping a token the checkpoint expects**,
+not fidelity to anything.
+
+Two consequences:
+
+- **All three ladder rungs run `prepend_bos_to_chat_template: true`.** It also
+  removes the second uncontrolled variable: the comparison arm is
+  Llama-3.1-8B-Instruct on the same base weights, and a BOS difference would sit
+  precisely where the ladder's design must be clean — an artefact of us rather
+  than a property of the model.
+- **⚠️ Job `9011034` is SUPERSEDED.** It ran the RLVR rung BOS-less, so it is
+  both off-distribution and not comparable to its own SFT/DPO siblings. Re-run
+  before differencing; a ladder whose rungs disagree about BOS measures BOS.
+
+**The generalisable lesson, and it is why the guard is worth its cost:** the
+repo's convention is stated as *"the chat template already emits BOS"*, but the
+property that actually matters is **"exactly one BOS reaches the model"** — and
+it can be satisfied by the template OR by the tokenizer's post-processor. Reading
+only the template answers the wrong question. The peer session reached the same
+invariant from the opposite failure (a DOUBLE BOS in `sae_reconstruction`, which
+tokenised with `add_special_tokens=True`), so the two guards together —
+`tests/test_bos_convention.py` for zero, `tests/test_real_bos_handling.py` for
+two — are the pair that expresses it. A model joining the slate needs a row in
+both.

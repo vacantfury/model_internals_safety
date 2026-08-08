@@ -105,12 +105,20 @@ capture:
 # whose tokenizer declares a BOS token its chat template never emits, until the
 # config says which way to go. Documenting the trap in a comment left the trap.
 #
-# `false` records what job 9011034 ACTUALLY DID — it ran BOS-less, since nothing
-# prepended one — so the config describes the run rather than contradicting it,
-# and its two ladder siblings (`tulu3_8b_sft`, `tulu3_8b_dpo`) match. The choice
-# is provisional and its full reasoning, including what would settle it, is in
-# `tulu3_8b_sft.yaml`.
-prepend_bos_to_chat_template: false
+# `true`, settled by the artifact 2026-08-08 rather than by argument. This
+# checkpoint's `tokenizer.json` post-processor is structurally IDENTICAL to
+# Llama-3.1-8B-Instruct's — `Sequence[ByteLevel, TemplateProcessing
+# single=['<|begin_of_text|>', 'A']]` on both. Ai2 did not disable BOS; they kept
+# Llama-3.1's post-processor and simply did not duplicate the token in the
+# template. The tokenizer's own contract still says prepend it, so a BOS-less run
+# is our `add_special_tokens=False` convention stripping a token this checkpoint
+# expects. Full evidence and the ladder-level reasoning: `tulu3_8b_sft.yaml`.
+#
+# ⚠️ THEREFORE JOB 9011034 IS SUPERSEDED. It ran this checkpoint BOS-less, so it
+# is off-distribution AND not comparable to the SFT/DPO rungs, which run with
+# BOS. It must be re-run before the ladder can be differenced; a ladder whose
+# rungs disagree about BOS measures BOS.
+prepend_bos_to_chat_template: true
 
 refusal_openings:
   - "I"

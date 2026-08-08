@@ -35,9 +35,13 @@ capture:
 
 # Identical chat template to the other two rungs (sha256 prefix ac7498a36a71 on
 # all three, verified 2026-08-08), so the same BOS decision applies and MUST:
-# a ladder whose rungs disagree about BOS measures BOS. See `tulu3_8b_sft.yaml`
-# for why `false` and what would settle it.
-prepend_bos_to_chat_template: false
+# a ladder whose rungs disagree about BOS measures BOS.
+#
+# `true`, settled by the artifact rather than argued — this checkpoint's
+# `tokenizer.json` post-processor is identical to Llama-3.1-8B-Instruct's and
+# still prepends `<|begin_of_text|>`, so a BOS-less run is our harness stripping
+# a token the checkpoint expects. Full evidence in `tulu3_8b_sft.yaml`.
+prepend_bos_to_chat_template: true
 
 refusal_openings:
   - "I"

@@ -73,27 +73,41 @@ capture:
     - instruction_final
     - last
 
-# ⚠️ NO BOS, AND THIS IS A PROVISIONAL CHOICE RECORDED RATHER THAN AN ARGUMENT WON.
+# ⚠️ SETTLED BY THE ARTIFACT, 2026-08-08 — not by argument, and the answer
+# reversed the provisional choice made hours earlier.
 #
-# Tülu 3's chat template emits no BOS — verified against the real tokenizer
-# 2026-08-08, confirmed by the paper's Figure 27, and independently found by the
-# peer session (commit 70650e3). The repo tokenises `add_special_tokens=False`
-# (models/loader.tokenize_batch), so without a declaration this model runs with
-# NO BOS while every other model in the slate gets one from its template.
-# `verify_bos_convention` now refuses to attach until the config says which.
+# Tülu 3's chat template emits no BOS (verified against the real tokenizer;
+# paper Figure 27; found independently by the peer session, 70650e3). The repo
+# tokenises `add_special_tokens=False` (models/loader.tokenize_batch), so without
+# a declaration this model runs with NO BOS while every other model in the slate
+# gets one. `verify_bos_convention` refuses to attach until the config decides.
 #
-# `false` — run as AI2's own template produces, for ONE reason that outranks the
-# arguments the other way: the RLVR rung of this same ladder is ALREADY RUNNING
-# BOS-less (job 9011034), and the ladder's primary comparison is INTERNAL — SFT
-# vs DPO vs RLVR. A ladder whose rungs disagree about BOS measures BOS. Uniform
-# and provisional beats correct-in-isolation and inconsistent.
+# THE DECIDING EVIDENCE is one level below the template. Read from the
+# checkpoints' own `tokenizer.json`:
 #
-# The arguments for `true` are real and unresolved: the base was pretrained with
-# BOS, HF's default path supplies one, and the Llama-3.1-8B-Instruct arm gets one
-# — so the ladder-vs-Instruct comparison carries a BOS difference and must say so
-# until settled. It is settleable cheaply and empirically rather than by
-# argument: run one rung both ways and see whether anything moves. FILED.
-prepend_bos_to_chat_template: false
+#   allenai/Llama-3.1-Tulu-3-8B-SFT   post_processor: Sequence[ByteLevel,
+#       TemplateProcessing single=['<|begin_of_text|>', 'A']]
+#   meta-llama/Llama-3.1-8B-Instruct  post_processor: Sequence[ByteLevel,
+#       TemplateProcessing single=['<|begin_of_text|>', 'A']]
+#
+# **Identical.** AI2 did not disable BOS — they kept Llama-3.1's post-processor
+# unchanged and simply did not DUPLICATE the token in the template, which is why
+# Llama's template emits one and theirs does not. The tokenizer's own contract
+# still says "prepend <|begin_of_text|>". So a BOS-less Tülu run is our harness
+# stripping a token the checkpoint expects, not fidelity to the authors' setup —
+# which is how the missing BOS first read.
+#
+# `true`. It also removes the second uncontrolled variable the peer session
+# identified: the comparison arm is Llama-3.1-8B-Instruct on the SAME base
+# weights, and the ladder's entire value is that post-training is the only
+# difference. A BOS difference would sit exactly where the design must be clean,
+# and unlike post-training it is an artefact of us rather than a property of the
+# model.
+#
+# ⚠️ CONSEQUENCE: job 9011034 ran the RLVR rung BOS-LESS and is therefore not
+# comparable to these two. It needs re-running before the ladder can be
+# differenced. Mixing is worse than either choice.
+prepend_bos_to_chat_template: true
 
 # Single-token on this tokenizer, checked 2026-08-08 (not copied from the Llama
 # config — the vocab differs by 8 tokens): 'I', 'As', 'Sure', 'Here' are all one
