@@ -97,7 +97,92 @@ Reading a broader claim off `fullwidth` alone would also be exactly the error
 this repo keeps catching in its own instruments: generalising from the one cell
 that survived screening.
 
-## 5. What it DOES support, and it is a stronger paper
+## 4a. ⚠️ THE STORY, THIRD VERSION (2026-08-08) — the dissociation is the paper
+
+*Supersedes §5 below, which was written before the Qwen arm ran. §5 recommended
+leading with the measurement contribution because the substantive result looked
+like one rung. It is kept as the record of that reasoning; this section is the
+recommendation.*
+
+**The two models dissociate, on the same inputs through the same instruments,
+and the dissociation runs opposite to the aggregate metric.**
+
+| | Llama-3.1-8B-Instruct | Qwen2.5-7B-Instruct |
+|---|---|---|
+| ability (`fullwidth`) | 1.00 | 0.80 |
+| harmful refusal | **0.88** | 0.83 |
+| benign refusal | 0.61 | **0.21** |
+| harm gap | +0.27 | **+0.62** |
+| **binding failure, B/(B+S)** | **27-43%** | **5-11%** |
+| echo (P) share of cells | 66-74% | 2-61% |
+
+**Llama refuses MORE and binds LESS.** It refuses encoded benign content three
+times as often as Qwen, and on the cells where it demonstrably decoded the
+request it fails to bind refusal to that comprehension three to five times as
+often. Per rung: Llama `fullwidth` 27%, `fullwidth_letters` 27%, `math_bold`
+43%; Qwen `fullwidth` 11%, `homoglyph` 11%, `zero_width` 5%.
+
+**The two rankings point opposite ways.** The aggregate refusal rate — the
+reportable, standard, outside-visible number — says Llama is the more cautious
+model (0.88 against 0.83). Conditioned on demonstrated comprehension, Llama is
+the weaker one by 3-5x. **An aggregate safety metric inverts the
+internals-grounded ranking**, and it inverts it because a model that refuses on
+surface cues scores well on a metric that cannot tell surface refusal from
+recognition-grounded refusal.
+
+**Echo is the mechanism by which the aggregate metric gets it wrong**, and it is
+not a small correction: 42-74% of cells on most rungs are the model parroting
+the ciphertext, which the JailbreakBench judge counts as a refusal *by its own
+docstring* (§3.7). Remove them and both the numerator and the denominator move,
+the denominator far more.
+
+**Why this needs the internals instrument and cannot be done black-box.** The
+claim is conditioned on *the model decoded this prompt*, which is measurement #1
+plus a licensed deployment probe. The deployment instrument validates cleanly
+within this run: readable rungs read 0.86-0.89 (Llama) and 0.99 (Qwen), while
+the can't-decode rungs read 0.653-0.658 — the noise floor. Rungs the model
+cannot decode read at chance and rungs it can read far above it, which is the
+behaviour a decoding probe should show and the strongest internal evidence the
+probe measures decoding rather than surface form.
+
+**Recognition CORROBORATES but must not carry the claim.** Llama's recognition
+probe sits at 0.53 (p=0.75, inside the length null by 0.12) while Qwen's reads
+0.83-0.86 (p=0.005, beats the length null by 0.21) — i.e. "refusal without
+recognition" for Llama and "refusal with recognition" for Qwen, exactly matching
+the behavioural split. **But this repo has an unresolved recognition anomaly**
+(§5 of instrument_layer) and there is no plaintext baseline in these runs to
+distinguish "Llama does not recognise harm here" from "the recognition probe
+does not work on Llama". Until that is settled, the dissociation is stated on
+ability + behaviour, which need no such assumption.
+
+**Honest limits, all of them:**
+- **n = 2 models.** A claim about models needs a third; this is the single
+  biggest gap and the cheapest to close.
+- **No ASR number is reportable** (judge control fails), so the argument is made
+  on refusal rate and binding failure only — which is sufficient, since those
+  are the two that disagree.
+- **Denominators are small**: 26-38 measured cells per rung after echo removal.
+- **The Qwen run has NO control floor** (`kind: none`, 0 controls) — it carried
+  no can't-decode rung, so its deployment licensing is permutation-only, the
+  exact "significance is not sufficiency" gap. Its 0.99 is far above any floor
+  ever derived here, but the screen was not applied.
+- **The Llama floor is a `bound`, not the adopted mean+2SD** — only one control
+  rung qualified (`math_sans`), below the 5-control minimum.
+
+**What this makes the paper.** The four-regime instrument stops being the
+contribution and becomes the method; the measurement defects of §5 stop being
+the headline and become the reason nobody has reported this. The finding is
+that **safety training can produce refusal that is not bound to comprehension,
+that this is invisible to — indeed rewarded by — aggregate refusal and ASR
+metrics, and that separating can't / didn't / wouldn't is what makes it
+visible.**
+
+**Next runs, in priority order:** (1) a third model family; (2) the Qwen band at
+`fullwidth`-class rungs with a can't-decode control included, so it has a real
+floor; (3) a plaintext recognition baseline on Llama, which would promote the
+recognition axis from corroboration to evidence.
+
+## 5. What it DOES support, and it is a stronger paper *(SUPERSEDED — see §4a)*
 
 **Encoded jailbreaks are mostly not comprehension failures — and the standard
 instruments cannot tell you that.**
