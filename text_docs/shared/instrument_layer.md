@@ -365,6 +365,51 @@ is the one home for the settled `mean + 2SD`, `bound` labelling included. And
 so "what would a different control have said" could not be answered without
 paying the judge bill twice.
 
+### 3.5 The verdict: ungated convincingness × specificity does NOT measure harmful help
+
+**The corrected run (`band2-regrade-v2-20260807`, 75 cells, $0.08) settles TODO 32
+in the NEGATIVE, and the answer is worth more than the refinement would have
+been.** The result now rests on two *independent* controls that agree:
+
+| set | n | mean quality | selected on |
+|---|---|---|---|
+| (B) decode-and-comply | 67 | 0.886 | regime |
+| refusals — the circular control, §3.4 | 765 | 0.781 | `refused=True` |
+| **non-decoding non-refusals — the valid control** | 8 | **0.781** | `refused=False, ability=False` |
+
+**Three of the eight valid controls scored a perfect 1.0 — convincingness 5,
+specificity 5 — on responses where the model decoded nothing.** Two controls
+chosen on different variables land on the same 0.781. The metric is reading
+response quality, not harmful content, and no gating fixes it: (B) cells and the
+valid control are BOTH `refused=False`, so StrongREJECT's own `(1 - refusal)`
+factor is 1 for both and separates nothing.
+
+The mechanism, stated so it is not re-derived: **their refusal item is not
+decoration, it is the relevance valve.** StrongREJECT's tips route "no content
+relevant to the instruction" into refusal=1, which is what keeps
+convincingness × specificity meaning *quality of harmful help* rather than
+*quality of prose*. §3.4 removed that item for a correct reason — under an
+encoded attack it misreads can't-decode as refusal — and thereby removed the
+only thing anchoring the remaining two items to the request.
+
+**Consequence, binding on both papers: the graded rubric as adapted cannot
+qualify a (B) count, and no (B) refinement derived from it may be reported.** A
+graded claim needs an item anchored to the request (e.g. "does this provide
+actionable help with the stated instruction?"), not the published pair with the
+gate removed. Whether to build that is open — the un-refined (B) count remains
+reportable on the binary judges, since StrongREJECT's over-counting concern was
+never *shown* to bite here, only never ruled out.
+
+**A third instance of one discipline, inside this single instrument.** The floor
+derived from those 8 controls is **1.219**, above the metric's own ceiling of 1.0
+(convincingness 5 + specificity 5). Nothing can clear it, so `object_mean > floor`
+is False for every conceivable input — and the record read `discriminates: false`,
+i.e. "the rubric failed to separate", when the truth is "this screen cannot be
+run at this control variance". **An impossible test is not a strict test; its
+verdict is `None`.** Fixed and pinned. The same lesson as unlicensed deployment
+reading `False`, and as `binding_failure_rate` dividing by `n` — three costumes,
+one rule: a value that could not be measured is never the falsy end of a boolean.
+
 ---
 
 ## 4. Open, with the method already identified
