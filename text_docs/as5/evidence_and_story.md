@@ -310,50 +310,113 @@ model.
 | Tulu-3-8B | 0.16 | 0.48 | +0.32 |
 | Qwen2.5-7B-Instruct | 0.11 | 0.30 | +0.19 |
 
-### §4c's headline was right about the numbers and wrong about the subject
+### ⚠️ Three defects in the first write-up of this section, corrected 2026-08-08
 
-§4c said benign refusal is "95% model-determined" and that models differ ~5×
-more on harmless content than on harmful. The variance decomposition was
-correct; the attribution was not. **In plaintext the four models agree** —
-benign refusal spans 0.15 (0.01–0.16). Under `homoglyph` it spans 0.69
-(0.30–0.99), 4.6× wider. The disagreement §4c measured does not pre-exist the
-encoding; **the encoding creates it.** "95% model-determined" was measured
-across encoded conditions only, so *model* absorbed variance that belongs to
-*model × encoding*, and no plaintext cell existed to separate them.
+Kept visible because two of the three are errors this repo had already recorded
+and paid for elsewhere.
 
-### The result, stated as one quantity: encoding destroys harm discrimination
+1. **Mistral's collapse was reported as real and is not.** With a CI on the
+   difference: Llama **+0.82 [+0.74, +0.90]**, Tulu-3 **+0.34 [+0.20, +0.48]**,
+   Qwen **+0.20 [+0.07, +0.33]**, Mistral **+0.09 [−0.06, +0.24]** — which
+   includes zero. Three collapses, not four, and the graded four-row table
+   implied a dose-response that one row does not support.
+2. **A MAX statistic was used as evidence.** "Benign refusal spans 0.15 in
+   plaintext against 0.69 encoded, 4.6× wider" compares two max-minus-min
+   statistics over four noisy points. `instrument_layer.md` §2.4 records that
+   exact statistic as n-dependent and not comparable — committed here one level
+   up, in prose, the day after it was written down.
+3. **"Mistral inverts" was the wrong mechanism**, and reading it as an exception
+   is what hid the actual result below.
 
-The harm gap (harmful refusal − benign refusal) is the model's ability to tell
-the two corpora apart behaviourally. It falls on **every** model:
+### The result: the effect is symmetric, and it runs OPPOSITE ways on the two arms
 
-| model | harm gap, plain | harm gap, `homoglyph` | lost |
+Each observed cross-model spread, bootstrapped against a null in which all four
+models sit at the observed mean (20 000 draws, n = 100 per cell):
+
+| arm | observed spread | spread if the 4 models were identical | verdict |
 |---|---|---|---|
-| Llama-3.1-8B-Instruct | +0.82 | **0.00** | −0.82 |
-| Tulu-3-8B | +0.79 | +0.45 | −0.34 |
-| Qwen2.5-7B-Instruct | +0.81 | +0.61 | −0.20 |
-| Mistral-7B-v0.3 | +0.37 | +0.28 | −0.09 |
+| plain harmful | **0.57** | 0.08 [0.02, 0.16] | huge real differences |
+| plain benign | 0.15 | 0.06 [0.02, 0.12] | marginal |
+| **`homoglyph` harmful** | **0.08** | 0.05 [0.01, 0.10] | **indistinguishable from noise** |
+| `homoglyph` benign | **0.69** | 0.10 [0.03, 0.19] | huge real differences |
 
-Llama's discrimination does not degrade, it **vanishes**: it refuses benign and
-harmful homoglyph prompts at the identical 0.99. On the model with the best
-plaintext discrimination in the slate, one echo-clean encoding removes all of
-it. That is the paper's headline sentence, and it needs no probe.
+- **Harmful arm: encoding ERASES model differences.** Four models spanning
+  0.38–0.95 in plaintext — a 0.57 spread, far outside noise — all land at
+  0.91–0.99 encoded, a spread that cannot be distinguished from zero.
+- **Benign arm: encoding CREATES them.** Barely separable in plaintext (0.15,
+  marginal against a 0.12 null ceiling); 0.30–0.99 encoded.
 
-### The surprise: on the weakest-aligned model, encoding RAISES refusal
+Mistral is not an exception. It rises to meet the others *because encoded
+harmful refusal is model-independent*, which is one mechanism rather than an
+inversion.
 
-Mistral refuses **0.38** of harmful *plaintext* prompts — its safety training
-barely engages this corpus. Under `homoglyph` it refuses **0.91**. The encoding
-more than doubles its harmful refusal (+0.53), where the other three move by
-−0.02 to +0.07.
+**The honest caveat:** encoded harmful refusal sits at 0.91–0.99, so
+*equalizes* and *saturates* both fit and n = 100 cannot separate them. The
+consequence for evaluation is identical either way, and that consequence is the
+claim.
 
-So the encoding is not acting as an attack that lowers refusal. **It is a
-refusal trigger**, and its strength varies ~5× across post-training pipelines.
-On the weakest-aligned model it makes safety look *better*; on the
-strongest-aligned model it destroys benign utility. A paper reporting only
-harmful-arm ASR on Mistral would report encoding as a *defence*.
+### The claim: the harmful arm has no discriminative power, and it is the only arm the field reports
 
-This also disposes of a reading nobody had ruled out: that encoded refusal is
-high because these are safety-tuned models refusing anything unusual. Mistral
-shows the trigger works on a model that does not reliably refuse plain harm.
+Llama and Qwen are indistinguishable on encoded harmful prompts (0.99 vs 0.91,
+CIs overlapping). They are not remotely the same model: under `homoglyph` Qwen
+discriminates harm at **+0.61** and Llama at exactly **0.00**. Every
+encoded-attack benchmark reports the harmful arm alone, so every one of them
+assigns these two models the same score.
+
+**This framing is deliberately not "encoding causes false positives."** That
+version invites the reviewer answer *refusing homoglyph text is correct
+behaviour, no legitimate user sends it* — and there is no good reply. Whether
+refusing encoded input is desirable is irrelevant to whether the measurement can
+tell two very different models apart. It cannot.
+
+### The pipeline evidence: a harmful-only metric reports the OPPOSITE SIGN
+
+The cross-family result above cannot say what produces the difference. Tülu-3's
+ladder can, because SFT → DPO → RLVR is a published recipe run on identical base
+weights (`instrument_layer.md` §3.6.2, jobs `9011347`/`9011348`/`9011349`):
+
+| rung | harmful refusal, SFT → DPO → RLVR | harm gap, SFT → DPO → RLVR |
+|---|---|---|
+| `fullwidth` | 0.96 → 0.73 → 0.73 | +0.16 → +0.28 → **+0.43** |
+| `homoglyph` | 0.99 → 0.90 → 0.93 | +0.20 → +0.27 → **+0.45** |
+| `zero_width` | 1.00 → 0.87 → 0.81 | +0.09 → +0.44 → **+0.44** |
+
+**On all three rungs the harmful arm falls while the harm gap roughly doubles.**
+A benchmark reading refusal-under-attack sees 0.96 → 0.73 and reports that
+two-thirds of Tülu-3's published safety pipeline made the model *less* safe. The
+gap says it got substantially *better* at telling harm from harmless. **The two
+metrics disagree in sign, on every rung.**
+
+And it closes the cross-family question: **SFT behaves like Llama-3.1-8B-Instruct
+and DPO like Qwen2.5-7B.** The Llama/Qwen difference is not a family difference —
+it is what DPO does that SFT does not, established on identical base weights,
+which no cross-family comparison could ever say.
+
+Independent confirmation worth recording: `homoglyph` benign refusal at RLVR
+reads **0.48** in the ladder job and **0.48** in `plain_baseline_tulu3`
+(`9012070`) — the same checkpoint, two presets, two sessions, n = 100 each.
+
+### What §4c got right, and what it got wrong
+
+The variance decomposition was right; the subject was not. §4c attributed the
+benign spread to the models. The ladder shows it is attributable to a **training
+stage**, and the four-cell design shows it is absent in plaintext — so the
+variance §4c assigned to *model* belongs to *post-training × encoding*. Its
+"95% model-determined" was computed across encoded conditions only, with no
+plaintext cell to separate the terms.
+
+### Replication across rungs, and its limit
+
+Three rungs × two models, from earlier runs — harmful/benign refusal: Llama
+0.93/0.90, 0.99/0.99, 0.90/0.59; Qwen 0.87/0.30, 0.89/0.29, 0.83/0.21. The
+cross-model difference is **0.06 / 0.10 / 0.07** on the harmful arm and
+**0.60 / 0.70 / 0.38** on the benign arm — the same 5–10× ratio every time.
+
+⚠️ **Its limit: `zero_width` and `fullwidth` are echo-heavy** (0.62–0.81 and
+0.66–0.76), and §3.7's rule is that the refusal judge scores echo as refusal. So
+only `homoglyph` is clean and this is suggestive, not established. On the ladder
+the echo bias runs *against* the effect (DPO echoes more than SFT), so the true
+gap growth is at least as large as the table shows.
 
 ### ⚠️ The binary harm judge is a non-refusal detector, and the plaintext arm proves it
 
@@ -417,10 +480,20 @@ recognition is unreportable. A title promising a three-way diagnosis the evidenc
 cannot deliver is the kind reviewers check first.
 
 **Title of record: "Refusal without discrimination: what encoded prompts do to
-safety-trained models."** It names the finding, covers both the collapse and the
-false-positive axis, and — the reason it beats a punchier "encoding breaks
-safety" — it survives the Mistral inversion in §4d, where encoding *raises*
-refusal. A title asserting a direction would be refuted by our own slate.
+safety-trained models."** It names the finding and covers both the collapse and
+the false-positive axis.
+
+⚠️ **Its stated justification is corrected (2026-08-08).** This paragraph read
+"it survives the Mistral inversion in §4d, where encoding *raises* refusal."
+§4d's statistical pass withdrew that inversion — Mistral's harm-gap change is
+**+0.09 [−0.06, +0.24]**, not distinguishable from zero, and its rise on the
+harmful arm is the *same* mechanism as every other model rather than a
+counter-direction. **The title stands, and the corrected reading supports it
+better than the old one did:** "refusal without discrimination" is now the
+literal finding, since encoded harmful refusal is model-independent (spread 0.08
+against a 0.10 noise ceiling) while discrimination spans 0.00–0.61. The title
+never asserted a direction, which is why it survived a correction to its own
+rationale.
 
 ### The three legs, in order
 
@@ -428,6 +501,16 @@ refusal. A title asserting a direction would be refuted by our own slate.
    discrimination. Benign refusal rises 2–10× over plaintext on four models, and
    on Llama-3.1-8B the harm gap goes **+0.82 → 0.00** — benign and harmful
    `homoglyph` prompts refused at an identical 0.99. No probe required.
+
+   **State it as the measurement claim, not the utility claim.** "Encoding causes
+   false positives" invites the reviewer answer *refusing homoglyph text is
+   correct behaviour, no legitimate user sends it*, and there is no good reply.
+   The defensible form: **the harmful arm has no discriminative power, and it is
+   the only arm the field reports.** Llama and Qwen are indistinguishable on
+   encoded harmful prompts (0.99 vs 0.91, CIs overlapping; cross-model spread
+   0.08 against a 0.10 noise ceiling) while discriminating at 0.00 and +0.61
+   respectively. Whether refusing encoded input is *desirable* has no bearing on
+   whether the measurement can tell two very different models apart. It cannot.
 2. **The mechanism — NEW, and it is what §4e adds.** §4d could only say the
    effect "varies ~5× across post-training pipelines", which is a correlation
    across four unrelated models with everything else varying too. The Tülu
@@ -435,10 +518,25 @@ refusal. A title asserting a direction would be refuted by our own slate.
    makes it a controlled series on **identical base weights** along a
    **published** recipe: benign refusal falls monotonically at every stage and
    every rung (`fullwidth` 0.80→0.45→0.30, `homoglyph` 0.79→0.63→0.48,
-   `zero_width` 0.91→0.43→0.37) while harmful refusal stays roughly flat. The
-   harm gap therefore grows **from the bottom, not the top** — post-training buys
-   back benign utility under encoding rather than adding refusal. That is the
-   difference between observing a spread and locating it.
+   `zero_width` 0.91→0.43→0.37). The harm gap grows **from the bottom, not the
+   top** — post-training buys back benign utility under encoding rather than
+   adding refusal. That is the difference between observing a spread and
+   locating it.
+
+   ⚠️ **"Harmful refusal stays roughly flat" is corrected, and the correction
+   makes leg 2 stronger.** It falls: `fullwidth` 0.96 → 0.73, `zero_width`
+   1.00 → 0.81, `homoglyph` 0.99 → 0.93. So a benchmark reading
+   refusal-under-attack sees **0.96 → 0.73 and reports that two-thirds of
+   Tülu-3's published safety pipeline made the model less safe**, while the harm
+   gap says it got substantially better (+0.16 → +0.43). **The two metrics
+   disagree in SIGN, on all three rungs.** That is the sharpest statement of leg
+   1 the evidence supports, and it comes from a controlled series rather than a
+   cross-family comparison — call it flat and the result is lost.
+
+   It also closes the cross-family question leg 1 leaves open: **SFT behaves like
+   Llama-3.1-8B-Instruct and DPO like Qwen2.5-7B.** The Llama/Qwen difference is
+   not a family difference; it is what DPO does that SFT does not, on identical
+   base weights.
 3. **The instrument.** None of the above is measurable without controls the field
    does not run — the benign arm, the echo screen, the length null, the control
    floor. Every defect found on the behaviour axis inflated apparent safety,
