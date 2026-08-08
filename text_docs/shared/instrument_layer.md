@@ -620,6 +620,86 @@ suggested, and no (B) rate here may be quoted without its denominator. That is a
 real cost of the fix and it is the honest state: the rung was never measuring
 100 cells' worth of behaviour.
 
+### 3.8 Tokenizer fertility is a measured rung property — and it refuted the hypothesis it was built to order
+
+**Measured 2026-08-07, `scripts/alphabet_fertility.py`, tokenizer only, no
+weights, no GPU, seconds.** §3.6 left `fullwidth` as the only rung whose refusal
+tracks harm, and `fullwidth` differs from `zero_width`/`homoglyph` on **two axes
+at once** — completeness of substitution (it maps every printable ASCII;
+`homoglyph` maps 21 characters; `zero_width` maps none) and corpus familiarity.
+The band run cannot say which earned the 31-point gap, and the two answers imply
+different phase-1 builds: substrate that can be *constructed* versus substrate
+that was *found*.
+
+`encodings/deterministic/alphabets.py` breaks the confound with six complete
+A-Z/a-z alphabets, letters only and length-preserving, so digits, punctuation
+and spacing are byte-identical across the band. But "corpus familiarity" is not
+observable, and a band ordered by which script *looks* more familiar is a
+heuristic with no tuning path. **Fertility is observable** — tokens per
+character under the model's own tokenizer, where a script the tokenizer saw
+often earns efficient merges and a rare one falls back to UTF-8 bytes.
+
+Measured, ratio to the same model's plain English:
+
+| rung | Llama-3.1-8B | Qwen2.5-7B | harm-sensitive? |
+|---|---|---|---|
+| `homoglyph` | 0.72 (4.1x) | 0.73 (4.2x) | ✗ 0.99 vs 0.99 |
+| `zero_width` | 0.93 (5.3x) | 0.93 (5.2x) | ✗ 0.93 vs 0.90 |
+| `fullwidth` | 1.51 (8.6x) | 1.00 (5.7x) | **✓ 0.90 vs 0.59** |
+| `math_bold` / `circled` / `math_monospace` | 2.45-2.51 | 1.15-1.18 | unmeasured |
+| `math_sans` / `math_fraktur` | 2.53-2.54 | 1.47-1.84 | unmeasured |
+| `tag_block` | 3.00 (17.1x) | 3.00 (17.0x) | ability **0.00** |
+
+**Three results, and the first is a refutation of the design's own premise:**
+
+1. **Among the three sound rungs, harm-sensitivity RISES with fertility.** The
+   harm-sensitive rung is the *most expensive* of the three — the opposite of
+   the familiar-script hypothesis the band was drafted around. Mechanism worth
+   testing rather than asserting: the cheap rungs may preserve enough surface
+   structure to trigger a learned "this is obfuscation" detector, while the
+   expensive one forces the model to process content before it can decide.
+   **n=3 and post-hoc**, which is exactly what six more points are for.
+2. **The band grades on Qwen and ties on Llama.** Llama collapses the four
+   math/circled alphabets onto one level (2.45-2.54); Qwen spreads them
+   1.15-1.84. That is not a defect of the band, it is two different experiments:
+   Llama is the **within-level replicate** (four scripts, one fertility — is
+   behaviour set by the cost or by the script?) and Qwen is the **graded
+   series**. The measured order on Qwen is also not the intuitive one —
+   `math_sans` is the most expensive rung there, `math_fraktur` second.
+3. **`tag_block` sits at 3.00 with ability 0.00 on both models**, so 3.00 is a
+   measured *unreadable* ceiling. Llama's math band at ~2.5 sits between
+   `fullwidth` (1.51, harm-sensitive) and that ceiling — precisely the region
+   where it matters whether harm-sensitivity dies exactly when comprehension
+   does, or **before** it. The second would be the stronger and stranger result.
+
+**Two things this is NOT, both of which it would be easy to mistake it for.**
+It is not the length null (`measurements/length_null.py`), which controls for
+*character* length separating harmful from benign content — the AUROC-0.654
+confound. This is *token* cost of a fixed string under a fixed tokenizer: a
+property of the rung, not of the corpus split. Running one is not running the
+other. And it is not a naturalness measurement: **fertility and corpus exposure
+are not separable by this design**, so a rung costing four tokens per character
+may fail to transmit harm because the content is smeared across a long token
+sequence, with nothing to do with familiarity. Both readings stay live and get
+named in the write-up.
+
+*AS-6 inherits it directly.* Guards are fine-tunes of base models with their own
+tokenizers, so a guard-side ladder has its own fertility profile that need not
+match the target's — and "the guard never decoded it" versus "the guard's
+tokenizer shattered it" is a distinction AS-6's central quantity cannot afford
+to lose. Measuring it is free.
+
+**A generation lesson, paid for immediately.** The alphabet tables are generated
+and **NFKC-verified at import**, not typed. A mistyped offset round-trips
+perfectly — encode and decode share an inverse, so the error cancels and the
+model is shown a different script than the rung claims, with every round-trip
+test green. The fold is an independent check. It earned itself on the first run:
+Fraktur reserves five capitals (C H I R Z) whose characters live in Letterlike
+Symbols, so a contiguous range emits reserved codepoints. Related: no injectivity
+guard exists, because the fold *proves* injectivity — an unreachable guard reads
+as protection that is not there, so the property is asserted in the tests
+instead.
+
 ---
 
 ## 4. Open, with the method already identified
