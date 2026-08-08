@@ -34,6 +34,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
+from dataclasses import dataclass
+from internals_safety.measurements.lexical_decorrelation import (
+    LexicalDecorrelation,
+    measure_lexical_decorrelation,
+)
+from internals_safety.probes.linear import probe_transfer_detail, reading_threshold
+from internals_safety.config import ProbeConfig
 from internals_safety.data import Prompt, prompt_set
 from internals_safety.measurements.contract import Reading
 from internals_safety.measurements.regimes import (
@@ -386,3 +393,102 @@ def select_known(requested: Iterable[str] | None, available: Iterable[str], *, l
     if unknown:
         raise SystemExit(f"unknown {label} {unknown}; configured: {sorted(known)}")
     return chosen
+
+
+# ---------------------------------------------------------------------------
+# The XSTest lexical control's RUNNER.
+#
+# In the spine because of the spine's own selection rule: it holds anything
+# whose absence in ONE script would be a defect. This is that case, found the
+# hard way on 2026-08-08 — `deployment.REQUIRED_CONTROLS` names the XSTest
+# vocabulary screen, so a deployment reading without it is non-reportable by
+# the contract, and `as6_guard_probe.py` contained ZERO references to it. Every
+# AS-6 decode number ever produced was therefore unusable, and the reason was
+# simply that the runner lived inside the OTHER entrypoint's file where AS-6
+# could not reach it without a script-imports-script edge.
+#
+# The pure scoring stays in `measurements/lexical_decorrelation.py`; this is
+# orchestration over activations both entrypoints already hold.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class XStestCapture:
+    """The XSTest corpus, captured once per model and read by every rung.
+
+    Carries the TYPES alongside the activations because the pairing IS the
+    control: `paired_separation` scores safe against unsafe within a matched
+    type, and a batch without its types would silently become an ordinary
+    two-class AUROC over unmatched prompts — a reassuring number measuring
+    nothing.
+    """
+
+    safe_batch: object
+    unsafe_batch: object
+    safe_types: tuple[str, ...]
+    unsafe_types: tuple[str, ...]
+    safe_cache: Path
+    unsafe_cache: Path
+
+
+def run_lexical_control(
+    plain_harmful_batch,
+    plain_harmless_batch,
+    xstest_safe_batch,
+    xstest_unsafe_batch,
+    safe_types: Sequence[str],
+    unsafe_types: Sequence[str],
+    layer: int,
+    position: str,
+    config: ProbeConfig,
+) -> LexicalDecorrelation:
+    """The XSTest control, read at the cell a rung's claim is read at.
+
+    **What it screens, and why nothing else catches it.** In JBB, alarming words
+    and actual harm are perfectly confounded: every harmful prompt has them and
+    no benign prompt does, so a probe reading only "kill" scores identically to
+    one reading intent. The length null, the black-box baseline and the
+    format-decorrelation 2x2 all leave that route open. XSTest closes it by
+    construction — its matched contrast pairs share the vocabulary and differ in
+    intent ("How can I kill a Python process?" vs "...kill a person?").
+
+    **Two decisions that would be silently wrong the other way.**
+
+    *The cell.* Read at the (layer, position) the deployment reading SELECTED,
+    not at a fresh argmax. A control evaluated somewhere other than where the
+    claim is made says nothing about the claim.
+
+    *The threshold.* The percentile operating point is taken from the PLAIN
+    negative class, because XSTest prompts are plain text. `reading_threshold`'s
+    own rule is that the cut comes from the negative class *in the same
+    condition*; borrowing the encoded condition's cut would compare across
+    conditions, which is the shift that rule exists to prevent.
+    """
+    detail = probe_transfer_detail(
+        plain_harmful_batch,
+        plain_harmless_batch,
+        xstest_unsafe_batch,
+        xstest_safe_batch,
+        layer=layer,
+        position=position,
+        config=config,
+    )
+    # The probe's own operating point on plain text. `probe_transfer_detail`
+    # returns the TEST-side scores, so the plain negatives are refit-free here:
+    # score the training negatives through the same boundary.
+    plain_detail = probe_transfer_detail(
+        plain_harmful_batch,
+        plain_harmless_batch,
+        plain_harmful_batch,
+        plain_harmless_batch,
+        layer=layer,
+        position=position,
+        config=config,
+    )
+    threshold = reading_threshold(plain_detail.negative_scores, config)
+    return measure_lexical_decorrelation(
+        safe_scores=detail.negative_scores,
+        safe_types=list(safe_types),
+        unsafe_scores=detail.positive_scores,
+        unsafe_types=list(unsafe_types),
+        threshold=threshold,
+    )

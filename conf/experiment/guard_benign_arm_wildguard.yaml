@@ -64,6 +64,10 @@ families:
 
 n_prompts: 100
 
+# MANDATORY, not optional. `deployment.REQUIRED_CONTROLS` names the XSTest
+# vocabulary screen, so a decode reading produced without it is WITHHELD by the
+# contract — and this entrypoint had no way to run it until 2026-08-08, which is
+# why every AS-6 decode number before then was non-reportable.
 instruments: [lexical]
 run_name: guard-benign-wildguard
 

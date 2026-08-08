@@ -73,7 +73,7 @@ from internals_safety.config import (
     load_measurements_config,
     load_corpus_config,
 )
-from internals_safety.data import Prompt, digest
+from internals_safety.data import Prompt, digest, prompt_set as load_prompt_set
 from internals_safety.encodings.base import Encoder
 from internals_safety.encodings.registry import load_ladder
 from internals_safety.guards.prompts import prepare_guard_prompts
@@ -98,7 +98,9 @@ from internals_safety.models.capture import (
 )
 from internals_safety.models.loader import LoadedModel, load_model, resolve_device
 from internals_safety.pipeline import (
+    XStestCapture,
     add_common_arguments,
+    run_lexical_control,
     load_contrast_sets,
     resolve_run_paths,
     run_families,
@@ -111,6 +113,14 @@ from internals_safety.provenance import (
 )
 
 PHASE = "as6_phase1"
+
+# The optional roster. `lexical` is not decorative: `deployment.REQUIRED_CONTROLS`
+# names the XSTest vocabulary screen, so a decode reading produced without it is
+# WITHHELD by the contract. This script had no way to run it until 2026-08-08,
+# which means every AS-6 decode number before that date was non-reportable — not
+# wrong, unusable, and nothing said so because the entrypoint could not express
+# the control at all.
+OPTIONAL_INSTRUMENTS = ("lexical",)
 
 
 def capture_guard(
@@ -163,8 +173,15 @@ def run_family(
     measurements: MeasurementsConfig,
     cache_dir: Path,
     refresh: bool = False,
+    xstest: XStestCapture | None = None,
 ) -> dict:
-    """Every phase-1 measurement for one rung."""
+    """Every phase-1 measurement for one rung.
+
+    `xstest` carries the model-level capture the lexical control reads, captured
+    once in `main` and passed down. `None` means the control was not requested,
+    and then the decode reading is non-reportable by the contract — which is
+    what every AS-6 run before 2026-08-08 was, silently.
+    """
     config: GuardConfig = loaded.config
     family = encoder.family
 
@@ -275,9 +292,50 @@ def run_family(
         )
     ]
 
+    # The XSTest lexical control, read at the cell this rung's decode claim is
+    # read at. Costs no forward pass here — the corpus was captured once at model
+    # level and this is a logistic fit over activations already in hand.
+    #
+    # In JBB, alarming words and actual harm are perfectly confounded, so a guard
+    # probe reading only "bomb" scores identically to one reading intent. The
+    # length null and the ability-0 floor both leave that route open; XSTest
+    # closes it by construction with matched pairs that share the vocabulary and
+    # differ in intent.
+    lexical_detail: dict = {}
+    if xstest is not None:
+        best = curve.best()
+        lexical = run_lexical_control(
+            plain_harmful_batch,
+            plain_harmless_batch,
+            xstest.safe_batch,
+            xstest.unsafe_batch,
+            xstest.safe_types,
+            xstest.unsafe_types,
+            layer=best.layer,
+            position=best.position,
+            config=measurements.probes,
+        )
+        lexical_detail = {
+            "lexical_pooled_auroc": lexical.pooled_auroc,
+            "lexical_false_positive_rate": lexical.lexical_false_positive_rate,
+            "lexical_reads_vocabulary": lexical.reads_vocabulary,
+            "lexical_clears": lexical.clears(
+                measurements.controls.lexical_min_margin,
+                measurements.controls.vocabulary_reader_floor,
+            ),
+            "lexical_floor": measurements.controls.vocabulary_reader_floor,
+            "lexical_pairs": {pair.pair: pair.auroc for pair in lexical.pairs},
+            # Zero scorable pairs reads exactly like a failure otherwise, and
+            # `reads_vocabulary` fails CLOSED to True — the tri-state defect
+            # this repo has now found in three instruments.
+            "lexical_n_pairs": len(lexical.pairs),
+            "lexical_cell": {"layer": best.layer, "position": best.position},
+        }
+
     summary = {
         **cell_map.as_dict(),
         "invertibility": encoder.invertibility.value,
+        "lexical": lexical_detail,
         # THE CONTROL ON THE BLOCK AXIS. Reported beside the cell counts and
         # never silently gating them — the same posture the length null takes
         # below, and for the same reason: a reader must be able to see that the
@@ -409,6 +467,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--guard", required=True, help="conf/guards/<name>.yaml")
     add_common_arguments(parser, default_n_prompts=corpus.n_prompts)
     parser.add_argument(
+        "--instruments",
+        nargs="+",
+        default=None,
+        help=f"optional instruments to run: {', '.join(OPTIONAL_INSTRUMENTS)}. Default "
+        "none. `lexical` is the XSTest vocabulary screen, which "
+        "`deployment.REQUIRED_CONTROLS` names as MANDATORY for a reportable decode "
+        "reading — without it every decode number this script produces is withheld "
+        "by the contract, which is what happened to every AS-6 run before "
+        "2026-08-08.",
+    )
+    parser.add_argument(
         "--strata-bins",
         type=int,
         default=None,
@@ -430,6 +499,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     ladder = load_ladder()
     families = select_known(args.families, ladder, label="rungs")
+    instruments = (
+        select_known(args.instruments, OPTIONAL_INSTRUMENTS, label="instruments")
+        if args.instruments
+        else []
+    )
 
     device = resolve_device(config.device, allow_cpu_in_job=args.allow_cpu)
     print(describe_plan(config, families, args.n_prompts, str(device)))
@@ -459,6 +533,37 @@ def main(argv: Sequence[str] | None = None) -> int:
         loaded, [p.text for p in harmless], "plain-harmless", activations_dir,
         refresh=args.refresh_activations,
     )
+
+    # ---- the XSTest lexical control, MODEL-level ----------------------------
+    # Captured once and read by every rung: the decode probe is plain-fitted, so
+    # the control is the same corpus for every rung and capturing per family
+    # would pay 11x for one answer.
+    #
+    # ⚠️ Through `capture_guard`, NOT the plain chat template. The probe is
+    # fitted on plaintext rendered through the GUARD's classification prompt, so
+    # the control has to sit in that same distribution — reading it on bare
+    # plaintext would compare across conditions and answer a question nobody
+    # asked. Same reason the plain contrast sets above go through it.
+    xstest: XStestCapture | None = None
+    if "lexical" in instruments:
+        safe_prompts = load_prompt_set("xstest_safe_prompts.jsonl")
+        unsafe_prompts = load_prompt_set("xstest_unsafe_prompts.jsonl")
+        safe_batch, safe_cache, _ = capture_guard(
+            loaded, [p.text for p in safe_prompts], "xstest-safe", activations_dir,
+            refresh=args.refresh_activations,
+        )
+        unsafe_batch, unsafe_cache, _ = capture_guard(
+            loaded, [p.text for p in unsafe_prompts], "xstest-unsafe", activations_dir,
+            refresh=args.refresh_activations,
+        )
+        xstest = XStestCapture(
+            safe_batch=safe_batch,
+            unsafe_batch=unsafe_batch,
+            safe_types=tuple(p.category for p in safe_prompts),
+            unsafe_types=tuple(p.category for p in unsafe_prompts),
+            safe_cache=safe_cache,
+            unsafe_cache=unsafe_cache,
+        )
 
     plain_verdicts, _ = read_verdicts(loaded, [prompt.text for prompt in harmful])
     plain_block_rate = sum(v.unsafe for v in plain_verdicts) / len(plain_verdicts)
@@ -499,6 +604,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             measurements,
             activations_dir,
             refresh=args.refresh_activations,
+            xstest=xstest,
         ),
         report=report,
         # EXPLICITLY none, and this line is the decision rather than an omission

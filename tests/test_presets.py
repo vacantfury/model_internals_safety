@@ -9,6 +9,7 @@ problem re-entering through the launcher.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 from pathlib import Path
 from typing import get_args
@@ -407,3 +408,64 @@ class TestEveryShippedPresetCanBeCosted:
         belongs on the phase-0 route.
         """
         assert "as6_guard_probe" not in self._PHASE0_SHAPED
+
+
+class TestEveryPresetsCommandLineParses:
+    """Bind each preset's RENDERED argv to the target script's real flags.
+
+    **This exists because a declaration went unreconciled and it cost a job.**
+    `_CONSUMES` claimed `as6_guard_probe` consumes `instruments`. It does not —
+    the script has no such flag. So `guard_benign_arm_wildguard` carried
+    `instruments: [lexical]`, the schema accepted it, `command()` rendered
+    `--instruments lexical`, and job 9010529 died in 22 seconds on
+    `unrecognized arguments` after a queue wait.
+
+    Neither existing guard could see it. `tests/test_presets.py` validated the
+    preset against the schema, and the schema was the thing that was wrong;
+    `tests/test_entrypoint_call_sites.py` binds calls to library FUNCTIONS, and
+    a command-line flag is not a function. And a `--dry-run` does not cover it
+    either, because a dry run is invoked by hand with hand-typed flags — the
+    exact gap the preset system was built to close, reopened one level up.
+
+    The check is on the RENDERED command line rather than on `_CONSUMES`
+    directly, so it needs no field-to-flag mapping to drift out of date: whatever
+    `command()` emits must be something the script can parse.
+    """
+
+    def _flags_defined_in(self, path: Path) -> set[str]:
+        """Every `--flag` string passed to an add_argument call in this file."""
+        flags: set[str] = set()
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            attr = getattr(node.func, "attr", None)
+            if attr != "add_argument":
+                continue
+            for arg in node.args:
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    if arg.value.startswith("--"):
+                        flags.add(arg.value)
+        return flags
+
+    def test_every_flag_the_launcher_emits_exists_in_its_script(self):
+        repo = Path(__file__).resolve().parents[1]
+        # Shared flags live in the pipeline helper every entrypoint calls.
+        shared = self._flags_defined_in(repo / "src" / "internals_safety" / "pipeline.py")
+
+        checked = 0
+        for path in sorted((repo / "conf" / "experiment").glob("*.yaml")):
+            preset = load_preset(path.stem)
+            for row in preset.tasks(Path("/tmp/outputs")):
+                script = repo / row[0]
+                assert script.exists(), f"{path.stem}: {row[0]} does not exist"
+                available = self._flags_defined_in(script) | shared
+                emitted = {token for token in row if token.startswith("--")}
+                missing = emitted - available
+                assert not missing, (
+                    f"preset {path.stem!r} renders {sorted(missing)}, which "
+                    f"{row[0]} cannot parse — the job would die at argparse "
+                    f"after a queue wait (job 9010529)"
+                )
+                checked += 1
+        assert checked, "no preset command lines were checked"

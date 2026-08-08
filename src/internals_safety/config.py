@@ -957,6 +957,15 @@ Entrypoint = Literal[
 # approved for I1 and did not run it.
 _CONSUMES: dict[str, frozenset[str]] = {
     "phase0_regime_map": frozenset({"target", "families", "n_prompts", "instruments"}),
+    # NO `instruments` — the guard entrypoint has no such flag, and claiming it
+    # did cost a job. Preset `guard_benign_arm_wildguard` carried
+    # `instruments: [lexical]`, this map accepted it, `command()` rendered it,
+    # and job 9010529 died in 22 seconds on `unrecognized arguments`. The map is
+    # a DECLARATION about an entrypoint's real command line, so like every other
+    # declaration in this repo it has to be reconciled against the thing it
+    # describes: `tests/test_presets.py::TestEveryPresetsCommandLineParses`
+    # renders each committed preset's argv and binds every flag in it to a real
+    # `add_argument` in the target script.
     "as6_guard_probe": frozenset({"target", "families", "n_prompts", "instruments"}),
     "sae_pregate": frozenset({"target", "n_prompts", "sae_layers", "render_chat", "source_runs"}),
     "relicense_probes": frozenset({"targets", "families", "source_runs"}),

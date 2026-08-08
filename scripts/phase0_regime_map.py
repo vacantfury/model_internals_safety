@@ -156,10 +156,12 @@ from internals_safety.paths import ACTIVATIONS_DIR
 from internals_safety.measurements.control_floor import derive as derive_control_floor
 from internals_safety.pipeline import (
     CrossRungScreen,
+    XStestCapture,
     add_common_arguments,
     load_contrast_sets,
     resolve_run_paths,
     run_families,
+    run_lexical_control,
     select_known,
 )
 from internals_safety.provenance import (
@@ -617,89 +619,6 @@ def run_attribution(
         batch_size=model_config.capture_batch_size,
     )
     return attribution_reading(attribution, measurements)
-
-
-@dataclass(frozen=True)
-class XStestCapture:
-    """The XSTest corpus, captured once per model and read by every rung.
-
-    Carries the TYPES alongside the activations because the pairing IS the
-    control: `paired_separation` scores safe against unsafe within a matched
-    type, and a batch without its types would silently become an ordinary
-    two-class AUROC over unmatched prompts — a reassuring number measuring
-    nothing.
-    """
-
-    safe_batch: object
-    unsafe_batch: object
-    safe_types: tuple[str, ...]
-    unsafe_types: tuple[str, ...]
-    safe_cache: Path
-    unsafe_cache: Path
-
-
-def run_lexical_control(
-    plain_harmful_batch,
-    plain_harmless_batch,
-    xstest_safe_batch,
-    xstest_unsafe_batch,
-    safe_types: Sequence[str],
-    unsafe_types: Sequence[str],
-    layer: int,
-    position: str,
-    config: ProbeConfig,
-) -> LexicalDecorrelation:
-    """The XSTest control, read at the cell a rung's claim is read at.
-
-    **What it screens, and why nothing else catches it.** In JBB, alarming words
-    and actual harm are perfectly confounded: every harmful prompt has them and
-    no benign prompt does, so a probe reading only "kill" scores identically to
-    one reading intent. The length null, the black-box baseline and the
-    format-decorrelation 2x2 all leave that route open. XSTest closes it by
-    construction — its matched contrast pairs share the vocabulary and differ in
-    intent ("How can I kill a Python process?" vs "...kill a person?").
-
-    **Two decisions that would be silently wrong the other way.**
-
-    *The cell.* Read at the (layer, position) the deployment reading SELECTED,
-    not at a fresh argmax. A control evaluated somewhere other than where the
-    claim is made says nothing about the claim.
-
-    *The threshold.* The percentile operating point is taken from the PLAIN
-    negative class, because XSTest prompts are plain text. `reading_threshold`'s
-    own rule is that the cut comes from the negative class *in the same
-    condition*; borrowing the encoded condition's cut would compare across
-    conditions, which is the shift that rule exists to prevent.
-    """
-    detail = probe_transfer_detail(
-        plain_harmful_batch,
-        plain_harmless_batch,
-        xstest_unsafe_batch,
-        xstest_safe_batch,
-        layer=layer,
-        position=position,
-        config=config,
-    )
-    # The probe's own operating point on plain text. `probe_transfer_detail`
-    # returns the TEST-side scores, so the plain negatives are refit-free here:
-    # score the training negatives through the same boundary.
-    plain_detail = probe_transfer_detail(
-        plain_harmful_batch,
-        plain_harmless_batch,
-        plain_harmful_batch,
-        plain_harmless_batch,
-        layer=layer,
-        position=position,
-        config=config,
-    )
-    threshold = reading_threshold(plain_detail.negative_scores, config)
-    return measure_lexical_decorrelation(
-        safe_scores=detail.negative_scores,
-        safe_types=list(safe_types),
-        unsafe_scores=detail.positive_scores,
-        unsafe_types=list(unsafe_types),
-        threshold=threshold,
-    )
 
 
 def run_reply_inversion(
