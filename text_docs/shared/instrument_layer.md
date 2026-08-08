@@ -712,8 +712,17 @@ observed norm beside the declared one:
 | 20 | 26.92 | 17.125 | **1.57** |
 | 22 | 30.71 | 21.5 | **1.43** |
 
-**~1.5x, not the ~5x a scale bug would need.** Two further points argue this is
-corpus difference rather than a defect: the declared norm is **per layer** (not
+⚠️ **CORRECTED 2026-08-07 — the sentence that followed called this "a corpus
+offset, not a lead". It WAS the lead.** Not a loader defect, which is what the
+original claim got right; but the ratio was the one number pointing at the actual
+cause, and dismissing it cost two further runs. The templated Base arm is out of
+distribution, and §4.6 is the confirmation: on plain text the same ratio closes
+to **1.045-1.053** and variance explained goes from -915 to +0.70. Read the two
+sections together; the table below is the TEMPLATED reading.
+
+**~1.5x, not the ~5x a scale bug would need.** Two further points were taken to
+argue corpus difference rather than defect — the second is now known to be the
+signature of chat-template special tokens on a model that never saw them: the declared norm is **per layer** (not
 the single 13.8125 that two docstrings in this repo quoted unqualified, now
 fixed), and the ratio *falls*
 monotonically with depth while both norms rise — the shape of a systematic
@@ -797,6 +806,54 @@ exactly `sqrt(d_model) / dataset_average_activation_norm`
 measures over exactly the scored positions through the same `scored_positions`
 mask. Until this landed, **no control-margin statement from any pre-gate run was
 interpretable in either direction.**
+
+---
+
+### 4.6 RESOLVED — the pre-gate's refusal was our prompt rendering, not the loader
+
+Job 9009915, plain-text Base arm, against 9009783's templated arm on identical
+weights, layers, prompts and control:
+
+| our layer | rendering | KL recovered | variance explained | L0 | control VE | norm ratio |
+|---|---|---|---|---|---|---|
+| 18 | **plain** | **0.919** | **+0.698** | 199.3 | -0.041 | **1.049** |
+| 18 | templated | 0.409 | -915.15 | 599.2 | +0.085 | 1.716 |
+| 20 | **plain** | **0.920** | **+0.708** | 172.1 | -0.080 | **1.045** |
+| 20 | templated | 0.290 | -1253.34 | 614.7 | +0.063 | 1.572 |
+| 22 | **plain** | **0.910** | **+0.723** | 137.5 | -0.113 | **1.053** |
+| 22 | templated | 0.374 | -1759.98 | 582.7 | +0.073 | 1.428 |
+
+**`models/sae_loader.py` is correct.** The dictionary reconstructs the model it
+was fitted on, beats its matched random control by ~0.75, and the norm ratio
+closes to ~1.05 — which is the scale diagnostic of §4.4 confirming its own
+reading. `conf/models/llama3_1_8b_base.yaml` borrows the Instruct chat template
+so both arms see identical text, correct for the TRANSFER comparison and fatal to
+the LOADER check, because Llama Scope was fitted on plain text and a base
+checkpoint never saw a template. `render_chat` is now a preset field.
+
+**Three real defects were fixed on the way and NONE of them was the cause** —
+pad/BOS contamination in the reduction, the missing
+`sparsity_include_decoder_norm` gating, and a control sized on the wrong
+positions. A fourth hypothesis (jumprelu vs topk) was refuted by reading
+`hyperparams.json`. The lesson is not that those fixes were wasted — each was a
+genuine defect and the control fix was load-bearing for interpreting ANY margin
+— it is that **four hypotheses were all about the instrument and none about what
+was being fed to it**, for three runs.
+
+**The gate was inverted, and the ceiling arm is what exposed it.**
+`min_variance_explained: 0.75` was a placeholder applied to both arms, while the
+ceiling arm — the model the dictionary was FITTED on, the highest any transfer
+can reach — measures 0.698-0.723. A guessed bar was failing the run whose job is
+to set it. Retired: the ceiling arm is judged on reconstructing at all (positive
+variance, above its own control, KL term clearing its bar) and the target arm on
+`min_transfer_ratio` of the measured ceiling. The KL term keeps an absolute bar
+because it is already relative by construction; variance explained is not.
+
+*AS-6 inheritance:* Llama Guard 3 8B is a fine-tune of this same base, so its
+pre-gate inherits the ceiling arm directly. **But a guard is addressed only
+through its classification prompt**, so "plain text" is not the guard's fitted
+distribution either — the guard-side pre-gate needs its own ceiling arm and must
+not import 0.698.
 
 ---
 

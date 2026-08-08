@@ -85,11 +85,13 @@ ROSTER: tuple[Item, ...] = (
         "I4",
         "SAE features",
         ("measurements.sae_reconstruction", "models.sae_loader"),
-        incomplete="the pre-gate and the Llama Scope loader are built, tested and "
-        "reachable (scripts/sae_pregate.py); the FEATURE instrument — which features "
-        "distinguish decoded from non-decoded — is not written, and deliberately so: "
-        "the build plan gates it on the pre-gate passing, and the pre-gate needs the "
-        "8B Base arm, which is cluster work",
+        incomplete="the pre-gate PASSED its ceiling arm 2026-08-07 (job 9009915, "
+        "Llama-3.1-8B-Base on plain text: variance explained 0.698-0.723, KL "
+        "recovered 0.91-0.92, beating its matched random control by ~0.75), so the "
+        "loader is verified and the gating precondition is met; what remains is the "
+        "FEATURE instrument itself — which features distinguish decoded from "
+        "non-decoded — plus the Instruct TARGET arm, which is what a transfer number "
+        "requires and is cluster work",
     ),
     Item("I5", "reply-inversion causal test", ("measurements.reply_inversion",)),
     Item(

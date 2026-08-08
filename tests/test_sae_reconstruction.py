@@ -183,7 +183,7 @@ class TestEndToEndOnARealModel:
 
     @pytest.fixture
     def config(self):
-        return SAEConfig(trained_on="tiny-test", min_kl_recovered=0.8, min_variance_explained=0.75)
+        return SAEConfig(trained_on="tiny-test", min_kl_recovered=0.8, min_transfer_ratio=0.8)
 
     def test_the_identity_dictionary_recovers_everything(self, tiny_model, prompts, config):
         """The sanity check the gate rests on: substituting an exact round trip

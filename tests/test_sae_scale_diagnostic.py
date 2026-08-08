@@ -41,7 +41,7 @@ from internals_safety.models.sae_loader import LlamaScopeSAE
 CONFIG = SAEConfig(
     trained_on="a config string that must LOSE to the checkpoint's own claim",
     min_kl_recovered=0.8,
-    min_variance_explained=0.75,
+    min_transfer_ratio=0.8,
 )
 
 

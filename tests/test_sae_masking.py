@@ -84,7 +84,7 @@ class TestPaddingChangesNothing:
             prompts,
             layer=1,
             config=SAEConfig(
-                trained_on="t", min_kl_recovered=0.8, min_variance_explained=0.75
+                trained_on="t", min_kl_recovered=0.8, min_transfer_ratio=0.8
             ),
             batch_size=batch_size,
         )

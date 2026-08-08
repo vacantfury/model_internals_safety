@@ -404,9 +404,23 @@ sae:
   # no cross-model transfer experiment at all, so the experiment above is the ONLY
   # available anchor rather than merely the convenient one. Build plan §3.4.
   min_kl_recovered: 0.80
-  # Diagnostic, not the gate — a dictionary can explain variance and still wreck
-  # the output distribution. PLACEHOLDER, same tuning path.
-  min_variance_explained: 0.75
+  # ⚠️ `min_variance_explained` was RETIRED here 2026-08-07. It stood at 0.75
+  # while the CEILING arm — Llama-3.1-8B-Base on plain text, the model the
+  # dictionary was fitted on — measures 0.698-0.723 (job 9009915). A guessed
+  # absolute bar was failing the run whose job is to SET it. Variance explained
+  # is not relative by construction the way the KL term is, so an absolute bar
+  # on it means different things per model and per layer.
+  #
+  # How much of the ceiling arm's variance explained a TARGET arm must retain.
+  # Never applied to the ceiling arm itself, which is judged on reconstructing
+  # at all: positive variance, above its own matched random control.
+  #
+  # PLACEHOLDER with a NAMED but deferred tuning path: run I4's feature
+  # instrument at several transfer levels and find where the feature-level
+  # conclusions change. That is the only question this bar exists to answer and
+  # it cannot be asked until the feature half is built. Setting it from the first
+  # Instruct number that appears would be fitting the bar to the result.
+  min_transfer_ratio: 0.80
   # The random-dictionary control must share the trained dictionary's sparsity;
   # a dense control reconstructs better for reasons unrelated to learned
   # features. Tuning path: copy from the loaded suite's own TopK setting.

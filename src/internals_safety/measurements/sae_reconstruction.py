@@ -577,13 +577,30 @@ def unmeasured_reading(reason: str) -> Reading:
     )
 
 
-def reading(quality: ReconstructionQuality, config: SAEConfig) -> Reading:
+def reading(
+    quality: ReconstructionQuality,
+    config: SAEConfig,
+    ceiling: float | None = None,
+) -> Reading:
     """The pre-gate's verdict. `licensed=True` means I4 MAY be read on this model.
 
-    Three conditions, and the ordering of importance is the paper's own: the
-    downstream term is the gate, variance explained is a diagnostic that must
-    still beat the random-dictionary control, and MSE is reported but decides
-    nothing on its own.
+    **Two arms, two questions — and conflating them inverted the instrument.**
+
+    * **Ceiling arm** (`ceiling is None`): the dictionary against the model it
+      was FITTED on. The question is whether our loader works, so the bar is
+      that it reconstructs *at all* — positive variance explained, above its own
+      matched random control, with the downstream KL term clearing its bar.
+      There is nothing above this arm to compare it to; it IS the comparison.
+    * **Target arm** (`ceiling` supplied): the same dictionary on a model it was
+      not fitted on. The question is transfer, so the bar is a FRACTION of what
+      the ceiling arm achieved.
+
+    An absolute `min_variance_explained` was applied to both until 2026-08-07,
+    and it failed the ceiling arm: the guessed 0.75 sat above the measured
+    ceiling of 0.698-0.723, so the run whose job is to SET the bar was being
+    judged against a guess at it. The KL term keeps an absolute bar because it
+    is already relative by construction — a fraction of the layer's own
+    downstream contribution — while variance explained is not.
 
     ⚠️ `licensed=True` here licenses NAMING, never a causal claim — see the
     module docstring's policy note. It is a gate on admissibility, not evidence
@@ -597,12 +614,23 @@ def reading(quality: ReconstructionQuality, config: SAEConfig) -> Reading:
             "for a reconstruction to recover — the gate is undefined here, not passed"
         )
     margin = quality.control_margin
-    passes = (
-        recovered >= config.min_kl_recovered
-        and quality.variance_explained >= config.min_variance_explained
-        and margin is not None
-        and margin > 0.0
-    )
+    # A missing control is never a passed one: without it "the dictionary
+    # reconstructs" is a statement about linear algebra, not about training.
+    beats_control = margin is not None and margin > 0.0
+    if ceiling is None:
+        floor = 0.0
+        passes = (
+            recovered >= config.min_kl_recovered
+            and quality.variance_explained > floor
+            and beats_control
+        )
+    else:
+        floor = ceiling * config.min_transfer_ratio
+        passes = (
+            recovered >= config.min_kl_recovered
+            and quality.variance_explained >= floor
+            and beats_control
+        )
     return Reading(
         instrument="sae_reconstruction",
         kind=KIND,
@@ -612,8 +640,14 @@ def reading(quality: ReconstructionQuality, config: SAEConfig) -> Reading:
             f"at layer {quality.layer} (1.0 = perfect, 0.0 = no better than deleting "
             f"the layer, negative = worse than deleting it); passes at "
             f">= {config.min_kl_recovered} with variance explained "
-            f">= {config.min_variance_explained} and above a matched-shape random "
-            "dictionary"
+            + (
+                "> 0 (CEILING arm — the model the dictionary was fitted on, judged on "
+                "reconstructing at all rather than against a bar it is meant to set)"
+                if ceiling is None
+                else f">= {floor:.4f} = {config.min_transfer_ratio} of the "
+                     f"{ceiling:.4f} ceiling (TARGET arm)"
+            )
+            + " and above a matched-shape random dictionary"
         ),
         licensed=bool(passes),
         control_reading=quality.control_variance_explained,
@@ -638,7 +672,12 @@ def reading(quality: ReconstructionQuality, config: SAEConfig) -> Reading:
             "norm_ratio": quality.norm_ratio,
             # Which feature-selection rule produced this reading. Two readings
             # from one run differ only here.
-            "selection": quality.selection,
+            # Which arm this is, and what it was judged against. A reading that
+            # cannot say whether it set the bar or was measured against one is
+            # not interpretable later.
+            "arm": "ceiling" if ceiling is None else "target",
+            "ceiling_variance_explained": ceiling,
+            "variance_floor_applied": floor,
             # ⚠️ The whole reason this gate exists. Llama Scope is trained on
             # Llama-3.1-8B-Base and our target is Instruct. The checkpoint's own
             # claim wins over the config string when it has one.

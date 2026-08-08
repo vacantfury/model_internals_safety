@@ -652,11 +652,31 @@ class SAEConfig(StrictModel):
     # reach, so the bar is set from the transfer gap, not from taste.
     min_kl_recovered: float = 0.80
 
-    # Diagnostic bar, not the gate. A dictionary can explain plenty of variance
-    # and still wreck the distribution the model was about to emit, which is why
-    # this cannot stand alone.
-    # PLACEHOLDER. Tuning path: the same Base-vs-Instruct transfer measurement.
-    min_variance_explained: float = 0.75
+    # **RETIRED as an absolute bar 2026-08-07, and the reason is a measured
+    # inversion.** It stood at 0.75; the Base arm — the model the dictionary was
+    # FITTED on, i.e. the ceiling any transfer can reach — measures 0.698-0.723
+    # on plain text (job 9009915). So a guessed bar was failing the very run
+    # whose job is to SET it. `min_variance_explained` was never a property of
+    # the world; it is a property of this dictionary on this model, and the only
+    # honest source for it is the ceiling arm itself.
+    #
+    # Replaced by `min_transfer_ratio` below. The KL term keeps an absolute bar
+    # because it is already relative by construction (a fraction of the layer's
+    # own downstream contribution); variance explained is not, which is exactly
+    # why an absolute bar on it means different things per model and per layer.
+
+    # How much of the CEILING arm's variance explained the target arm must
+    # retain. Applied only when a ceiling is supplied — the Base run establishes
+    # one and is therefore judged on whether it reconstructs at all (positive
+    # variance, above its matched control), never against this.
+    #
+    # PLACEHOLDER, and its tuning path is NAMED but deliberately deferred: run
+    # I4's feature instrument at several transfer levels and find where the
+    # feature-level conclusions actually change. That is the only question the
+    # bar exists to answer, and it cannot be asked before the feature half is
+    # built. Filed rather than guessed at again — setting it from the first
+    # Instruct number that appears would be fitting the bar to the result.
+    min_transfer_ratio: float = 0.80
 
     # Sparsity of the matched random-dictionary control. It must share the
     # trained dictionary's sparsity — a DENSE control would reconstruct better

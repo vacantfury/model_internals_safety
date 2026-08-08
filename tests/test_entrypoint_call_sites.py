@@ -211,7 +211,7 @@ def test_measure_reconstruction_runs_with_an_OFF_DEVICE_dictionary(tiny_model):
         dictionary,
         ["the cat sat", "a dog ran"],
         layer=1,
-        config=SAEConfig(trained_on="t", min_kl_recovered=0.8, min_variance_explained=0.75),
+        config=SAEConfig(trained_on="t", min_kl_recovered=0.8, min_transfer_ratio=0.8),
         batch_size=2,
     )
     assert quality.n_prompts == 2
