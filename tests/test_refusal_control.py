@@ -133,4 +133,7 @@ class TestSummarize:
         as a test because a control's own claim about its cost is not evidence —
         `behavior_control` asserted 'judge calls only' while buying a second
         generation pass (2026-08-07)."""
-        assert judge_calls(100) == 300
+        assert judge_calls(100, 100) == 300
+        # Arm B only where it can move: 18 movable of 500 on the real run, so
+        # the naive 3*n would spend 482 calls no rate would ever read.
+        assert judge_calls(500, 18) == 1018

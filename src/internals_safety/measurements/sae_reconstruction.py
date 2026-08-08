@@ -177,6 +177,30 @@ def l0_sparsity(features: torch.Tensor) -> float:
     return float((features != 0).float().sum(dim=-1).mean())
 
 
+def _render(loaded: LoadedModel, prompts: Sequence[str], render_chat: bool) -> list[str]:
+    """Prompt text as the model will see it.
+
+    **The Base arm of the pre-gate must NOT be chat-templated, and that is not a
+    formatting preference.** Llama Scope's dictionaries were fitted on plain
+    text and the Base checkpoint never saw a chat template in training, so a
+    templated Base run reads the dictionary on a distribution neither it nor the
+    model has ever met — and then reports poor reconstruction as evidence about
+    `models/sae_loader.py`, which is the one thing the Base arm exists to test.
+
+    `conf/models/llama3_1_8b_base.yaml` borrows the Instruct sibling's template
+    to hold the input text fixed across the two arms. That is correct for
+    reading the TRANSFER gap and it silently disables the loader check; the two
+    purposes pull opposite ways and the arm can only serve one at a time.
+
+    Evidence it matters: the templated Base run measures a mean activation norm
+    of 23.7 against the checkpoint's declared 13.8 — special tokens the base
+    model never trained on are exactly what inflates that.
+    """
+    if render_chat:
+        return [prompt.text for prompt in prepare_prompts(loaded, prompts, positions=[])]
+    return list(prompts)
+
+
 def scored_positions(attention_mask: torch.Tensor, *, drop_first_real: bool) -> torch.Tensor:
     """[batch, seq] bool: which positions may enter a reconstruction statistic.
 
@@ -318,6 +342,11 @@ def measure_reconstruction(
     # constant: BOS carries Llama-3.1's massive-activation spike, which the
     # dictionary's dataset-wise normalisation assumes away — see scored_positions
     drop_bos: bool = True,
+    # definitional: which DISTRIBUTION the dictionary is read on. Not a knob for
+    # tuning a number — it decides what the number is ABOUT. Tuning path: none;
+    # the preset declares it and `render_chat: false` is the Base arm's own
+    # training distribution. See `scripts/sae_pregate.py`.
+    render_chat: bool = True,
 ) -> ReconstructionQuality:
     """Run the three checks the foundational paper reports, on OUR model.
 
@@ -332,7 +361,7 @@ def measure_reconstruction(
     ON — a false refusal that cost job `9008483`. Padding and the attention-sink
     spike were in both the numerator and the denominator.
     """
-    rendered = [prompt.text for prompt in prepare_prompts(loaded, prompts, positions=[])]
+    rendered = _render(loaded, prompts, render_chat)
 
     totals = {
         "sq_err": 0.0, "n_tokens": 0.0, "l0": 0.0, "kl_sae": 0.0, "kl_ablated": 0.0,
@@ -477,6 +506,9 @@ def observed_sparsity(
     # constant: must MATCH `measure_reconstruction`'s masking, since the whole
     # point is that the control is sized on the positions the run will score
     drop_bos: bool = True,
+    # definitional: must MATCH `measure_reconstruction`'s rendering for the same
+    # reason — a control sized on a different distribution is not matched.
+    render_chat: bool = True,
 ) -> float:
     """Mean L0 over EXACTLY the positions `measure_reconstruction` will score.
 
@@ -496,7 +528,7 @@ def observed_sparsity(
     is not a second implementation of that rule: `scored_positions` is the single
     home, and this calls it.
     """
-    rendered = [prompt.text for prompt in prepare_prompts(loaded, prompts, positions=[])]
+    rendered = _render(loaded, prompts, render_chat)
     total, counted = 0.0, 0.0
     for start in range(0, len(rendered), batch_size):
         chunk = rendered[start : start + batch_size]

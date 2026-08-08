@@ -69,6 +69,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--outputs-dir", default=None)
     parser.add_argument("--allow-dirty", action="store_true")
     parser.add_argument("--allow-cpu", action="store_true")
+    parser.add_argument(
+        "--plain-text",
+        action="store_true",
+        help="do NOT render prompts through the chat template. The Base arm's own "
+             "training distribution — see measurements.sae_reconstruction._render",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
@@ -80,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"model            {model_config.name}")
         print(f"SAE              Llama Scope layer {args.sae_layer} (~540 MB download)")
         print(f"prompts          {len(prompts)}")
+        print(f"rendering        {'PLAIN TEXT (dictionary training distribution)' if args.plain_text else 'chat template'}")
         # Three passes: clean, SAE-substituted, ablated. Plus the same again for
         # the matched random-dictionary control — priced, because a control the
         # estimate cannot see is a cost nobody approved.
@@ -138,6 +145,7 @@ def main(argv: list[str] | None = None) -> int:
         observed_sparsity(
             loaded, sae, prompts[:16], layer,
             batch_size=model_config.capture_batch_size,
+            render_chat=not args.plain_text,
         )
     )
     print(f"  observed L0 {observed_k} over the SCORED positions "
@@ -153,6 +161,7 @@ def main(argv: list[str] | None = None) -> int:
     quality = measure_reconstruction(
         loaded, sae, prompts, layer=layer, config=measurements.sae, control=control,
         batch_size=model_config.capture_batch_size,
+        render_chat=not args.plain_text,
     )
     verdict = (
         reading(quality, measurements.sae)
@@ -191,6 +200,7 @@ def main(argv: list[str] | None = None) -> int:
                 "nominal_top_k": sae.nominal_top_k,
             },
             "n_prompts": quality.n_prompts,
+            "render_chat": not args.plain_text,
             "provenance": capture_provenance(str(device)),
         },
         readings=verdicts,

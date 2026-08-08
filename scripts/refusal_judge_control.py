@@ -103,7 +103,13 @@ def main(argv: list[str] | None = None) -> int:
     for family, cells in selected.items():
         movable = sum(1 for cell in cells if not cell.get("refused"))
         print(f"  {family:20s} {len(cells):4d}   (arm B movable: {movable})")
-    print(f"judge calls           {judge_calls(total)} (3 conditions x 1 judge)")
+    movable_total = sum(
+        1 for cells in selected.values() for cell in cells if not cell.get("refused")
+    )
+    print(
+        f"judge calls           {judge_calls(total, movable_total)} "
+        f"(anchor {total} + parrot {total} + appended {movable_total}; one judge)"
+    )
     print("GPU                   none — no generation, no model load")
 
     if args.dry_run:
@@ -115,14 +121,27 @@ def main(argv: list[str] | None = None) -> int:
     results = {}
     for family, cells in selected.items():
         triples = [conditions(cell) for cell in cells]
-        verdicts = []
-        for index, arm in enumerate(("anchor", "appended", "parrot")):
+
+        def judged(index: int, subset: list[int]) -> dict[int, bool]:
             items = [
-                JudgeItem(id=f"{cell['prompt_id']}", behavior=cell["plaintext"], response=triple[index])
-                for cell, triple in zip(cells, triples)
+                JudgeItem(
+                    id=str(position),
+                    behavior=cells[position]["plaintext"],
+                    response=triples[position][index],
+                )
+                for position in subset
             ]
-            verdicts.append([verdict.flag for verdict in judge.judge(items)])
-        anchor, appended, parrot = verdicts
+            flags = [verdict.flag for verdict in judge.judge(items)]
+            return dict(zip(subset, flags))
+
+        every = list(range(len(cells)))
+        anchor = [judged(0, every)[i] for i in every]
+        parrot = [judged(2, every)[i] for i in every]
+        # Arm B only where it can move — judging the rest buys nothing, since
+        # its rate is computed over the movable items alone.
+        movable = [i for i in every if not cells[i].get("refused")]
+        appended_by_position = judged(1, movable) if movable else {}
+        appended = [appended_by_position.get(i, False) for i in every]
 
         # The control's own control: the judge must reproduce its recorded
         # verdict on UNMODIFIED text, or every flip measured against it is noise.

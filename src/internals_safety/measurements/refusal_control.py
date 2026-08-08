@@ -191,12 +191,17 @@ def summarize_control(
     )
 
 
-def judge_calls(n_items: int) -> int:
-    """Judge calls this control adds: three conditions, ONE judge (refusal).
+def judge_calls(n_items: int, n_movable: int) -> int:
+    """Judge calls this control adds. ONE judge (refusal), asymmetric arms.
 
-    Priced for the same reason every control here is — and with the correction
-    of 2026-08-07 in mind, which is that a control's own claim about its cost is
-    not evidence. This one genuinely adds no generation: conditions B and C are
-    string edits of text already on disk.
+    Arms A and C are scored over EVERY item; arm B only over the movable ones,
+    because its rate is computed over those alone and judging the rest buys
+    nothing. On the 2026-08-07 run that is 18 movable of 500, so the naive
+    `3 * n` would have spent 482 calls on verdicts no rate would ever read.
+
+    Priced for the same reason every control here is — and with that day's
+    correction in mind, which is that a control's own claim about its cost is
+    not evidence. This one genuinely adds no generation: arms B and C are string
+    edits of text already on disk.
     """
-    return 3 * n_items
+    return 2 * n_items + n_movable

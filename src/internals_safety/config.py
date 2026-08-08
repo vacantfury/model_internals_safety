@@ -938,7 +938,7 @@ Entrypoint = Literal[
 _CONSUMES: dict[str, frozenset[str]] = {
     "phase0_regime_map": frozenset({"target", "families", "n_prompts", "instruments"}),
     "as6_guard_probe": frozenset({"target", "families", "n_prompts", "instruments"}),
-    "sae_pregate": frozenset({"target", "n_prompts", "sae_layers"}),
+    "sae_pregate": frozenset({"target", "n_prompts", "sae_layers", "render_chat"}),
     "relicense_probes": frozenset({"targets", "families", "source_runs"}),
 }
 
@@ -972,6 +972,19 @@ class PresetConfig(StrictModel):
     source_runs: dict[str, str] = Field(default_factory=dict)
     run_name: str | None = None
 
+    # Whether prompts go through the chat template. **Only the SAE pre-gate may
+    # set this, and only because its Base arm has two jobs that pull opposite
+    # ways.** Holding the input text fixed across the Base and Instruct arms
+    # makes the MODEL the single variable — correct for reading the transfer
+    # gap. But Llama Scope's dictionaries were fitted on plain text, and the
+    # Base checkpoint never saw a chat template in training, so the templated
+    # Base arm is out of distribution for both the model and the dictionary and
+    # cannot serve as the check on `models/sae_loader.py` that it is supposed to
+    # be. `false` runs the dictionary on the distribution it was actually fitted
+    # on. Declared in the preset because it changes what the run MEANS, not how
+    # fast it goes.
+    render_chat: bool = True
+
     resources: ResourceConfig
 
     @model_validator(mode="after")
@@ -983,6 +996,12 @@ class PresetConfig(StrictModel):
                          "sae_layers", "source_runs")
             if name not in consumed and getattr(self, name)
         ]
+        # `render_chat` is checked SEPARATELY because its meaningful value is
+        # False, and the truthiness sweep above would wave through
+        # `render_chat: false` on an entrypoint that ignores it -- silently
+        # approving a run whose declared distribution never reached the code.
+        if "render_chat" not in consumed and not self.render_chat:
+            set_but_ignored.append("render_chat")
         if set_but_ignored:
             raise ValueError(
                 f"entrypoint {self.entrypoint!r} ignores {set_but_ignored}; a field the "
@@ -1043,6 +1062,8 @@ class PresetConfig(StrictModel):
             rows = []
             for layer in self.sae_layers:
                 argv = list(base) + ["--sae-layer", str(layer)]
+                if not self.render_chat:
+                    argv += ["--plain-text"]
                 argv += ["--run-name", f"{self.run_name or 'pregate'}-L{layer}"]
                 rows.append(argv + ["--outputs-dir", str(outputs)])
             return rows
