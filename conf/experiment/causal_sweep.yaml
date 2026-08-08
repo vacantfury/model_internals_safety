@@ -26,7 +26,9 @@ gates: >-
 target: llama3_1_8b_instruct
 families: [zero_width, homoglyph, fullwidth]
 n_prompts: 100
-instruments: [causal_license, behavior_control, lexical]
+# behavior_control is NO LONGER declarable — it is mandatory and always runs
+# (TODO 61, 2026-08-07). Declaring it here would now be a schema error.
+instruments: [causal_license, lexical]
 run_name: causal-sweep
 
 resources:

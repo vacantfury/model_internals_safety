@@ -220,8 +220,12 @@ class TestRunFamily:
         assert all("encoded with" in message.lower() for message in batch.user_messages)
 
     def test_judges_saw_the_plaintext_not_the_ciphertext(self, family_result, judges, harmful):
+        # `calls`, not `seen`: since the benign arm became mandatory (TODO 61)
+        # a run judges TWO arms whose prompt ids collide, so the id-keyed `seen`
+        # holds only the benign one. The harmful arm was still judged — the
+        # stub was dropping the record, not the pipeline dropping the call.
         refusal, _ = judges
-        sent = " ".join(refusal.service.seen.values())
+        sent = " ".join(text for _, text in refusal.service.calls)
         assert harmful[0].text in sent
         assert family_result["cells"][0]["ciphertext"] not in sent
 
@@ -916,20 +920,24 @@ class TestBehaviorControlIsWired:
 
     @pytest.fixture
     def with_control(self, pilot, tiny_model, monkeypatch, tmp_path):
-        return self._run(
-            pilot, tiny_model, monkeypatch, tmp_path, "behavior_control", "bc_on"
+        """No `instruments` argument: the control is MANDATORY since TODO 61."""
+        return self._run(pilot, tiny_model, monkeypatch, tmp_path, None, "bc_on")
+
+    def test_it_runs_without_being_asked_for(self, with_control):
+        """⚠️ TODO 61. It was opt-in, so it had never run — every (B) and (S)
+        count this repo reported was measured without it, and its first
+        execution failed on all three sound rungs. A control that costs no GPU
+        and decides whether the headline number may be reported does not belong
+        behind a flag."""
+        behavior = next(
+            r for r in with_control["readings"] if r["instrument"] == "behavior"
         )
+        assert "judge_benign_arm" in [s["name"] for s in behavior["controls"]]
 
-    @pytest.fixture
-    def without_control(self, pilot, tiny_model, monkeypatch, tmp_path):
-        return self._run(pilot, tiny_model, monkeypatch, tmp_path, None, "bc_off")
-
-    def test_a_run_WITHOUT_the_control_withholds_every_behaviour_number(self, without_control):
-        """⚠️ The point of making it REQUIRED. Before TODO 38 a behaviour reading
-        with no control at all looked exactly like one whose control passed."""
-        withheld = without_control["withheld"]
-        assert "behavior" in withheld
-        assert any("NOT RUN" in why for why in withheld["behavior"])
+    def test_it_cannot_be_declared_as_an_instrument_any_more(self, pilot):
+        """The escape hatch is GONE, not merely defaulted on. A preset naming it
+        must fail loudly rather than silently meaning nothing."""
+        assert "behavior_control" not in pilot.OPTIONAL_INSTRUMENTS
 
     def test_the_control_runs_the_judges_on_the_BENIGN_arm(self, with_control):
         behavior = next(
@@ -956,17 +964,18 @@ class TestBehaviorControlIsWired:
         )
         assert behavior["detail"]["benign_arm_refusal_rate"] == 1.0
 
-    def test_it_is_OFF_by_default_because_it_costs_judge_money(self, pilot):
+    def test_it_is_PRICED_by_default_because_it_always_runs(self, pilot):
+        """It used to return 0 unless declared, which meant the approval gate
+        could be shown an estimate excluding the one control the headline number
+        depends on."""
         config = load_model_config("qwen2_5_0_5b_instruct")
         plan = pilot.build_plan(config, ["base64"], n_prompts=10)
-        assert plan.behavior_control_judge_calls == 0
+        assert plan.behavior_control_judge_calls == 2 * 10 * 1
 
     def test_the_dry_run_prices_it_as_judge_calls_not_forward_passes(self, pilot):
         """The only control on the roster that lands on the API bill rather than
         the cluster allocation, so it has to be priced in its own units."""
         config = load_model_config("qwen2_5_0_5b_instruct")
-        plan = pilot.build_plan(
-            config, ["base64", "rot13"], n_prompts=10, instruments=["behavior_control"]
-        )
+        plan = pilot.build_plan(config, ["base64", "rot13"], n_prompts=10)
         assert plan.behavior_control_judge_calls == 2 * 10 * 2
         assert "benign judge calls" in plan.describe(MEASUREMENTS)

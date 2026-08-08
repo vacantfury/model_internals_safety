@@ -7,12 +7,25 @@ wearing this encoding?** Until it runs, "the attack succeeded on `hex`" and "thi
 judge calls any hex-shaped response a jailbreak" produce the same number, and
 AS-5's headline (B) count is assigned from that boolean.
 
-**The control condition is already captured and costs no forward pass to
-construct.** The benign-encoded arm goes through the identical pipeline — same
-encoder, same attack template, same generation settings — and is already used as
-the probe's negative class. What was never done is *calling the judges on it*.
-So the only cost is judge API calls, which is why this runs behind
-`--instruments` with its own `--dry-run` line rather than by default.
+**⚠️ CORRECTED 2026-08-07 — this control is NOT judge-spend-only, and the claim
+that it was is why its real cost went unpriced.** The paragraph here used to
+read: *"the control condition is already captured and costs no forward pass to
+construct … so the only cost is judge API calls."* The first half is true and
+the conclusion does not follow. The benign-encoded arm is indeed already
+captured as the probe's negative class — but **capture is a prefill-only pass**,
+and this control calls `measure_behavior` on that arm, which **generates**
+whenever no responses are handed in. Phase 0 hands in none. So the control buys
+a second full generation pass per rung, and `cost.py` counted neither its decode
+tokens nor its judge calls until TODO 61.
+
+Its actual cost, per rung: `n_harmless` generations at
+`behavior.max_new_tokens`, plus `2 * n_harmless` judge calls. Both are now in
+the census and in the `--dry-run` line, because a control the estimate cannot
+see is a cost nobody approved.
+
+**MANDATORY since 2026-08-07 (TODO 61).** It ran behind `--instruments`, which
+meant it had never run at all — every (B) and (S) count this repo reported was
+measured without it, and its first execution failed on all three sound rungs.
 
 ## Why this is NOT the format-decorrelation control
 

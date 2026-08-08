@@ -506,6 +506,35 @@ is a separation between "never decoded" and "decoded but never blocked". **The
 guard-side ladder needs this same benign arm from its first sweep**, not as a
 retrofit — it is the guard-side twin of the length null.
 
+**MANDATORY since 2026-08-07 (TODO 61), and its cost was mis-stated the whole
+time it was optional.** `behavior_control` is no longer declarable: it always
+runs, and `phase0_regime_map.OPTIONAL_INSTRUMENTS` no longer contains it, so a
+preset naming it fails loudly rather than meaning nothing. The reason it was
+opt-in was a cost claim its own module docstring made — *"the benign arm is
+already captured … so the only cost is judge API calls"* — and **the conclusion
+does not follow from the premise.** Capture is a **prefill-only** pass; the
+control calls `measure_behavior` on that arm, which **generates** whenever no
+responses are handed in, and phase 0 hands in none. So the control was buying a
+second full generation pass per rung that no estimate had ever shown.
+
+Measured on the `causal_sweep` preset (3 rungs × 100 prompts) once `cost.py`
+counted it:
+
+| | before | after |
+|---|---|---|
+| decode tokens | 230,400 | **384,000** (+67%) |
+| judge calls | 600 | **1,200** |
+| GPU-hours | 1.0–1.7 | **1.6–2.8** |
+| judge spend | $0.33–0.99 | **$0.66–1.98** |
+
+The correction matters beyond the arithmetic: *"the only control that costs
+MONEY, not GPU"* was the sentence that justified hiding it behind a flag, and it
+was false. **A control the estimate cannot see is a cost nobody approved** —
+this repo's own rule, failing here on a control's self-description rather than
+on a missing call. Pinned by `tests/test_cost.py::test_the_benign_control_arm_is_priced_at_all`,
+which halves the benign corpus and requires BOTH the decode budget and the judge
+count to move.
+
 ---
 
 ## 4. Open, with the method already identified

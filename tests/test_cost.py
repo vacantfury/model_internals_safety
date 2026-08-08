@@ -62,15 +62,39 @@ class TestCensus:
         census = census_phase0(
             count_chars, harmful, harmless, load_ladder(), ["base64", "rot13"], MEASUREMENTS, 500
         )
-        # 2 families x 4 harmful prompts x (100 restate + 200 attack).
-        assert census.decode_tokens == 2 * 4 * 300
+        # 2 families x [4 harmful x (100 restate + 200 attack)
+        #               + 4 BENIGN x 200 attack].
+        #
+        # The benign term was missing until 2026-08-07 (TODO 61).
+        # `behavior_control` claimed to cost judge calls only, on the grounds
+        # that the benign arm is already captured — but capture is prefill-only
+        # and the control calls `measure_behavior`, which GENERATES. It was
+        # buying a second generation pass no estimate showed.
+        assert census.decode_tokens == 2 * (4 * 300 + 4 * 200)
 
     def test_two_judges_per_attack_response(self, prompts):
         harmful, harmless = prompts
         census = census_phase0(
             count_chars, harmful, harmless, load_ladder(), ["base64", "rot13"], MEASUREMENTS, 500
         )
-        assert census.judge_calls == 2 * 2 * 4
+        # 2 judges x 2 families x (4 harmful + 4 benign). The benign arm is
+        # measurement #4's mandatory control and is judged by the same two.
+        assert census.judge_calls == 2 * 2 * (4 + 4)
+
+    def test_the_benign_control_arm_is_priced_at_all(self, prompts):
+        """⚠️ Pinned as its own test because its absence was invisible for as
+        long as the control was opt-in. Halving the corpus's benign half must
+        move BOTH the decode budget and the judge count; if either is unmoved,
+        the control has gone unpriced again."""
+        harmful, harmless = prompts
+        full = census_phase0(
+            count_chars, harmful, harmless, load_ladder(), ["base64"], MEASUREMENTS, 500
+        )
+        halved = census_phase0(
+            count_chars, harmful, harmless[:2], load_ladder(), ["base64"], MEASUREMENTS, 500
+        )
+        assert halved.judge_calls < full.judge_calls
+        assert halved.decode_tokens < full.decode_tokens
 
     def test_inflation_reaches_the_estimate(self, prompts):
         """The load-bearing property: the ciphertext drives prompt length, so a

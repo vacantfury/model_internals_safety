@@ -175,8 +175,26 @@ OPTIONAL_INSTRUMENTS = (
     "reply_inversion",
     "attribution",
     "lexical",
-    "behavior_control",
 )
+
+# ⚠️ `behavior_control` WAS on that list until 2026-08-07 and is now MANDATORY —
+# it always runs and cannot be declared, deselected, or forgotten (TODO 61).
+#
+# It was opt-in because it is the only control that costs money rather than GPU.
+# The consequence was that it had never run at all: every (B) and (S) count this
+# repo reported was measured without it. Its first execution (job `9008632`)
+# failed on all three sound rungs and INVERTED on `fullwidth`, where the binary
+# judge called benign-encoded responses jailbreaks at 0.28 against 0.12 for
+# harmful ones. Until it runs, "the attack succeeded here" and "this judge says
+# yes to anything wearing this encoding" are the same number.
+#
+# Making it opt-in was the error, and the cost argument that justified it was
+# wrong in both directions: the benign arm is ALREADY captured and ALREADY
+# generated as the probe's negative class, so this buys judge calls only — no
+# GPU, no wall-clock, nothing that competes for a cluster allocation. Against
+# that, a run without it produces an ASR the contract must withhold, which is a
+# run that paid for GPU hours and cannot report its headline number.
+MANDATORY_JUDGE_CONTROL = "behavior_control"
 
 # FAIL-SAFE DEFAULT — the live value is `causal_license.max_sweep_layers` in
 # conf/measurements.yaml, and every real call passes it. Kept so `Plan` is
@@ -361,9 +379,13 @@ class Plan:
         probes; what this pays for is calling the two judges on it. Priced here
         because a control the estimate cannot see is a cost nobody approved —
         and this one lands on the API bill, not the cluster allocation.
+
+        **Unconditional since 2026-08-07 (TODO 61).** There is no branch left to
+        take: the control always runs, so the approval gate always sees its
+        cost. The conditional that used to be here is how a run could be
+        approved on an estimate that excluded the one control its headline
+        number depends on.
         """
-        if "behavior_control" not in self.instruments:
-            return 0
         return behavior_control_judge_calls(self.n_prompts, len(self.families))
 
     @property
@@ -415,8 +437,10 @@ class Plan:
                 f"({self.causal_candidates} candidate directions x 3 passes + 2 baselines, "
                 "model-level not per-family)",
                 f"  benign judge calls  {self.behavior_control_judge_calls} "
-                "(measurement #4's negative control — 2 judges x the benign-encoded "
-                "arm; the only control that costs MONEY, not GPU)",
+                "(measurement #4's negative control, MANDATORY — 2 judges x the "
+                "benign-encoded arm, PLUS a generation pass over that arm: it was "
+                "labelled 'costs MONEY, not GPU' until 2026-08-07 and that was "
+                "wrong, the arm is captured but not generated)",
                 f"  lexical passes      {self.lexical_capture_passes} "
                 "(XSTest control, corpus captured ONCE per model — the deployment "
                 "probe is plain-fitted, so it is the same probe for every rung)",
@@ -867,15 +891,14 @@ def run_family(
     # Measurement #4's negative control (TODO 38): the SAME two judges on the
     # benign-encoded arm. Without it, "the attack succeeded on this rung" and
     # "this judge says yes to anything wearing this encoding" are the same
-    # number. Behind `--instruments` because it is the one control that costs
-    # money — the arm is already captured and already generated, so what is paid
-    # for is the judge calls.
-    benign_behavior_records = (
-        measure_behavior(
-            loaded, encoded_harmless, refusal_judge, harm_judge, measurements.behavior
-        )
-        if "behavior_control" in instruments
-        else []
+    # number. It is the one control that costs money rather than GPU — the arm
+    # is already captured and already generated, so what is paid for is only the
+    # judge calls.
+    # MANDATORY since 2026-08-07 (TODO 61) — no `if` here on purpose. See
+    # MANDATORY_JUDGE_CONTROL: this was behind `--instruments`, so it had never
+    # run, so no ASR this repo has published was ever screened against it.
+    benign_behavior_records = measure_behavior(
+        loaded, encoded_harmless, refusal_judge, harm_judge, measurements.behavior
     )
 
     # The length-MATCHED permutation null, from the exact ciphertexts this rung

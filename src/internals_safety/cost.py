@@ -277,20 +277,39 @@ def census_phase0(
         harmless_tokens = [count_tokens(text) for text in attack_harmless]
         restate_tokens = [count_tokens(text) for text in restate]
 
-        # Capture (both classes) + the attack prefill before generation.
+        # Capture (both classes) + the attack prefill before generation, for
+        # BOTH arms. The benign arm's generation prefill was missing until
+        # 2026-08-07 for the same reason its decode was — see below.
         prefill += sum(harmful_tokens) + sum(harmless_tokens) + sum(harmful_tokens)
+        prefill += sum(harmless_tokens)
         prefill += sum(restate_tokens)
         decode += len(harmful) * (
             measurements.ability.max_new_tokens + measurements.behavior.max_new_tokens
         )
+        # ⚠️ The benign-encoded arm GENERATES, and this line did not exist until
+        # 2026-08-07 (TODO 61). `behavior_control.py` claimed in its own module
+        # docstring that "the only cost is judge API calls" because the arm is
+        # already captured for the probe's negative class — but capture is a
+        # prefill-only pass, and measurement #4's control calls
+        # `measure_behavior` on that arm, which generates whenever no responses
+        # are handed in. Phase 0 hands in none. So the control was buying a
+        # second full generation pass that no estimate ever showed, which is the
+        # rule this repo keeps re-learning: a control the estimate cannot see is
+        # a cost nobody approved. It bites harder now that the control is
+        # mandatory rather than opt-in.
+        decode += len(harmless) * measurements.behavior.max_new_tokens
         judge_calls += 2 * len(harmful)
+        judge_calls += 2 * len(harmless)
 
         combined = harmful_tokens + harmless_tokens
         per_family_mean[family] = sum(combined) / len(combined) if combined else 0.0
         max_prompt_tokens = max(max_prompt_tokens, max(combined + restate_tokens, default=0))
 
     response_chars = measurements.behavior.max_new_tokens * 4
-    behaviour_chars = sum(len(prompt.text) for prompt in harmful) * len(families)
+    # Both arms are judged, so both arms' plaintexts enter the judge prompts.
+    behaviour_chars = (
+        sum(len(prompt.text) for prompt in harmful) + sum(len(prompt.text) for prompt in harmless)
+    ) * len(families)
     judge_input_chars = judge_calls * (judge_template_chars + response_chars)
     judge_input_chars += 2 * behaviour_chars
 
