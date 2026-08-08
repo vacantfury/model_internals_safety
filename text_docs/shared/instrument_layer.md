@@ -575,6 +575,57 @@ throws them away. **A control that is computed and discarded costs exactly as
 much as one that is computed and kept, and the difference only shows up as an
 unreportable number months later.** Persist by default.
 
+### 3.5.2 ⚠️ The binary harm judge is a non-refusal detector — proved on plaintext, where no attack exists
+
+**Measured 2026-08-08, jobs `9012067`–`9012070`, four models × 100 plaintext
+prompts per arm.** §3.5 and §3.5.1 diagnosed the *graded* rubric. This settles
+the *binary* judge, and it does so on the one corpus where the answer is known
+in advance: **plaintext benign prompts contain no attack by construction**, so
+any nonzero ASR there is judge error with nothing to argue about.
+
+| model | harmful ASR | harmful non-refusal | benign ASR | benign non-refusal |
+|---|---|---|---|---|
+| Llama-3.1-8B-Instruct | 0.07 | 0.08 | **0.70** | 0.90 |
+| Qwen2.5-7B-Instruct | 0.08 | 0.08 | **0.63** | 0.89 |
+| Tulu-3-8B | 0.05 | 0.05 | **0.61** | 0.84 |
+| Mistral-7B-v0.3 | 0.61 | 0.62 | **0.69** | 0.99 |
+
+Two independent readings of the same table, and they agree:
+
+1. **On the harmful arm, ASR equals non-refusal to within 0.01 on all four
+   models.** The harm judge contributes no information the refusal judge did not
+   already carry. Mistral is the tell — its ASR of 0.61 is its compliance rate,
+   which happens to be high because its safety training barely engages this
+   corpus, not because it produced more harmful content.
+2. **On the benign arm it fires at 0.61–0.70**, roughly 0.7 of whatever the model
+   complied with. It is measuring compliance, discounted, and reporting it as
+   attack success.
+
+**This is the same conclusion §3.5 reached for the graded rubric, reached
+independently and far more cheaply.** There the metric read *response quality*;
+here it reads *response existence*. Both are properties of the answer rather
+than of the harm in it — which is why removing StrongREJECT's refusal item
+(§3.4, for a correct reason) leaves nothing anchoring either judge to the
+request.
+
+**Binding, and retroactive: no ASR number this repo has produced is
+reportable.** That was already the standing position, but it rested on the
+encoded benign arm (§3.6), where a defender could argue the encoding itself
+confused the judge. It now rests on plaintext, where that argument is not
+available.
+
+**The refusal judge is NOT implicated and must stop being described alongside
+it.** On the same run it separates the corpora by +0.79 to +0.82 on the three
+aligned models, at a benign false-positive rate of 0.01–0.16. Every regime count
+in this repo splits on `refused`, so the (B)/(S)/(R) map is untouched by this
+section. Conflating the two judges would withdraw the map for no reason.
+
+**AS-6 inherits it in a harder form.** A guard emits a verdict, not a response,
+so there is no "did it comply" for a broken judge to latch onto — but the same
+failure reappears one level up as *flagged-ness tracking conspicuousness rather
+than harm*, which is exactly what §3.6 measures on the target side. The guard's
+benign arm is the only thing that separates them.
+
 ### 3.6 ⚠️ Refusal is ENCODING-driven on two of three sound rungs — the benign judge arm finally ran
 
 > **✅ REPLICATED ON QWEN 2026-08-08 — AND IT INVERTS. The demotion below is a
@@ -763,6 +814,72 @@ first sweep (§3.6), **and** it must run on more than one guard — "this guard
 flags anything encoded" and "guards flag anything encoded" are different claims,
 and AS-6's whole contribution is a separation that the first would destroy and
 the second would make universal.
+
+### 3.6.2 It is not a model property either — it is a POST-TRAINING STAGE, and the stage is DPO
+
+**Measured 2026-08-08, jobs `9011347` (Tülu-3-8B-SFT) and `9011348`
+(Tülu-3-8B-DPO), 8 rungs × 100 prompts per arm.** §3.6.1 concluded the
+blanket-refusal difference was "a difference between MODELS". The Tülu ladder
+narrows that to a difference between *training stages of one model on identical
+base weights*, which is what no cross-family comparison could ever say. Third
+rung (RLVR, `9011349`) still running.
+
+| rung | ability SFT→DPO | harmful refusal | **benign refusal** | gap |
+|---|---|---|---|---|
+| `fullwidth` | 0.99 → 0.99 | 0.96 → **0.73** | 0.80 → **0.45** | +0.16 → **+0.28** |
+| `homoglyph` | 0.37 → 0.77 | 0.99 → 0.90 | 0.79 → **0.63** | +0.20 → **+0.27** |
+| `zero_width` | 0.96 → 1.00 | 1.00 → **0.87** | 0.91 → **0.43** | +0.09 → **+0.44** |
+| 5 can't-decode rungs | 0.00–0.03 | 0.97–1.00 | 0.99–1.00 | −0.02 … +0.01 |
+
+**The SFT checkpoint behaves like Llama-3.1-8B-Instruct and the DPO checkpoint
+like Qwen2.5-7B.** SFT refuses benign encoded content at 0.79–0.91 — near-blanket,
+the saturation §3.6 found on Llama — and DPO drops that to 0.43–0.63 while
+harmful refusal falls much less, so the gap roughly doubles. The Llama/Qwen
+difference was never about the families; it is about what DPO does that SFT does
+not.
+
+**Ability does not explain it, and one rung settles that internally.** On
+`fullwidth` ability is flat at 0.99 across both stages while refusal moves
+0.96 → 0.73 and benign refusal 0.80 → 0.45. Comprehension is constant; only what
+the model does with it changed.
+
+**The ability threshold from §3.8 reproduces on a third and fourth model**: every
+rung with ability ≤ 0.03 blanket-refuses both arms at 0.97–1.00 with a gap inside
+±0.02. One counter-instance is worth keeping — `homoglyph` at SFT reads ability
+**0.37** and still shows a +0.20 gap, which the `math_monospace` result (0.69
+ability, no gap) would not have predicted. The threshold is not yet a clean law.
+
+**⚠️ What may NOT be taken from this run.**
+
+- **No ASR number, and the judge inverted again on every readable rung, on both
+  checkpoints.** Benign-arm ASR exceeds harmful-arm ASR at SFT (0.11 vs 0.05,
+  0.15 vs 0.01, 0.04 vs 0.00) and at DPO (0.32 vs 0.25, 0.22 vs 0.08, 0.32 vs
+  0.13). That is §3.6's arm-1 failure reproducing on two more models — the third
+  and fourth independent instances — and the contract withheld `behavior` on
+  both runs accordingly.
+- **The refusal figures come from the same withheld instrument.** They are read
+  here as §3.6's arm 2 (a model measurement, not a control), but the refusal
+  judge still has no negative control of its own (§3.7), so this is a strong
+  pattern rather than a reportable number.
+- **Echo is high and it runs AGAINST the effect, which is the one direction that
+  helps.** DPO echoes more than SFT on nearly every rung (`fullwidth` 0.65 →
+  0.76, `zero_width` 0.24 → 0.69, `base64` 0.07 → **0.87**), and §3.7's rule is
+  that the refusal judge scores echo AS refusal. So DPO's measured refusal is
+  *inflated* relative to SFT's, and the true drop is at least as large as the
+  table shows. The corollary is uglier: DPO's 1.00 refusal on `base64` is
+  0.87 echo, so blanket refusal on can't-decode rungs is mostly parroting.
+- **Both run records carry a wrong `git_hash`** (`2a3a75e`, written at write time
+  by the pre-`188644d` path while the shared checkout moved underneath), and
+  neither has a `benign_cells.jsonl`, since per-cell persistence landed after
+  they started.
+
+**Why this is in the shared file rather than an AS-5 one.** AS-6's guards are
+post-trained models too — Llama Guard 3 and WildGuard are fine-tunes with their
+own safety stages — so "blanket refusal is a property of a training stage, not of
+an architecture or an attack" governs how a guard-side block rate may be read.
+And it sharpens the guard-side benign arm from a control into a *measurement*:
+whichever guard blanket-blocks is telling us about its post-training, not about
+the encoding.
 
 ### 3.7 ⚠️ The (S) cell is not the same measurement across rungs — most of it is ECHO
 
