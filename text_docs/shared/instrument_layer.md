@@ -581,6 +581,56 @@ nulls". The attenuating side is precisely what this repo measures.
 
 ---
 
+### 4.4 The SAE pre-gate's failure is NOT the normalisation — measured, job `9009119`
+
+I4's pre-gate refuses on Llama-3.1-8B-**Base**, the model Llama Scope was fitted
+on, where a dictionary cannot fail to transfer. Three suspects were named in
+`models/sae_loader.py` before any of them was measured. **One is now excluded.**
+
+The loader normalises by `sqrt(d_model) / input_norm`, taking `input_norm` from
+the checkpoint's `dataset_average_activation_norm`. That is a claim about *our*
+activations, and it went unchecked until the run record was made to carry the
+observed norm beside the declared one:
+
+| our layer | observed norm | declared | ratio |
+|---|---|---|---|
+| 18 | 23.71 | 13.8125 | **1.72** |
+| 20 | 26.92 | 17.125 | **1.57** |
+| 22 | 30.71 | 21.5 | **1.43** |
+
+**~1.5x, not the ~5x a scale bug would need.** Two further points argue this is
+corpus difference rather than a defect: the declared norm is **per layer** (not
+the single 13.8125 quoted elsewhere in this repo), and the ratio *falls*
+monotonically with depth while both norms rise — the shape of a systematic
+distribution offset between their training corpus and our chat-templated prompts,
+not of an arithmetic error.
+
+**What the same run localises instead.** Per-token reconstruction error is
+`sqrt(mse)` = 2128.6 against an activation norm of 23.7 — the round trip emits a
+vector **~90x too large**. An input off by 1.7x cannot become an output off by
+90x through a linear decoder. The amplification is *inside* the round trip, and
+`l0 = 549` against the checkpoint's nominal `top_k: 50` says where: ~11x too many
+features are selected, and the reconstruction is their sum.
+
+That promotes the loader's **trap #3** — `act_fn: jumprelu` versus the `top_k: 50`
+"leftover" in the same hyperparams file — from a footnote to the leading
+hypothesis. The jumprelu reading was *derived* from the artifact (threshold
+magnitude, decoder-bias norm), never verified against upstream's forward pass.
+If the dictionary is really TopK-50 and we apply a jumprelu threshold, we select
+549 features where 50 were intended, which is exactly this failure.
+
+**The cheap decisive test is ours, not theirs:** switch the selection rule and
+re-run the same preset. Reading `OpenMOSS/Language-Model-SAEs` would also settle
+it, but the experiment tests OUR pipeline end to end where their source only
+tells us what to re-derive.
+
+Corollary already visible in the artifacts and not yet explained: `sae.observed_l0`
+(167/140/92) and `readings[].detail.l0` (549/563/539) disagree **by ~4x within a
+single run record**. Both exceed nominal 50. Two L0s from one run is its own
+defect and may share this root cause.
+
+---
+
 ## 5. Known anomaly, unexplained
 
 On Llama-3.1-8B the **recognition** probe licenses on `reverse_characters`
