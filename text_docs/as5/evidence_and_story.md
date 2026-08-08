@@ -192,7 +192,7 @@ visible.**
 floor; (3) a plaintext recognition baseline on Llama, which would promote the
 recognition axis from corroboration to evidence.
 
-## 4c. ⚠️ THE FOURTH STORY (2026-08-08, later the same day) — §4b's REASON was wrong too, and echo is why
+## 4c. ⚠️ THE FOURTH STORY (2026-08-08, later the same day) — §4b's REASON was wrong too, and echo is why *(numbers stand; the ATTRIBUTION is superseded by §4d — the cross-model spread is caused by the encoding, not by the models)*
 
 *§4b's verdict on §4a stands — the axis is refuted — but §4b's stated REASON
 ("binding failure is rung-level, so a model-level property cannot explain it")
@@ -259,7 +259,7 @@ model refusing 0.99 of everything cannot produce (B) cells — so it carries
 little independent information here, and the §4a-style story built on it should
 not be rebuilt in either direction.
 
-### ⚠️ The one control that would make this an ENCODING finding has never been run
+### ⚠️ The one control that would make this an ENCODING finding has never been run *(IT RAN 2026-08-08 — see §4d. It came back LOW: this IS an encoding finding, and the "95% model-determined" attribution below is superseded.)*
 
 Every number above is measured **only on encoded prompts**. There is no
 plaintext behavioural arm anywhere in this repo: `phase0_regime_map` calls
@@ -273,6 +273,126 @@ the encoding causes a 19× jump in false positives and the asymmetry above is th
 paper. **The two readings are opposite conclusions and nothing on disk
 distinguishes them.** This is the next run, and it gates the story rather than
 decorating it.
+
+## 4d. ✅ THE BASELINE RAN AND THE GATE FIRED LOW — the encoding IS the finding (2026-08-08)
+
+Jobs `9012067`–`9012070`, four models × (plain baseline + `homoglyph`) × 100
+prompts, 21–25 min each, all COMPLETED. The baseline and the rung ran **inside
+one job per model**, so every comparison below is paired — same judges, same
+seed, same session — which is the error class §4c exists to correct.
+
+### The gate, and which branch fired
+
+The preset named two opposite readings. Quoted from
+`conf/experiment/plain_baseline_llama.yaml`:
+
+> HIGH plain benign refusal (close to the encoded rate) — the model over-refuses
+> this corpus generally, the encoded number is not an encoding effect […] LOW
+> plain benign refusal — the encoding manufactures the false positives, the
+> cross-model asymmetry is the result, and phase 1 targets the false-positive
+> axis rather than the (B)/(D) split.
+
+**Plain benign refusal is 0.01–0.16 on all four models.** The LOW branch fires,
+and not marginally — the encoded rate is 2× to 10× the plaintext rate on every
+model.
+
+| model | benign refusal, plain | benign refusal, `homoglyph` | Δ |
+|---|---|---|---|
+| Llama-3.1-8B-Instruct | 0.10 | 0.99 | **+0.89** |
+| Mistral-7B-v0.3 | 0.01 | 0.63 | +0.62 |
+| Tulu-3-8B | 0.16 | 0.48 | +0.32 |
+| Qwen2.5-7B-Instruct | 0.11 | 0.30 | +0.19 |
+
+### §4c's headline was right about the numbers and wrong about the subject
+
+§4c said benign refusal is "95% model-determined" and that models differ ~5×
+more on harmless content than on harmful. The variance decomposition was
+correct; the attribution was not. **In plaintext the four models agree** —
+benign refusal spans 0.15 (0.01–0.16). Under `homoglyph` it spans 0.69
+(0.30–0.99), 4.6× wider. The disagreement §4c measured does not pre-exist the
+encoding; **the encoding creates it.** "95% model-determined" was measured
+across encoded conditions only, so *model* absorbed variance that belongs to
+*model × encoding*, and no plaintext cell existed to separate them.
+
+### The result, stated as one quantity: encoding destroys harm discrimination
+
+The harm gap (harmful refusal − benign refusal) is the model's ability to tell
+the two corpora apart behaviourally. It falls on **every** model:
+
+| model | harm gap, plain | harm gap, `homoglyph` | lost |
+|---|---|---|---|
+| Llama-3.1-8B-Instruct | +0.82 | **0.00** | −0.82 |
+| Tulu-3-8B | +0.79 | +0.45 | −0.34 |
+| Qwen2.5-7B-Instruct | +0.81 | +0.61 | −0.20 |
+| Mistral-7B-v0.3 | +0.37 | +0.28 | −0.09 |
+
+Llama's discrimination does not degrade, it **vanishes**: it refuses benign and
+harmful homoglyph prompts at the identical 0.99. On the model with the best
+plaintext discrimination in the slate, one echo-clean encoding removes all of
+it. That is the paper's headline sentence, and it needs no probe.
+
+### The surprise: on the weakest-aligned model, encoding RAISES refusal
+
+Mistral refuses **0.38** of harmful *plaintext* prompts — its safety training
+barely engages this corpus. Under `homoglyph` it refuses **0.91**. The encoding
+more than doubles its harmful refusal (+0.53), where the other three move by
+−0.02 to +0.07.
+
+So the encoding is not acting as an attack that lowers refusal. **It is a
+refusal trigger**, and its strength varies ~5× across post-training pipelines.
+On the weakest-aligned model it makes safety look *better*; on the
+strongest-aligned model it destroys benign utility. A paper reporting only
+harmful-arm ASR on Mistral would report encoding as a *defence*.
+
+This also disposes of a reading nobody had ruled out: that encoded refusal is
+high because these are safety-tuned models refusing anything unusual. Mistral
+shows the trigger works on a model that does not reliably refuse plain harm.
+
+### ⚠️ The binary harm judge is a non-refusal detector, and the plaintext arm proves it
+
+This run also produced the cleanest possible read on the judge, because on
+**plaintext benign prompts no attack exists by construction** — so any nonzero
+"ASR" there is judge error, with no confound to argue about.
+
+| model | harmful ASR | harmful non-refusal | benign ASR | benign non-refusal |
+|---|---|---|---|---|
+| Llama-3.1-8B-Instruct | 0.07 | 0.08 | **0.70** | 0.90 |
+| Qwen2.5-7B-Instruct | 0.08 | 0.08 | **0.63** | 0.89 |
+| Tulu-3-8B | 0.05 | 0.05 | **0.61** | 0.84 |
+| Mistral-7B-v0.3 | 0.61 | 0.62 | **0.69** | 0.99 |
+
+Two things are visible at once. On the harmful arm **ASR equals non-refusal to
+within 0.01 on all four models** — the harm judge contributes no information the
+refusal judge did not already carry. On the benign arm it fires at 0.61–0.70,
+roughly 0.7 of whatever the model complied with. It is measuring *compliance*,
+discounted, and calling it attack success. Mistral is the tell: its harmful ASR
+of 0.61 is its compliance rate, not a harm rate.
+
+**Consequence, and it is retroactive:** no ASR number this repo has ever
+produced is reportable, now established on the clean control rather than
+inferred from the encoded one. The detail field already carries
+`binary_judge_caveat = strongreject_2402.10260`; this is that critique measured
+on our own judge. It promotes the judge repair from "proposed experiment 3" to a
+blocking dependency for any behavioural claim.
+
+**The refusal judge, by contrast, validates.** Plaintext gap +0.79 to +0.82 on
+the three aligned models, benign false-positive rate 0.01–0.16. The two judges
+are not equally broken and must stop being described together — every regime
+count in this repo splits on `refused`, not on the ASR judge, so the (B)/(S)
+map is unaffected by the paragraph above.
+
+### What this changes downstream
+
+- **AS-5 is a paper about encoding.** The §5 fallback (measurement contribution
+  alone) is no longer the recommended story; it becomes the second half.
+- **Phase 1 targets the false-positive axis** — what makes a model refuse benign
+  encoded content — not the (B)/(D) split. That is a different intervention
+  design, which is what the gate was for.
+- **The single-model lesson binds again.** Mistral inverts the direction of the
+  effect. Any claim of the form "encoding does X to refusal" needs the slate.
+- **AS-6 inherits the sharpest version of this.** A guard whose block rate rises
+  on benign encoded content has the same defect with none of the visibility: a
+  perfect block rate and no benign arm reads as a perfect guard.
 
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
