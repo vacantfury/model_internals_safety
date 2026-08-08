@@ -99,7 +99,7 @@ that survived screening.
 
 ## 4a. ⚠️ THE STORY, THIRD VERSION (2026-08-08) — the dissociation is the paper
 
-> ### ⛔ SUPERSEDED THE SAME DAY BY §4b — THE AXIS BELOW IS REFUTED
+> ### ⛔ SUPERSEDED — read §4c (which also withdraws §4b's reasoning)
 >
 > The third and fourth model arms ran (jobs `9010897` Mistral, `9011034`
 > Tulu-3) and the gate the presets declared fired **against** this section.
@@ -192,7 +192,89 @@ visible.**
 floor; (3) a plaintext recognition baseline on Llama, which would promote the
 recognition axis from corroboration to evidence.
 
-## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08)
+## 4c. ⚠️ THE FOURTH STORY (2026-08-08, later the same day) — §4b's REASON was wrong too, and echo is why
+
+*§4b's verdict on §4a stands — the axis is refuted — but §4b's stated REASON
+("binding failure is rung-level, so a model-level property cannot explain it")
+does not survive a balanced re-analysis, and I withdraw it. Both §4a and §4b
+made the same class of error one level apart: **comparing cells that are not
+the same measurement.** §3.7 had already established why, and neither applied
+it.*
+
+### The error, stated once
+
+§4a compared **Llama on `fullwidth`-family rungs** against **Qwen on
+`fullwidth`/`homoglyph`/`zero_width`** — different rung sets. §4b then
+"corrected" it with a variance decomposition over 12 cells in which Llama
+contributed 5 rungs and Qwen and Mistral 2 each — an unbalanced design, whose
+within-model term is inflated by whichever model happens to have the most rungs.
+Rebalanced to the rungs all four models measured soundly, the verdict flips:
+
+| quantity (balanced 4 models × 2 rungs) | MODEL | RUNG | INTERACTION |
+|---|---|---|---|
+| harmful refusal | 52% | 13% | 35% |
+| benign refusal | **95%** | 0% | 4% |
+| binding failure B/(B+S) | 43% | 21% | 36% |
+
+Binding failure is not "rung-level". It has **no clean attribution at all** —
+its interaction term equals its rung term, and the rung effect changes SIGN
+across models (`homoglyph`→`zero_width`: Mistral **+0.588**, Llama +0.090, Tulu
++0.129, Qwen **−0.062**). No single ordering of models by binding failure exists.
+
+### And then echo removes most of the remaining cells
+
+Echo (P) — the model reproducing the ciphertext, which the refusal judge scores
+as a refusal — is **rung-driven and enormous**, measured across all four models:
+
+| rung | echo rate |
+|---|---|
+| `zero_width` | 0.62 – 0.81 |
+| `fullwidth`, `fullwidth_letters`, `math_bold` | 0.66 – 0.76 |
+| **`homoglyph`** | **0.00 – 0.11** |
+
+So on every rung except `homoglyph`, two thirds to four fifths of cells are echo,
+and any refusal or binding number computed over them is largely a statement
+about echo. **The balanced 4×2 design is really 4×1.** §4a's Llama figures were
+computed on an echo-stripped base (n = 27, 33) while the Qwen figures it was
+compared against were not — that is the specific defect underneath its headline.
+
+### What the data in hand actually supports — the echo-clean rung, all four models
+
+| model | echo | ability | harmful refusal | benign refusal | B/(B+S) |
+|---|---|---|---|---|---|
+| Llama-3.1-8B-Instruct | 0.11 | 0.91 | 0.99 | **0.99** | 0.012 |
+| Mistral-7B-v0.3 | 0.00 | 0.95 | 0.90 | 0.67 | 0.098 |
+| Tulu-3-8B ⚠️ | 0.04 | 0.99 | 0.85 | 0.41 | 0.156 |
+| Qwen2.5-7B-Instruct | 0.02 | 0.98 | 0.89 | **0.29** | 0.115 |
+
+**The finding that survives every screen applied so far:** on one clean rung, at
+n = 100 per model, four models from four independent post-training pipelines
+agree on harmful encoded prompts to within 0.14 (0.85–0.99) and disagree on
+benign encoded prompts by 0.70 (0.29–0.99). Benign refusal is 95% model-
+determined. **The models differ ~5× more in what they refuse when it is harmless
+than in what they refuse when it is harmful.**
+
+Binding failure on this rung is nearly a restatement of blanket refusal — a
+model refusing 0.99 of everything cannot produce (B) cells — so it carries
+little independent information here, and the §4a-style story built on it should
+not be rebuilt in either direction.
+
+### ⚠️ The one control that would make this an ENCODING finding has never been run
+
+Every number above is measured **only on encoded prompts**. There is no
+plaintext behavioural arm anywhere in this repo: `phase0_regime_map` calls
+`measure_behavior` on `encoded_harmful` and `encoded_harmless` and never on the
+plain corpora, though both are already captured for the probes.
+
+So "Llama refuses 99% of benign encoded requests" has no denominator. If Llama
+refuses 95% of benign *plaintext* JBB prompts, the finding is "Llama over-refuses
+in general", which is known, not ours, and not about encoding. If it refuses 5%,
+the encoding causes a 19× jump in false positives and the asymmetry above is the
+paper. **The two readings are opposite conclusions and nothing on disk
+distinguishes them.** This is the next run, and it gates the story rather than
+decorating it.
+
+## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
 Jobs `9010897` (Mistral-7B-Instruct-v0.3, 1:15:12) and `9011034` (Tulu-3-8B,
 1:23:29), 8 rungs × 100 prompts each: the three substrate rungs plus five
