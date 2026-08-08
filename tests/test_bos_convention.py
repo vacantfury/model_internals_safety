@@ -179,39 +179,75 @@ class TestTheGuardFieldIsNotShadowed:
         verify_bos_convention(tokenizer, guard)  # must not raise
 
 
+def committed_model_names() -> list[str]:
+    """Every model config in `conf/models/`, DERIVED — never hand-listed.
+
+    ⚠️ A hand-written slate goes stale silently and keeps reporting green. The
+    peer session's version of this table was written on the morning of
+    2026-08-08 and the Tulu ladder added two configs the same afternoon, so it
+    was covering 5 of 8 while passing. Deriving the row set is what makes "add a
+    row when a model joins the slate" stop being a rule anyone has to remember.
+    """
+    from internals_safety.paths import CONF_DIR
+
+    return sorted(path.stem for path in (CONF_DIR / "models").glob("*.yaml"))
+
+
 @pytest.mark.slow
+@pytest.mark.parametrize("model_name", committed_model_names())
 class TestTheRealSlate:
     """Pins the artifacts, not our mechanism. Tokenizers only — no weights.
 
-    The table is the verified state as of 2026-08-08
-    (`text_docs/shared/model_slate.md` §3). If a vendor changes a template, this
-    is where it surfaces — before a queue wait, not after.
+    Every committed model config is checked against the real tokenizer it names.
+    If a vendor changes a template, this is where it surfaces — before a queue
+    wait, not after.
 
-    ⚠️ SIBLING TABLE, found the same day by the peer session:
-    `tests/test_real_bos_handling.py` pins that exactly ONE BOS reaches the
-    model. The two are the opposite ends of one axis and neither subsumes the
-    other — that file catches a DOUBLE BOS (`sae_reconstruction` tokenising with
-    `add_special_tokens=True` against a post-processor that already prepends
-    one), this one catches ZERO BOS (a template that never emits it under the
-    repo's `add_special_tokens=False`). Both maintain a per-model row set, so
-    **a model joining the slate must be added to both**, and if they are ever
-    merged the merge must keep both questions askable.
+    ⚠️ SIBLING FILE: `tests/test_real_bos_handling.py` pins that exactly ONE BOS
+    reaches the model. The two are opposite ends of one axis and neither subsumes
+    the other — that file catches a DOUBLE BOS (`add_special_tokens=True` against
+    a post-processor that already prepends one), this one catches ZERO BOS (a
+    template that never emits it under `add_special_tokens=False`). The shared
+    invariant, and the fact that reading only the template gave a wrong answer in
+    EACH direction on the same day, is stated once in
+    `text_docs/shared/model_slate.md` §3.1 and restated in neither.
     """
 
-    @pytest.mark.parametrize(
-        ("hf_id", "expected"),
-        [
-            ("meta-llama/Llama-3.1-8B-Instruct", True),
-            ("mistralai/Mistral-7B-Instruct-v0.3", True),
-            ("google/gemma-2-9b-it", True),
-            # bos_token is None -> the question is undefined, not answered "no".
-            ("Qwen/Qwen2.5-7B-Instruct", None),
-            # The one that broke the premise. Paper Figure 27 confirms the
-            # template is plain-text role markers with no BOS.
-            ("allenai/Llama-3.1-Tulu-3-8B-SFT", False),
-        ],
-    )
-    def test_bos_emission_matches_the_recorded_table(self, hf_id, expected):
+    def test_the_config_declaration_matches_the_real_tokenizer(self, model_name):
+        """The config must not lie about the checkpoint, and must not omit.
+
+        This is the whole guard applied to committed reality: load the real
+        tokenizer, run `verify_bos_convention` against the real config, and
+        require it to accept. A config declaring `true` on a template that
+        already emits BOS fails here, as does one declaring nothing on a template
+        that emits none — which is the Tulu case that started this.
+        """
         from transformers import AutoTokenizer
 
-        assert template_emits_bos(AutoTokenizer.from_pretrained(hf_id)) is expected
+        from internals_safety.config import load_model_config
+
+        config = load_model_config(model_name)
+        tokenizer = AutoTokenizer.from_pretrained(config.hf_id)
+        verify_bos_convention(tokenizer, config)
+
+    def test_after_the_guard_exactly_zero_is_impossible(self, model_name):
+        """Post-guard, a chat template either emits BOS or the model has none.
+
+        The zero-BOS end of the invariant, asserted on the state a run actually
+        sees rather than on the shipped template — `verify_bos_convention`
+        rewrites the template when the config says to, so checking the shipped
+        one would test a model no run will ever use.
+        """
+        from transformers import AutoTokenizer
+
+        from internals_safety.config import load_model_config
+
+        config = load_model_config(model_name)
+        tokenizer = AutoTokenizer.from_pretrained(config.hf_id)
+        if tokenizer.chat_template is None or tokenizer.bos_token is None:
+            pytest.skip(f"{model_name}: no chat template or no BOS token — question undefined")
+        verify_bos_convention(tokenizer, config)
+        emits = template_emits_bos(tokenizer)
+        assert emits is True, (
+            f"{model_name} renders no BOS even after the guard ran; "
+            f"prepend_bos_to_chat_template={config.prepend_bos_to_chat_template!r}"
+        )
