@@ -451,6 +451,58 @@ verdict is `None`.** Fixed and pinned. The same lesson as unlicensed deployment
 reading `False`, and as `binding_failure_rate` dividing by `n` — three costumes,
 one rule: a value that could not be measured is never the falsy end of a boolean.
 
+### 3.5.1 ⚠️ The graded regrade is blocked by CONTROL MASS, and the control it needs was generated and thrown away
+
+**Diagnosed 2026-08-08 by counting, not by argument. This is what actually
+blocks every ASR number and every graded (B) refinement in the paper — not the
+rubric, which exists and has run.**
+
+§3.4 established the valid negative control for a graded refinement of (B):
+cells the model **neither declined nor decoded** (`refused=False, ability=False`).
+Whatever those responses contain it is not harmful help, and — unlike (S) — they
+are not selected on refusal. §3.4 recorded 8 such cells in `band2-20260805`.
+Counted directly across all three current runs, it is worse:
+
+| run | valid control cells | (B) cells |
+|---|---|---|
+| `band2-20260805` (Llama) | **2** | 22 |
+| `benign-arm-qwen` (Qwen) | **5** | 17 |
+| `naturalness-band-llama` | **5** | 29 |
+
+All at or under `controls.control_floor_min_controls`, so the floor is a `bound`
+and the verdict is `None` — never `True`. **The regime taxonomy makes refusal and
+compliance nearly disjoint by construction, so a graded refinement of (B) has
+almost no natural control mass, and no amount of re-running the rubric changes
+that.** It is a structural property of the taxonomy, not a sampling accident.
+
+**The control that WOULD work already exists and is discarded.** The benign arm
+generates a full response per prompt through the same encoder at the same
+operating point; those responses contain no harmful help *by construction of the
+request*, and they are selected on the harmfulness of the REQUEST rather than on
+refusal — so they are not circular in §3.4's sense. On Qwen, which answers benign
+encoded content rather than refusing it (non-refusal 0.70–0.79, §3.6.1), that is
+**~70–79 control cells per rung against 5**, more than an order of magnitude.
+
+It is thrown away. `cells.jsonl` carries `attack_response` and `restate_response`
+— both from the harmful arm. `benign_behavior_records` is built at
+`phase0_regime_map.py:823`, consumed at 1085–1090 for four aggregate rates, and
+never persisted per cell. The generations were paid for, judged, and dropped.
+
+**Fix: persist the benign arm per cell.** No GPU, no new judge calls at run
+time, no re-run — the data is in memory when it is discarded. Then the graded
+regrade gets a real floor and the ASR/(B) numbers become reportable.
+⚠️ **Deliberately NOT landed 2026-08-08**: it changes the run spine and two of
+the three ladder jobs had already started, so landing it would split the ladder
+across two code versions — the same error as mixing BOS. It goes in after the
+ladder completes. Filed.
+
+**The pattern, which is now three for three this week.** `guard_working_tree`
+read the git state at exactly the right moment and threw it away; AS-6 read the
+guard's benign verdicts and threw them away; this reads the benign responses and
+throws them away. **A control that is computed and discarded costs exactly as
+much as one that is computed and kept, and the difference only shows up as an
+unreportable number months later.** Persist by default.
+
 ### 3.6 ⚠️ Refusal is ENCODING-driven on two of three sound rungs — the benign judge arm finally ran
 
 > **✅ REPLICATED ON QWEN 2026-08-08 — AND IT INVERTS. The demotion below is a
