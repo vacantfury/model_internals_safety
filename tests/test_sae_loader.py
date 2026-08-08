@@ -25,6 +25,7 @@ HYPERPARAMS = {
     "apply_decoder_bias_to_pre_encoder": False,
     "norm_activation": "dataset-wise",
     "dataset_average_activation_norm": {"in": 10.8125, "out": 10.8125},
+    "sparsity_include_decoder_norm": True,
     "d_model": D_MODEL,
     "d_sae": D_SAE,
     "top_k": 50,
@@ -91,8 +92,44 @@ class TestTheActivationFunction:
         kept = features > 0
         assert torch.allclose(features[kept], raw[kept])
 
-    def test_values_below_the_threshold_are_zero_not_small(self, checkpoint):
+    def test_the_gate_is_applied_in_the_DECODER_NORM_SCALED_space(self, checkpoint):
+        """**The threshold is compared against `pre * decoder_norm`, not `pre`.**
+
+        This test used to assert `features == 0 | features > threshold`, which
+        encoded the loader's behaviour before `sparsity_include_decoder_norm` was
+        implemented (2026-08-07). That flag is TRUE in every Llama Scope
+        checkpoint and upstream's `encode` scales the pre-activations by the
+        per-feature decoder norm, gates, then divides back out — so a surviving
+        feature whose decoder column has norm > 1 is returned BELOW the raw
+        threshold, legitimately. The old assertion would now fail on correct
+        code, which is why it is replaced rather than relaxed.
+        """
         sae = load_llama_scope_sae(*checkpoint(), repo_id="test")
+        x = torch.randn(4, D_MODEL)
+        features = sae.encode(x)
+        raw = sae._normalise(x) @ sae.encoder_weight.T + sae.encoder_bias
+        scaled = raw * sae.decoder_norms
+
+        assert torch.all((features == 0) | (scaled > sae.jump_relu_threshold)), (
+            "a feature survived whose SCALED pre-activation is below threshold"
+        )
+        assert torch.all((scaled <= sae.jump_relu_threshold) | (features != 0)), (
+            "a feature was dropped whose SCALED pre-activation clears the threshold"
+        )
+
+    def test_the_decoder_norms_are_per_feature_not_a_scalar(self, checkpoint):
+        sae = load_llama_scope_sae(*checkpoint(), repo_id="test")
+        assert sae.decoder_norms.shape == (sae.d_sae,)
+
+    def test_gating_can_be_turned_off_and_then_the_raw_threshold_binds(self, checkpoint):
+        """The OFF path is upstream's `sparsity_include_decoder_norm: False`, and
+        it must still be reachable — a checkpoint that sets it False has a
+        genuinely different forward pass."""
+        import dataclasses
+
+        sae = dataclasses.replace(
+            load_llama_scope_sae(*checkpoint(), repo_id="test"), decoder_norm_gating=False
+        )
         features = sae.encode(torch.randn(4, D_MODEL))
         assert torch.all((features == 0) | (features > sae.jump_relu_threshold))
 

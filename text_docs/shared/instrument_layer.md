@@ -718,6 +718,60 @@ defect and may share this root cause.
 
 ---
 
+### 4.5 The pre-gate's real defect: `sparsity_include_decoder_norm` was never implemented
+
+Settled 2026-08-07 by READING upstream (`other_repos/Language-Model-SAEs`, cloned
+with the owner's permission), after two runs failed to settle it.
+
+**What the checkpoint actually declares** (`hyperparams.json`, layer 17):
+
+    act_fn                        = 'jumprelu'
+    sparsity_include_decoder_norm = True
+    jump_relu_threshold           = 0.4453125
+    dataset_average_activation_norm = {'in': 13.8125, 'out': 13.8125}
+
+**The defect.** Upstream's `encode` (`models/sae.py`) gates in a decoder-norm-
+scaled space and divides back out:
+
+    hidden_pre   = hidden_pre * decoder_norm()      # per-feature, [d_sae]
+    feature_acts = activation_function(hidden_pre)
+    feature_acts = feature_acts / decoder_norm()
+
+Our loader did **neither half**. The flag defaults to True upstream, so an absent
+key must gate rather than skip. It changes *which* features fire — a feature with
+a large decoder column clears the threshold on a smaller pre-activation — and it
+is what produced L0 549 against a nominal 50.
+
+**Also confirmed, so stop re-deriving them:** the dataset-wise normalisation is
+exactly `sqrt(d_model) / dataset_average_activation_norm`
+(`sparse_dictionary.py:451`) — our `_normalise` was right all along, and §4.4's
+1.4-1.7x ratio really is a corpus offset. The `top_k: 50` really is a leftover.
+
+**Two process lessons, both paid for.**
+
+1. **The TopK run was answerable for free.** `hyperparams.json` is ~30 lines and
+   `curl`s in a second; it says `act_fn: 'jumprelu'` outright. Worse, the loader
+   **already asserted** that value at load time — so the repo had the answer in
+   code and a run was spent testing a hypothesis its own validation would have
+   refused. The claim that jumprelu was "derived, never verified" was true of the
+   THRESHOLD SEMANTICS, not of `act_fn`, and conflating the two cost a run.
+   **Read the artifact's own config before designing an experiment about it.**
+2. **A wrong test can be load-bearing.** `test_values_below_the_threshold_are_zero_not_small`
+   asserted `features == 0 | features > threshold`, which is FALSE under the
+   correct forward pass — the returned value is divided by the decoder norm and
+   legitimately lands below the raw threshold. It passed for as long as the bug
+   existed. It is replaced, not relaxed, by an assertion on the scaled
+   pre-activation in both directions.
+
+**Control sizing fixed in the same pass.** `observed_l0` was measured on
+`positions=["last"]` over 16 prompts while the run scores every kept position —
+167 vs 549 in one record, the peer session's find. `observed_sparsity()` now
+measures over exactly the scored positions through the same `scored_positions`
+mask. Until this landed, **no control-margin statement from any pre-gate run was
+interpretable in either direction.**
+
+---
+
 ## 5. Known anomaly, unexplained
 
 On Llama-3.1-8B the **recognition** probe licenses on `reverse_characters`

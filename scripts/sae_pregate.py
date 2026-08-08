@@ -16,10 +16,10 @@ The pre-gate has two arms and they answer different questions:
 
 A dictionary cannot fail to transfer to the model it was fitted on, so a poor
 Base result is a bug in `models/sae_loader.py` — most likely the dataset-wise
-normalisation convention, which was derived from the checkpoint rather than read
-from upstream's code (`other_repos` has no clone of it; repo clones are the
-owner's call). Reading the Instruct arm before the Base arm passes would attribute
-our own bug to the science.
+forward pass. Three such bugs have been found this way and the third needed
+upstream's own source: `other_repos/Language-Model-SAEs` (cloned 2026-08-07 with
+the owner's permission) is the authority, and reading the Instruct arm before the
+Base arm passes would attribute our own bug to the science.
 
 ## Cost
 
@@ -35,7 +35,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import replace
 
 import torch
 
@@ -44,6 +43,7 @@ from internals_safety.data import prompt_set
 from internals_safety.measurements.sae_reconstruction import (
     RandomDictionary,
     measure_reconstruction,
+    observed_sparsity,
     reading,
     unmeasured_reading,
 )
@@ -84,14 +84,10 @@ def main(argv: list[str] | None = None) -> int:
         # the matched random-dictionary control — priced, because a control the
         # estimate cannot see is a cost nobody approved.
         #
-        # DOUBLED since 2026-08-07: the run measures both selection rules
-        # (jumprelu and topk) on the same weights, which is a second full
-        # `measure_reconstruction`. Same rule as the control — work the estimate
-        # cannot see is work nobody approved, and this is the larger half.
-        print(f"forward passes   {12 * len(prompts)} "
-              f"(clean/SAE/ablated x real + control, x2 selection rules)")
-        print("selection rules  jumprelu (derived) AND topk (nominal_top_k) — "
-              "the comparison IS the gate")
+        # Back to a single rule 2026-08-07: upstream's hyperparams.json states
+        # `act_fn: jumprelu` outright, so the topk arm was refuted by reading
+        # rather than by another run and the doubled estimate retired with it.
+        print(f"forward passes   {6 * len(prompts)} (clean/SAE/ablated x real + control)")
         print("judge calls      0 — no spend")
         print("\n⚠️  Run --model llama_3_1_8b_base FIRST. A poor Base result is a")
         print("    loader bug, not a transfer finding, and reading the Instruct arm")
@@ -126,14 +122,26 @@ def main(argv: list[str] | None = None) -> int:
     # this data — never to `nominal_top_k`, which is a training-schedule leftover
     # in a jumprelu checkpoint. A denser control reconstructs better for reasons
     # unrelated to having learned anything, making it trivially easy to beat.
-    from internals_safety.models.capture import capture_activations
-    from internals_safety.models.loader import prepare_prompts
-
-    probe_batch = capture_activations(
-        loaded, prepare_prompts(loaded, prompts[:16]), layers=[layer], positions=["last"]
+    # ⚠️ `positions=["last"]` and 16 prompts, while `measure_reconstruction`
+    # reduces over EVERY kept position of all of them. Those are different
+    # distributions and they produced different L0s in the same run record —
+    # 167 here against 549 there on job 9008803, which the peer session found
+    # by reading the artifact. The control's sparsity is matched to THIS number
+    # while the run exhibits the other, so the control was matched to neither.
+    #
+    # Fixed by measuring the probe L0 the same way the run does: all positions
+    # the reduction will score, not just the final token. A control matched to
+    # the wrong sparsity makes the trained-vs-random margin uninterpretable in
+    # BOTH directions — too dense and it is unbeatable, too sparse and beating
+    # it means nothing.
+    observed_k = round(
+        observed_sparsity(
+            loaded, sae, prompts[:16], layer,
+            batch_size=model_config.capture_batch_size,
+        )
     )
-    observed_k = round(sae.observed_l0(probe_batch.select(layer, "last").float()))
-    print(f"  observed L0 {observed_k} (nominal top_k {sae.nominal_top_k}, unused)", flush=True)
+    print(f"  observed L0 {observed_k} over the SCORED positions "
+          f"(nominal top_k {sae.nominal_top_k}, unused)", flush=True)
 
     control = RandomDictionary(
         d_model=sae.d_model,
@@ -142,49 +150,28 @@ def main(argv: list[str] | None = None) -> int:
         generator=torch.Generator().manual_seed(measurements.probes.seed),
     )
 
-    # BOTH selection rules, on the same weights and the same activations.
-    #
-    # The loader DERIVED `jumprelu` from the artifact and never verified it
-    # against upstream's forward pass; `top_k: 50` sits in the same hyperparams
-    # file, dismissed in a comment as a training-schedule leftover. Job 9009119
-    # made that dismissal the leading suspect: the normalisation is off by only
-    # 1.4-1.7x (corpus offset) while the round trip emits a vector ~90x too
-    # large, and jumprelu selects 549 features where nominal is 50.
-    #
-    # Run as ONE job rather than two, because the question is a comparison and a
-    # within-run comparison holds the weights, the prompts, the activations and
-    # the control fixed. Two jobs would differ by whatever else drifted.
-    qualities = {
-        variant.selection: measure_reconstruction(
-            loaded, variant, prompts, layer=layer, config=measurements.sae,
-            control=control, batch_size=model_config.capture_batch_size,
-        )
-        for variant in (sae, replace(sae, selection="topk"))
-    }
-    verdicts = [
+    quality = measure_reconstruction(
+        loaded, sae, prompts, layer=layer, config=measurements.sae, control=control,
+        batch_size=model_config.capture_batch_size,
+    )
+    verdict = (
         reading(quality, measurements.sae)
         if quality.n_prompts
-        else unmeasured_reading(f"no prompts scored ({name})")
-        for name, quality in qualities.items()
-    ]
+        else unmeasured_reading("no prompts scored")
+    )
+    verdicts = [verdict]
 
-    for name, quality in qualities.items():
-        print(f"\n--- selection: {name}")
-        print(f"variance explained  {quality.variance_explained:.4f}")
-        print(f"control (random)    {quality.control_variance_explained}")
-        print(f"KL recovered        {quality.kl_recovered}")
-        print(f"L0                  {quality.l0:.1f}  (nominal {sae.nominal_top_k})")
-        print(f"activation norm     {quality.observed_activation_norm:.3f} observed "
-              f"vs {quality.declared_input_norm} declared (ratio {quality.norm_ratio:.3f})")
-
-    for verdict, (name, _) in zip(verdicts, qualities.items()):
-        print(f"\nLICENSED ({name}): {verdict.licensed}")
-        for why in verdict.why_not_reportable():
-            print(f"  - {why}")
-    if not any(verdict.licensed is True for verdict in verdicts):
-        print("\n⚠️  Feature-level claims are NOT licensed on this model under EITHER rule.")
-
-    quality = qualities[sae.selection]
+    print(f"\nvariance explained  {quality.variance_explained:.4f}")
+    print(f"control (random)    {quality.control_variance_explained}")
+    print(f"KL recovered        {quality.kl_recovered}")
+    print(f"L0                  {quality.l0:.1f}  (control k {control.k})")
+    print(f"activation norm     {quality.observed_activation_norm:.3f} observed "
+          f"vs {quality.declared_input_norm} declared (ratio {quality.norm_ratio:.3f})")
+    print(f"\nLICENSED: {verdict.licensed}")
+    for why in verdict.why_not_reportable():
+        print(f"  - {why}")
+    if verdict.licensed is not True:
+        print("\n⚠️  Feature-level claims are NOT licensed on this model.")
 
     directory = (
         (PROJECT_ROOT / args.outputs_dir if args.outputs_dir else PROJECT_ROOT / "outputs")

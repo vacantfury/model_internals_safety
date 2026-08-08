@@ -466,6 +466,59 @@ def measure_reconstruction(
     )
 
 
+def observed_sparsity(
+    loaded: LoadedModel,
+    sae: SparseAutoencoder,
+    prompts: Sequence[str],
+    layer: int,
+    *,
+    # plumbing(batch_size): throughput only — the L0 is a per-position mean
+    batch_size: int = 8,
+    # constant: must MATCH `measure_reconstruction`'s masking, since the whole
+    # point is that the control is sized on the positions the run will score
+    drop_bos: bool = True,
+) -> float:
+    """Mean L0 over EXACTLY the positions `measure_reconstruction` will score.
+
+    **The random control's sparsity must match the dictionary's, and matching it
+    to the wrong distribution makes the margin uninterpretable in both
+    directions** — a control that is too dense is unbeatable, one that is too
+    sparse is beaten by anything.
+
+    It existed as `LlamaScopeSAE.observed_l0` over `positions=["last"]` on 16
+    prompts, while the run reduces over every real non-BOS position of all of
+    them. Job 9008803 recorded both in ONE results.json and they disagreed by ~4x
+    (167 vs 549) — found by the peer session reading the artifact. The last token
+    of a chat-templated prompt is simply not drawn from the same distribution as
+    the body.
+
+    So this walks the same positions through the same mask as the reduction. It
+    is not a second implementation of that rule: `scored_positions` is the single
+    home, and this calls it.
+    """
+    rendered = [prompt.text for prompt in prepare_prompts(loaded, prompts, positions=[])]
+    total, counted = 0.0, 0.0
+    for start in range(0, len(rendered), batch_size):
+        chunk = rendered[start : start + batch_size]
+        encoded = loaded.tokenizer(chunk, return_tensors="pt", padding=True)
+        inputs = {key: value.to(loaded.device) for key, value in encoded.items()}
+        captured: list[torch.Tensor] = []
+
+        with torch.inference_mode():
+            with _substitute(loaded, layer, lambda h: (captured.append(h.detach().float().cpu()), h)[1]):
+                loaded.model(**inputs)
+
+        hidden = captured[0]
+        keep = scored_positions(encoded["attention_mask"].cpu(), drop_first_real=drop_bos)
+        kept = hidden.reshape(-1, hidden.shape[-1])[keep.reshape(-1)]
+        if not kept.numel():
+            continue
+        features = sae.encode(kept)
+        total += float((features > 0).float().sum(dim=-1).sum())
+        counted += float(kept.shape[0])
+    return total / counted if counted else 0.0
+
+
 def loaded_model_name(quality: ReconstructionQuality) -> str:
     """The target's identity, as recorded by the measurement itself.
 

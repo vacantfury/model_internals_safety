@@ -71,18 +71,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
-
 import torch
-
-# Which rule turns pre-activations into features. NOT a tunable: exactly one of
-# these is what the checkpoint was trained with, and the pre-gate's job is to
-# find out which. Tuning path: the Base arm of `scripts/sae_pregate.py`, which
-# runs both on the same weights and the same activations — a dictionary
-# reconstructs the model it was fitted on, so whichever rule does that is the
-# rule it was trained with. Once that run settles it, the loser is deleted
-# rather than left as a knob.
-Selection = Literal["jumprelu", "topk"]
 
 # Llama Scope names a layer's SAE by the block whose `resid_post` it reads.
 # Our capture site is `resid_pre`, and `resid_post` of block N IS `resid_pre` of
@@ -122,21 +111,14 @@ class LlamaScopeSAE:
     # the activation function; never used to select features here.
     nominal_top_k: int
 
-    # Which rule selects features. `jumprelu` is what this loader DERIVED from
-    # the artifact (threshold magnitude, decoder-bias norm) and it has never been
-    # verified against upstream's forward pass — so the alternative reading of the
-    # same checkpoint, that `top_k: 50` is the real rule and the threshold is the
-    # leftover, is expressible here rather than argued in prose.
+    # `sparsity_include_decoder_norm` from hyperparams.json, and it is TRUE in
+    # every Llama Scope checkpoint. Upstream gates on `hidden_pre * decoder_norm`
+    # and divides back out afterwards (their `models/sae.py` encode); this loader
+    # did NEITHER half until 2026-08-07, which is the pre-gate's real defect.
     #
-    # It exists because job 9009119 excluded the other candidate: the observed
-    # activation norm sits 1.4-1.7x from the declared one (corpus offset, not a
-    # scale bug), while the round trip emits a vector ~90x too large. A linear
-    # decoder cannot turn 1.7 into 90 — but selecting 549 features where 50 were
-    # intended can, and jumprelu on this checkpoint selects 549.
-    #
-    # `dataclasses.replace(sae, selection="topk")` gives the counterfactual on the
-    # SAME weights, so the comparison holds everything else fixed.
-    selection: Selection = "jumprelu"
+    # Read from the artifact rather than assumed, because upstream's own default
+    # is True and a checkpoint that ever set it False must not be silently gated.
+    decoder_norm_gating: bool = True
 
     @property
     def our_layer(self) -> int:
@@ -184,21 +166,39 @@ class LlamaScopeSAE:
         activations = activations.to(self.encoder_weight.device)
         weight = self.encoder_weight.to(activations.dtype)
         pre = self._normalise(activations) @ weight.T + self.encoder_bias.to(activations.dtype)
-        if self.selection == "topk":
-            # The competing reading of the same checkpoint: `top_k` is the rule
-            # and the threshold is the leftover. Keeps EXACTLY nominal_top_k
-            # features, so L0 is fixed by construction rather than by the data —
-            # which is the whole difference being tested.
-            kept = torch.zeros_like(pre)
-            values, indices = pre.topk(min(self.nominal_top_k, pre.shape[-1]), dim=-1)
-            # Still gated at zero: a TopK autoencoder does not reconstruct from
-            # negative activations, and keeping them would make this variant a
-            # third rule rather than the documented one.
-            return kept.scatter_(-1, indices, values.clamp(min=0.0))
+        # `sparsity_include_decoder_norm`, verified against upstream's own encode
+        # (OpenMOSS/Language-Model-SAEs `models/sae.py`), which does exactly:
+        #
+        #     hidden_pre  = hidden_pre * decoder_norm()
+        #     feature_acts = activation_function(hidden_pre)
+        #     feature_acts = feature_acts / decoder_norm()
+        #
+        # The gate is applied in a decoder-norm-scaled space and the magnitudes
+        # are scaled back afterwards. It changes WHICH features fire (a feature
+        # with a large decoder column clears the threshold on a smaller
+        # pre-activation) and it is not a no-op on the reconstruction either.
+        # Their config docstring gives the reason: it "suppresses the training
+        # dynamics that model tries to increase the decoder norm in exchange of a
+        # smaller feature activation magnitude".
+        norms = self.decoder_norms.to(pre.device, pre.dtype) if self.decoder_norm_gating else None
+        if norms is not None:
+            pre = pre * norms
         # JumpReLU: pass values above the threshold through UNCHANGED, zero the
-        # rest. Not ReLU (which would keep small positives) and not TopK (which
-        # would keep a fixed count) — both change the sparsity the gate measures.
-        return torch.where(pre > self.jump_relu_threshold, pre, torch.zeros_like(pre))
+        # rest. Not ReLU (which would keep small positives) and not TopK — the
+        # checkpoint's `top_k: 50` really is a training-schedule leftover, now
+        # CONFIRMED by `act_fn: 'jumprelu'` in hyperparams.json rather than
+        # derived from the artifact as it was until 2026-08-07.
+        features = torch.where(pre > self.jump_relu_threshold, pre, torch.zeros_like(pre))
+        return features / norms if norms is not None else features
+
+    @property
+    def decoder_norms(self) -> torch.Tensor:
+        """Per-FEATURE L2 norm of the decoder columns — `[d_sae]`.
+
+        Upstream reduces `norm(W_D, dim=1)` over their `[d_sae, d_model]` layout.
+        Ours is transposed (`[d_model, d_sae]`), so the same quantity is `dim=0`.
+        """
+        return self.decoder_weight.norm(p=2, dim=0)
 
     def decode(self, features: torch.Tensor) -> torch.Tensor:
         features = features.to(self.decoder_weight.device)
@@ -274,6 +274,11 @@ def load_llama_scope_sae(
         d_model=int(hyperparams["d_model"]),
         d_sae=int(hyperparams["d_sae"]),
         nominal_top_k=int(hyperparams.get("top_k", 0)),
+        # Upstream's own default is True, so an ABSENT key must gate rather than
+        # skip: a checkpoint that omits the flag is a checkpoint trained under
+        # the default, and defaulting to False here would silently restore the
+        # exact bug this line fixes.
+        decoder_norm_gating=bool(hyperparams.get("sparsity_include_decoder_norm", True)),
     )
 
 
