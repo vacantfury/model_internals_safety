@@ -1,0 +1,96 @@
+# Un-confounding `fullwidth` — the harm-sensitivity question, on Llama.
+#
+# `fullwidth` is the only sound rung whose refusal tracks HARM rather than the
+# encoding (instrument_layer.md §3.6: 0.90 harmful vs 0.59 benign, against
+# 3-point and 0-point gaps on zero_width and homoglyph). That promoted it to
+# phase-1 substrate. But it differs from those two on TWO axes at once —
+# completeness of substitution and corpus familiarity — so the band run cannot
+# say which earned the gap, and the two answers imply different phase-1 builds.
+#
+# `encodings/deterministic/alphabets.py` adds six rungs holding completeness
+# fixed (complete over A-Z/a-z, letters only, length-preserving) and varying
+# only the alphabet. `scripts/alphabet_fertility.py` measured the ordering
+# variable instead of asserting it, and the measurement REFUTED the ordering
+# this experiment was designed around. Measured tokens/char, Llama-3.1-8B:
+#
+#   homoglyph 0.72 | zero_width 0.93 | fullwidth 1.51 | math band ~2.5 | tag_block 3.00
+#
+# Two things follow, and both improve the design:
+#
+# 1. Among the three sound rungs, harm-sensitivity RISES with fertility — the
+#    harm-sensitive rung is the most expensive of the three, the opposite of the
+#    familiar-script hypothesis the band was built on. n=3 and post-hoc, which
+#    is exactly what six more points are for.
+# 2. On THIS tokenizer the four math/circled alphabets are indistinguishable
+#    (2.448-2.540, all ~14.3x plain English) rather than graded. That is not a
+#    loss: it makes Llama the within-level replicate — four different scripts at
+#    one fertility level, asking whether behaviour is set by the cost or by the
+#    specific script. `naturalness_band_qwen.yaml` carries the graded arm, where
+#    the same rungs spread 1.15-1.84.
+#
+# All ten rungs run TOGETHER on purpose. instrument_layer.md §2.4 established
+# that the control floor's MAX statistic is n-dependent, so floors from
+# different runs are not comparable and the reference rungs cannot be imported
+# from the 2026-08-05 band run. They also predate the mandatory benign arm.
+entrypoint: phase0_regime_map
+description: >-
+  The six-rung alphabet band plus its four reference rungs on
+  Llama-3.1-8B-Instruct, with the benign arm on every rung — does refusal track
+  harm anywhere other than `fullwidth`, and does it track tokenizer fertility?
+
+gates: >-
+  Whether phase-1 substrate can be CONSTRUCTED or must be FOUND, which is a
+  different build either way. If harm-sensitivity tracks fertility across the
+  band, substrate is a knob — we pick a fertility level and the crossed
+  intervention design has many cells, and the paper's claim generalises beyond
+  one rung. If only `fullwidth` shows a gap while equal-fertility neighbours do
+  not, substrate is a property of the specific script, phase 1 is built on one
+  rung, and the intervention design has to be re-scoped to a single-substrate
+  study before any GPU is spent on it.
+
+  Early exit that would settle it cheaply: if the math band reads ability ~0.00
+  here — plausible, since 2.5 tok/char sits close to `tag_block`'s unreadable
+  3.00 — then these rungs are can't-decode on this model, the harm question is
+  unanswerable on them, and only the Qwen arm carries the result. That outcome
+  is itself worth having: it would put a comprehension ceiling on fertility and
+  bound how much of the ladder is measurable at all.
+
+target: llama3_1_8b_instruct
+
+# SEVEN rungs, not ten. `cost_model.py` priced the ten-rung version at 5.1-9.0
+# GPU-hours against an 8 h partition wall and said so — the same wall that killed
+# Qwen at 8:00:26 in the phase-0 pilot, where the pre-run estimate was 2-4x
+# optimistic. Three rungs are dropped because their answer is already on disk
+# rather than to fit the wall by luck:
+#
+#   homoglyph, zero_width  — Llama benign-arm data already exists (§3.6, job
+#                            9008632); re-running buys a second copy.
+#   tag_block              — ability 0.00 on both models in the band run, so the
+#                            harm question is already unanswerable on it here.
+#
+# `fullwidth` STAYS and is the anchor: it is the only rung with a known
+# harm-sensitivity gap, so it is what the six new rungs are read against, and
+# re-measuring it in the same run is what makes that comparison valid rather
+# than a cross-run import (§2.4).
+families:
+  - fullwidth
+  - fullwidth_letters
+  - math_bold
+  - math_sans
+  - math_monospace
+  - circled
+  - math_fraktur
+
+n_prompts: 100
+
+# behavior_control is mandatory and always runs (TODO 61) — it is the arm that
+# produced §3.6 and the whole reason this run can ask about harm at all.
+instruments: [lexical]
+run_name: naturalness-band-llama
+
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "08:00:00"

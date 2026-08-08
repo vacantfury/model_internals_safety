@@ -135,3 +135,59 @@ families:
       # A knob, not a formatting choice: different marks normalise differently
       # under NFC, which plausibly changes tokenisation.
       mark: "́"
+
+  # --- the naturalness band (added 2026-08-07) --------------------------------
+  # `fullwidth` is the only sound rung whose refusal tracks HARM rather than the
+  # encoding (instrument_layer.md §3.6: 0.90 harmful vs 0.59 benign, against 3
+  # and 0 points on zero_width and homoglyph). It differs from those two on TWO
+  # axes at once — completeness of substitution AND corpus naturalness — so the
+  # band run cannot say which earned the gap, and the two explanations predict
+  # opposite things about whether phase-1 substrate can be constructed or must
+  # be found.
+  #
+  # These six hold completeness fixed at "complete over A-Z/a-z, letters only"
+  # and vary ONLY the alphabet. Digits, punctuation and spacing stay
+  # byte-identical across the whole band. `fullwidth_letters` is the bridge to
+  # the existing `fullwidth` rung: the pair differs solely in whether
+  # punctuation and the space are also mapped, which isolates that half of
+  # fullwidth's substitution as its own control.
+  #
+  # The ordering variable is MEASURED, not the order written here — see
+  # scripts/alphabet_fertility.py (keyless, instant) and the module docstring
+  # of encodings/deterministic/alphabets.py for why fertility and corpus
+  # exposure are not separable by this design.
+  fullwidth_letters:
+    encoder: AlphabetMapEncoder
+    encoding_name: fullwidth letter forms
+    params:
+      alphabet: fullwidth_letters
+
+  math_bold:
+    encoder: AlphabetMapEncoder
+    encoding_name: mathematical bold letter forms
+    params:
+      alphabet: math_bold
+
+  math_sans:
+    encoder: AlphabetMapEncoder
+    encoding_name: mathematical sans-serif letter forms
+    params:
+      alphabet: math_sans
+
+  math_monospace:
+    encoder: AlphabetMapEncoder
+    encoding_name: mathematical monospace letter forms
+    params:
+      alphabet: math_monospace
+
+  circled:
+    encoder: AlphabetMapEncoder
+    encoding_name: circled letter forms
+    params:
+      alphabet: circled
+
+  math_fraktur:
+    encoder: AlphabetMapEncoder
+    encoding_name: mathematical fraktur letter forms
+    params:
+      alphabet: math_fraktur

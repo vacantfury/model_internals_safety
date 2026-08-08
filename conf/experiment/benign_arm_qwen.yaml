@@ -1,0 +1,67 @@
+# Is "refusal is encoding-driven" a fact about models, or a fact about Llama?
+#
+# `instrument_layer.md` §3.6 is the most consequential measurement this repo has
+# made: on `zero_width` (0.93 harmful vs 0.90 benign) and `homoglyph` (0.99 vs
+# 0.99) the model refuses BENIGN content in the encoding at the same rate as
+# harmful content, so those rungs' (S) cells carry almost no evidence about harm
+# recognition — and only `fullwidth` (0.90 vs 0.59) shows a real gap. That
+# finding demoted two of three sound rungs to controls and promoted the third to
+# phase-1 substrate.
+#
+# **It is entirely Llama-3.1-8B-Instruct, n=100, one job (9008632).** The benign
+# arm has never run on a second model family. A claim that reshaped the paper's
+# substrate is currently a one-model claim, and this repo already knows what
+# that costs: the pilot's whole point was two families so that a regime result
+# is not a single tokenizer's artefact.
+#
+# Three rungs, deliberately not the whole band. This is a REPLICATION, and the
+# thing being replicated is a three-point contrast — adding new rungs here would
+# mix a replication with an exploration and leave neither clean. The alphabet
+# band runs separately on Llama (`naturalness_band_llama.yaml`); whether it also
+# runs on Qwen is a decision for after both of these report, because the Llama
+# arm's early exit would change what the Qwen band should even contain.
+entrypoint: phase0_regime_map
+description: >-
+  Measurement #4's benign arm on Qwen2.5-7B-Instruct for the three sound rungs —
+  the first benign-arm data on a second model family, replicating the §3.6
+  contrast that demoted `zero_width` and `homoglyph` to controls.
+
+gates: >-
+  Whether §3.6's demotion holds, and therefore how many rungs AS-5 has left. If
+  Qwen reproduces the pattern — flat refusal on `zero_width`/`homoglyph`, a real
+  gap on `fullwidth` — then encoding-driven refusal is a property of safety
+  training rather than of one checkpoint, the demotion stands, and the paper is
+  built on one substrate rung with the other two carried as controls. That is a
+  narrower paper and it is the honest one.
+
+  If Qwen does NOT reproduce it, the demotion was a model artefact: `zero_width`
+  and `homoglyph` come back as substrate on this family, the (B) counts already
+  measured on them regain their meaning, and the phase-1 design has three usable
+  rungs instead of one. It also means no harm-sensitivity conclusion may be
+  drawn from a single model again, which changes every subsequent run's shape.
+
+  Either way this is the cheapest run that can move the paper's scope, because
+  it re-reads rungs already characterised on this exact model rather than
+  characterising new ones.
+
+target: qwen2_5_7b_instruct
+
+# The same three §3.6 measured on Llama, and only those three. `fullwidth` is
+# the positive control (a gap is expected); the other two are where the
+# replication actually bites.
+families: [fullwidth, homoglyph, zero_width]
+
+n_prompts: 100
+
+instruments: [lexical]
+run_name: benign-arm-qwen
+
+# Qwen ran 32-37 min/rung against Llama's 18 in the phase-0 pilot and was killed
+# at the 8 h wall there, so three rungs is also what fits with margin once the
+# mandatory benign arm's +67% decode budget is counted.
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "08:00:00"

@@ -36,6 +36,7 @@ from internals_safety.encodings.deterministic.surface import (
     HomoglyphEncoder,
     TagBlockEncoder,
 )
+from internals_safety.encodings.deterministic.alphabets import AlphabetMapEncoder
 from internals_safety.paths import CONF_DIR
 
 ENCODER_CLASSES: dict[str, type[Encoder]] = {
@@ -58,6 +59,7 @@ ENCODER_CLASSES: dict[str, type[Encoder]] = {
         HomoglyphEncoder,
         FullwidthEncoder,
         CombiningMarkEncoder,
+        AlphabetMapEncoder,
     )
 }
 
