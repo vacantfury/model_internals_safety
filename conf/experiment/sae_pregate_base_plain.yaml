@@ -1,0 +1,59 @@
+# **The Base arm as the dictionary was actually fitted — no chat template.**
+#
+# `sae_pregate_base.yaml` runs the same model through the Instruct sibling's
+# chat template, and `conf/models/llama3_1_8b_base.yaml` explains why: holding
+# the input text fixed across the two arms makes the MODEL the single variable,
+# which is correct for reading the transfer gap.
+#
+# It also silently disables the arm's OTHER job. Llama Scope's dictionaries were
+# fitted on plain text and the Base checkpoint never saw a chat template in
+# training, so the templated Base run reads the dictionary on a distribution
+# neither it nor the model has ever met — and then reports poor reconstruction
+# as evidence about `models/sae_loader.py`, which is the one thing that arm
+# exists to test. The two purposes pull opposite ways; this preset serves the
+# loader check and the templated one serves the transfer comparison.
+#
+# Evidence this is not hypothetical: the templated run measures a mean
+# activation norm of 23.705 against the checkpoint's declared 13.8125. Special
+# tokens a base model never trained on are exactly what inflates that.
+#
+# Three defects were removed from this forward pass before this run, and none of
+# them moved variance_explained off -915: pad/BOS contamination (84ab2c9), the
+# missing sparsity_include_decoder_norm gating (4a385c6), and a control sized on
+# positions=["last"] while the run scored every kept position (4a385c6). A
+# jumprelu-vs-topk experiment was refuted by reading hyperparams.json.
+entrypoint: sae_pregate
+description: >-
+  Llama Scope dictionaries against Llama-3.1-8B-Base on PLAIN text — the
+  distribution they were fitted on, and the only reading that can test the
+  loader rather than our own prompt rendering.
+
+gates: >-
+  Whether the pre-gate's refusal is a LOADER bug or a DISTRIBUTION artefact, and
+  those lead to opposite next moves. If variance explained goes positive here,
+  `models/sae_loader.py` is correct, the Base arm needs a plain-text mode as its
+  loader check, and I4's feature half is unblocked with `min_kl_recovered` and
+  `min_variance_explained` set from these numbers. If it still reads around -900,
+  the loader is genuinely wrong and the next step is running our encode against
+  upstream's own implementation numerically, which the `other_repos` clone now
+  makes possible — no further guessing from the artifact.
+
+target: llama3_1_8b_base
+
+# No chat template. The whole point of this preset.
+render_chat: false
+
+# LLAMA SCOPE's indices, which are ours minus one (`LlamaScopeSAE.our_layer`).
+# 17/19/21 here = our resid_pre 18/20/22, matching the templated preset exactly
+# so the two runs differ in rendering and nothing else.
+sae_layers: [17, 19, 21]
+
+n_prompts: 100
+run_name: pregate-base-plain
+
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "01:00:00"
