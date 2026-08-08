@@ -313,10 +313,26 @@ def instruction_final_offset(
         offsets = tokenizer(
             rendered, add_special_tokens=False, return_offsets_mapping=True
         )["offset_mapping"]
+        # ⚠️ `start < content_end`, NOT `end <= content_end` (fixed 2026-08-08).
+        # The old rule kept only tokens lying ENTIRELY inside the content, so a
+        # token whose merge STRADDLES the content/template boundary was dropped
+        # and the readout landed one token early — silently, with no error.
+        #
+        # It fires whenever the template's first post-content character merges
+        # with the content's last one. Llama-3.1 (`<|eot_id|>`), Qwen2.5
+        # (`<|im_end|>`) and Mistral (`[/INST]`) all force a clean break and were
+        # never affected — verified, so this fix changes no existing result.
+        # Tulu-3 follows its content with a bare "\n", which merges: on "…pick a
+        # lock?" the site resolved to " lock" instead of "?".
+        #
+        # A straddling token does carry a template character as well as the last
+        # content one. That is unavoidable and it is still the right site: it is
+        # the token the model actually has, and reading one character earlier is
+        # strictly worse than reading the one that contains the content's end.
         candidates = [
             index
             for index, (start, end) in enumerate(offsets)
-            if end > start and end <= content_end
+            if end > start and start < content_end
         ]
         if candidates:
             return max(candidates) - n_tokens

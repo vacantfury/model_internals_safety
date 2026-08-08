@@ -1,0 +1,71 @@
+# The post-training contrast arm — SAME BASE WEIGHTS as llama3_1_8b_instruct.
+#
+# This is the most scientifically valuable model in the slate and the reason is
+# what it holds FIXED. Llama-3.1-8B-Instruct and Tulu-3-8B are the same
+# Llama-3.1-8B base with two entirely different post-training pipelines: Meta's
+# closed RLHF, and Ai2's fully open SFT -> DPO -> RLVR recipe. §4a's dissociation
+# currently compares three unrelated models, so "a property of safety training"
+# is an inference. Against this arm it becomes a controlled comparison: same
+# base, same tokenizer family, same scale, different post-training.
+#
+# Three further things it buys, none available from an unrelated family:
+#
+# 1. **A staged series.** Ai2 ships -SFT and -DPO checkpoints alongside the final
+#    model, and `llama3_1_8b_base.yaml` is already configured. So the ladder is
+#    Base (no safety training at all) -> SFT -> DPO -> RLVR, against
+#    Meta-Instruct as the contrast. That asks at WHICH post-training stage
+#    encoding-driven blanket refusal appears, which no cross-family comparison
+#    can ask.
+# 2. **A shared SAE dictionary.** Llama Scope is fitted on Llama-3.1-8B-Base and
+#    every model above is a fine-tune of it. Transfer to Instruct measured at
+#    ratio 1.009-1.017 (job 9010205), so one dictionary plausibly reads the whole
+#    series — I4 feature comparison ACROSS post-training recipes.
+# 3. **An open recipe.** Ai2 publishes the post-training data, so a difference
+#    can be attributed to something nameable rather than left as a black box.
+#
+# ⚠️ THREE CHECKPOINT FACTS, VERIFIED 2026-08-08, THAT MAKE THIS NOT A DROP-IN:
+#
+# a. **The template emits NO BOS.** It renders `<|user|>\n...\n<|assistant|>\n`
+#    and nothing else, so under the repo's `add_special_tokens=False` capture
+#    path token 0 is `<`, not `<|begin_of_text|>`. Llama-3.1-Instruct and Mistral
+#    both put BOS at token 0. **Any path that drops token 0 as BOS drops real
+#    content here** — that includes I4's `drop_bos=True` / `drop_first_real` in
+#    `measurements/sae_reconstruction.py`, which must be revisited BEFORE the SAE
+#    pre-gate is run on this model. The phase-0 capture path does not drop it.
+# b. **`<|user|>` and `<|assistant|>` are NOT special tokens.** They shatter into
+#    five pieces each (`<`, `|`, `user`, `|`, `>\n`). Only `<|begin_of_text|>` is
+#    in the added-tokens table. So nothing may key off role markers being single
+#    tokens.
+# c. **It exposed a real bug in `instruction_final`** (fixed same day). Its bare
+#    "\n" after the content merges with the content's last character, and the
+#    offset filter kept only tokens lying wholly inside the message — so the
+#    readout landed one token early, silently. Llama/Qwen/Mistral force a clean
+#    break and were never affected. Pinned by `tests/test_real_instruction_final.py`.
+name: tulu3_8b
+hf_id: allenai/Llama-3.1-Tulu-3-8B
+dtype: auto
+device: auto
+trust_remote_code: false
+
+# Matches the rest of the slate — no model gets a safety preamble the others lack.
+system_prompt: null
+capture_batch_size: 8
+
+# From config.json (`num_hidden_layers` = 32) — identical to Llama-3.1-8B, which
+# is the point: layer indices are directly comparable to the Instruct arm.
+n_layers: 32
+
+capture:
+  site: resid_pre
+  layers: all
+  positions:
+    - instruction_final
+    - last
+
+# Single-token on THIS checkpoint (vocab 128264): 'I'=40, 'Sure'=40914, 'Here'=8586.
+refusal_openings:
+  - "I"
+
+compliance_openings:
+  - "Sure"
+  - "Here"

@@ -1,0 +1,64 @@
+# The CONTROLLED version of §4a's dissociation — same base, different training.
+#
+# `dissociation_mistral.yaml` adds a third unrelated family, which tests whether
+# the axis generalises. This preset does something the cross-family comparison
+# cannot: it holds the BASE WEIGHTS FIXED. Tulu-3-8B and Llama-3.1-8B-Instruct
+# are the same Llama-3.1-8B base under Ai2's open SFT->DPO->RLVR recipe and
+# Meta's closed RLHF respectively. Any difference in blanket refusal or in
+# binding failure between them is attributable to post-training, not to scale,
+# tokenizer, pretraining corpus or architecture.
+#
+# That is the difference between "three models differ" and "safety training
+# causes this", and it is the claim §4a actually wants to make.
+#
+# Same rungs and same five control candidates as the Mistral arm, so all three
+# runs are read against each other without a cross-run import (§2.4).
+entrypoint: phase0_regime_map
+description: >-
+  §4a's dissociation with the base model held fixed — Tulu-3-8B (Ai2 open
+  post-training) against Llama-3.1-8B-Instruct (Meta RLHF) on identical base
+  weights, same rungs, same control candidates.
+
+gates: >-
+  Whether §4a's axis is caused by POST-TRAINING or merely correlated with model
+  identity, which decides what the paper is allowed to claim and is the
+  difference between a description and a mechanism.
+
+  If Tulu-3 differs from Llama-3.1-Instruct on benign refusal and binding failure
+  despite identical base weights, the effect is attributable to the
+  post-training recipe — and since Ai2's recipe is fully published, to something
+  nameable in it. That is the strongest form of the claim available without
+  training a model ourselves, and it makes the staged series (Base -> SFT -> DPO
+  -> RLVR) the obvious follow-up.
+
+  If the two are indistinguishable, blanket refusal is inherited from the base
+  model rather than installed by safety training, §4a's framing has to change
+  from "safety training produces refusal that is not bound to comprehension" to
+  a claim about base models, and the Mistral arm becomes the load-bearing one.
+
+  Both outcomes are informative and neither is the expected one, which is the
+  test this slate was missing.
+
+target: tulu3_8b
+
+families:
+  - fullwidth
+  - homoglyph
+  - zero_width
+  - base64
+  - reverse_characters
+  - tag_block
+  - math_sans
+  - circled
+
+n_prompts: 100
+
+instruments: [lexical]
+run_name: dissociation-tulu3
+
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "08:00:00"
