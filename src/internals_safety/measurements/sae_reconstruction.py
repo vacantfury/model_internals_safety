@@ -142,6 +142,31 @@ def variance_explained(original: torch.Tensor, reconstruction: torch.Tensor) -> 
     return float(1.0 - residual / centred)
 
 
+def mean_activation_norm(activations: torch.Tensor) -> float:
+    """Mean L2 norm per activation vector — the quantity the loader ASSUMES.
+
+    **Why this is recorded rather than derived.** `LlamaScopeSAE._normalise`
+    scales by `sqrt(d_model) / input_norm`, where `input_norm` is the checkpoint's
+    `dataset_average_activation_norm`. That is a claim about OUR activations: it
+    asserts they arrive with that average norm, so scaling lands them at
+    `sqrt(d_model)` — the space the dictionary was fitted in. Nothing checked it.
+
+    A mismatch here does not error. It feeds the encoder vectors at the wrong
+    scale, which surfaces two layers downstream as an inflated L0 (too many
+    features clear the jumprelu threshold) and a catastrophically negative
+    `variance_explained` — i.e. as "the dictionary does not transfer", which is
+    the pre-gate's own verdict wearing our bug. Job `9008803` read
+    `variance_explained` of -915 to -1760 on the model the dictionary was FITTED
+    ON, with a random dictionary scoring +0.13 to +0.21 against it; a trained
+    dictionary cannot lose to random on its own training distribution, so the
+    input scale was the first thing that had to be measured rather than assumed.
+
+    Reported beside `declared_input_norm` so the ratio is readable directly off
+    the run record instead of being reconstructed from MSE afterwards.
+    """
+    return float(activations.norm(dim=-1).mean())
+
+
 def l0_sparsity(features: torch.Tensor) -> float:
     """Mean number of active features per activation — the paper's x-axis.
 
@@ -223,6 +248,39 @@ class ReconstructionQuality:
     control_variance_explained: float | None = None
     control_kl_sae: float | None = None
 
+    # The loader's central ASSUMPTION, measured. `None` = not recorded (a test
+    # double that never saw real activations), never "matches".
+    observed_activation_norm: float | None = None
+    # What the checkpoint declared it would be. `None` for any dictionary that
+    # does not normalise, which is the honest reading for the random control.
+    declared_input_norm: float | None = None
+    # The target's own identity. `trained_on` vs `evaluated_on` IS this gate's
+    # whole subject, so a record carrying one without the other cannot answer
+    # the question it was written to answer.
+    evaluated_on: str | None = None
+    # What the CHECKPOINT says it was fitted on, read from hyperparams.json
+    # rather than from our config. The config knob is a hand-maintained string
+    # and this one is the artifact's own claim; where both exist the artifact
+    # wins, because a mislabelled config is exactly the error that would make
+    # this gate compare a dictionary against the wrong baseline.
+    trained_on: str | None = None
+
+    @property
+    def norm_ratio(self) -> float | None:
+        """Observed activation norm over the checkpoint's declared average.
+
+        **1.0 is the only value under which the reconstruction numbers mean what
+        they say.** Far from 1.0 and the dictionary is being fed a distribution
+        it was never fitted on, so every downstream figure is measuring our
+        scaling rather than its transfer. Deliberately not clamped and
+        deliberately not a gate: it is reported so the failure is legible, and
+        turning it into a pass/fail condition is a separate decision that would
+        change what `licensed` means.
+        """
+        if self.observed_activation_norm is None or not self.declared_input_norm:
+            return None
+        return self.observed_activation_norm / self.declared_input_norm
+
     @property
     def kl_recovered(self) -> float | None:
         """Fraction of the layer's downstream contribution the SAE preserves.
@@ -271,7 +329,13 @@ def measure_reconstruction(
     """
     rendered = [prompt.text for prompt in prepare_prompts(loaded, prompts, positions=[])]
 
-    totals = {"sq_err": 0.0, "n_tokens": 0.0, "l0": 0.0, "kl_sae": 0.0, "kl_ablated": 0.0}
+    totals = {
+        "sq_err": 0.0, "n_tokens": 0.0, "l0": 0.0, "kl_sae": 0.0, "kl_ablated": 0.0,
+        # Summed over the SAME kept positions as everything else, for the same
+        # reason: a norm averaged over pads and the BOS spike describes a
+        # distribution the dictionary was never asked to reconstruct.
+        "norm_sum": 0.0,
+    }
     originals: list[torch.Tensor] = []
     reconstructions: list[torch.Tensor] = []
     control_reconstructions: list[torch.Tensor] = []
@@ -341,6 +405,7 @@ def measure_reconstruction(
             reconstructions.append(kept_reconstruction)
             totals["sq_err"] += float((kept_hidden - kept_reconstruction).pow(2).sum())
             totals["n_tokens"] += float(flat.sum())
+            totals["norm_sum"] += float(kept_hidden.norm(dim=-1).sum())
             totals["l0"] += l0_sparsity(
                 features.reshape(-1, features.shape[-1])[flat]
             ) * hidden.shape[0]
@@ -382,17 +447,32 @@ def measure_reconstruction(
             if control_reconstructions
             else None
         ),
+        observed_activation_norm=(
+            totals["norm_sum"] / totals["n_tokens"] if totals["n_tokens"] else None
+        ),
+        # `getattr` rather than a protocol method: `SparseAutoencoder` is
+        # deliberately two methods, and a dictionary that does not normalise
+        # (the random control) has no declared norm to report. Absent reads as
+        # None — "this dictionary makes no scale claim" — never as agreement.
+        declared_input_norm=getattr(sae, "input_norm", None),
+        evaluated_on=loaded.config.hf_id,
+        trained_on=getattr(sae, "trained_on", None),
     )
 
 
 def loaded_model_name(quality: ReconstructionQuality) -> str:
-    """Placeholder until the loader carries the target's name into the reading.
+    """The target's identity, as recorded by the measurement itself.
 
-    Left explicit rather than dropped: `trained_on` vs `evaluated_on` IS the
-    pre-gate's whole subject, so a record showing only one of the pair is a
-    record that cannot answer the question it was written to answer.
+    `trained_on` vs `evaluated_on` IS the pre-gate's whole subject, so a record
+    showing only one of the pair cannot answer the question it was written to
+    answer. This used to return a standing placeholder string; the loader has
+    landed, so the name now comes from the model that was actually run, and the
+    placeholder survives only for a `ReconstructionQuality` built by hand
+    without one — where it says so rather than naming a model.
     """
-    return "set by the caller once the SAE loader lands (TODO 55)"
+    if quality.evaluated_on:
+        return quality.evaluated_on
+    return "not recorded — ReconstructionQuality built without a target model"
 
 
 def unmeasured_reading(reason: str) -> Reading:
@@ -458,9 +538,17 @@ def reading(quality: ReconstructionQuality, config: SAEConfig) -> Reading:
             "kl_sae": quality.kl_sae,
             "kl_ablated": quality.kl_ablated,
             "n_prompts": quality.n_prompts,
+            # The loader's scale assumption, measured against what the
+            # checkpoint declared. `norm_ratio` far from 1.0 means every figure
+            # above describes our scaling rather than the dictionary's transfer,
+            # so these three are read BEFORE the verdict, not after it.
+            "observed_activation_norm": quality.observed_activation_norm,
+            "declared_input_norm": quality.declared_input_norm,
+            "norm_ratio": quality.norm_ratio,
             # ⚠️ The whole reason this gate exists. Llama Scope is trained on
-            # Llama-3.1-8B-Base and our target is Instruct.
-            "trained_on": config.trained_on,
+            # Llama-3.1-8B-Base and our target is Instruct. The checkpoint's own
+            # claim wins over the config string when it has one.
+            "trained_on": quality.trained_on or config.trained_on,
             "evaluated_on": loaded_model_name(quality),
         },
     )
