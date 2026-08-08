@@ -34,6 +34,7 @@ from internals_safety.measurements.sae_reconstruction import (
     measure_reconstruction,
     reading,
     scored_positions,
+    tokenize_for_reconstruction,
 )
 from internals_safety.models.loader import prepare_prompts
 from internals_safety.models.sae_loader import LlamaScopeSAE
@@ -163,11 +164,11 @@ class TestTheNormIsScoredOverTheKeptPositionsOnly:
     is compared against a value computed outside the function under test.
     """
 
-    def _capture(self, tiny_model, prompts, layer):
+    def _capture(self, model, prompts, layer):
         """The same hidden states `measure_reconstruction` reduces over."""
-        rendered = [p.text for p in prepare_prompts(tiny_model, prompts, positions=[])]
-        encoded = tiny_model.tokenizer(rendered, return_tensors="pt", padding=True)
-        inputs = {key: value.to(tiny_model.device) for key, value in encoded.items()}
+        rendered = [p.text for p in prepare_prompts(model, prompts, positions=[])]
+        encoded = tokenize_for_reconstruction(model.tokenizer, rendered, render_chat=True)
+        inputs = {key: value.to(model.device) for key, value in encoded.items()}
         grabbed: list[torch.Tensor] = []
 
         def grab(hidden):
@@ -175,20 +176,27 @@ class TestTheNormIsScoredOverTheKeptPositionsOnly:
             return hidden
 
         with torch.inference_mode():
-            with _substitute(tiny_model, layer, grab):
-                tiny_model.model(**inputs)
-        return grabbed[0], encoded["attention_mask"]
+            with _substitute(model, layer, grab):
+                model.model(**inputs)
+        return grabbed[0], encoded["input_ids"], encoded["attention_mask"]
 
-    def test_the_reported_norm_is_the_mean_over_kept_positions(self, tiny_model):
+    def test_the_reported_norm_is_the_mean_over_kept_positions(self, tiny_bos_model):
+        # `tiny_bos_model`, not `tiny_model`: since BOS is dropped BY IDENTITY
+        # (2026-08-08) a fixture with no BOS drops nothing, and this test's own
+        # vacuity guard would fire. The quantity under test only exists on a
+        # model that has a BOS — which is every model the SAE gate runs on.
+        tiny_model = tiny_bos_model
         prompts = ["hi", "a much longer prompt with many more tokens", "middling one"]
         sae = tiny_scope_sae(tiny_model.model.config.hidden_size, input_norm=1.0)
         quality = measure_reconstruction(
             tiny_model, sae, prompts, layer=1, config=CONFIG, batch_size=3
         )
 
-        hidden, mask = self._capture(tiny_model, prompts, layer=1)
+        hidden, ids, mask = self._capture(tiny_model, prompts, layer=1)
         flat = hidden.reshape(-1, hidden.shape[-1])
-        kept = scored_positions(mask, drop_first_real=True).reshape(-1)
+        kept = scored_positions(
+            ids, mask, bos_token_id=tiny_model.tokenizer.bos_token_id
+        ).reshape(-1)
         every_real = mask.bool().reshape(-1)
 
         assert int(kept.sum()) < int(every_real.sum()), "nothing was dropped — test is vacuous"

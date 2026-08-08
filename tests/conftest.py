@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 import torch
-from tokenizers import Tokenizer, models, pre_tokenizers
+from tokenizers import Tokenizer, models, pre_tokenizers, processors
 from transformers import LlamaConfig, LlamaForCausalLM, PreTrainedTokenizerFast
 
 from internals_safety.config import CaptureConfig, ModelConfig
@@ -72,6 +72,49 @@ def tiny_tokenizer() -> PreTrainedTokenizerFast:
     return tokenizer
 
 
+# The BOS-carrying counterpart, added 2026-08-08. `tiny_tokenizer` has NO BOS —
+# which faithfully models Qwen2.5 (`bos_token_id is None`, measured) and models
+# nothing else on the slate. Llama-3.1, Mistral and Tulu-3 all carry one, Llama
+# Scope's dictionaries are Llama-only, so the SAE pre-gate runs exclusively on
+# the case the default fixture cannot express.
+#
+# It emits BOS from the TEMPLATE, like Llama-3.1 and Mistral do, because that is
+# what makes the double-BOS trap representable: tokenising this with
+# `add_special_tokens=True` yields two, and the masking that drops "the first
+# real position" then scores the second.
+TINY_BOS_TEMPLATE = "<|begin_of_text|> " + TINY_CHAT_TEMPLATE
+
+
+@pytest.fixture(scope="session")
+def tiny_bos_tokenizer() -> PreTrainedTokenizerFast:
+    vocab = {
+        "[UNK]": 0, "[PAD]": 1, "<|im_start|>": 2, "<|im_end|>": 3,
+        "system": 4, "user": 5, "assistant": 6, "Certainly": 7, "No": 8,
+        "<|begin_of_text|>": 9,
+    }
+    backend = Tokenizer(models.WordLevel(vocab=vocab, unk_token="[UNK]"))
+    backend.pre_tokenizer = pre_tokenizers.WhitespaceSplit()
+    # THE POINT OF THIS FIXTURE. Llama-3.1 and Mistral prepend BOS from a
+    # post-processor, so `tokenizer(text)` adds one even though the chat template
+    # already did — measured, both give a DOUBLE BOS. A bare
+    # `PreTrainedTokenizerFast` has no post-processor and never adds anything, so
+    # without this line the fixture cannot express the defect and any test of it
+    # passes under the mutation. Fourth instance of the fixture rule.
+    backend.post_processor = processors.TemplateProcessing(
+        single="<|begin_of_text|> $A",
+        special_tokens=[("<|begin_of_text|>", vocab["<|begin_of_text|>"])],
+    )
+    tokenizer = PreTrainedTokenizerFast(
+        tokenizer_object=backend,
+        unk_token="[UNK]",
+        pad_token="[PAD]",
+        eos_token="<|im_end|>",
+        bos_token="<|begin_of_text|>",
+    )
+    tokenizer.chat_template = TINY_BOS_TEMPLATE
+    return tokenizer
+
+
 @pytest.fixture(scope="session")
 def tiny_config() -> ModelConfig:
     return ModelConfig(
@@ -99,6 +142,24 @@ def tiny_model(tiny_tokenizer, tiny_config):
     )
     model = LlamaForCausalLM(architecture)
     return attach(model, tiny_tokenizer, tiny_config)
+
+
+@pytest.fixture
+def tiny_bos_model(tiny_bos_tokenizer, tiny_config):
+    """`tiny_model`'s BOS-carrying twin — the shape the SAE pre-gate really runs."""
+    torch.manual_seed(0)
+    architecture = LlamaConfig(
+        vocab_size=16,
+        hidden_size=32,
+        intermediate_size=64,
+        num_hidden_layers=3,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        max_position_embeddings=128,
+        pad_token_id=tiny_bos_tokenizer.pad_token_id,
+    )
+    model = LlamaForCausalLM(architecture)
+    return attach(model, tiny_bos_tokenizer, tiny_config)
 
 
 @pytest.fixture

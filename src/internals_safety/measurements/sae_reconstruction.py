@@ -203,7 +203,70 @@ def _render(loaded: LoadedModel, prompts: Sequence[str], render_chat: bool) -> l
     return list(prompts)
 
 
-def scored_positions(attention_mask: torch.Tensor, *, drop_first_real: bool) -> torch.Tensor:
+def tokenize_for_reconstruction(tokenizer, texts: Sequence[str], *, render_chat: bool):
+    """Tokenise an arm so BOS is decided by whoever owns that decision.
+
+    **Why this is not `tokenizer(texts, padding=True)` — measured 2026-08-08 on
+    the real tokenizers, and it was silently wrong in the arm the gate reads.**
+    This module was the ONLY place in the repo tokenising with the default
+    `add_special_tokens=True`; every other call site passes `False` and lets the
+    chat template own BOS. On the checkpoints whose tokenizer ALSO prepends one
+    from a post-processor, that gave a **double BOS** in the chat arm —
+    `['<|begin_of_text|>', '<|begin_of_text|>', ...]` on Llama-3.1-Instruct,
+    `['<s>', '<s>', '[INST]', ...]` on Mistral-v0.3. `scored_positions` then
+    dropped the first and SCORED THE SECOND, so the massive-activation spike the
+    masking exists to exclude sat inside the metric — and only in the target arm,
+    never the plain ceiling arm, i.e. on one side of the transfer ratio.
+
+    Ownership, and why this function decides nothing itself:
+
+    * **chat arm** — the template owns BOS, and since `verify_bos_convention`
+      (`models/loader.py`) a model whose template emits none must SAY so in its
+      config (`prepend_bos_to_chat_template`). Tulu-3 declares a deliberate
+      BOS-less run. So this tokenises with `add_special_tokens=False` and takes
+      the rendered text as final; adding BOS here would silently overrule a
+      decision the config already made, which is the same class of defect one
+      seam over.
+    * **plain arm** — there is no template, so nothing has decided. The
+      tokenizer's own post-processor supplies BOS, which is the distribution
+      Llama Scope's dictionaries were fitted on.
+
+    What it does assert is the invariant the defect violated: **no row starts
+    with two BOS.** Models with no BOS at all (Qwen2.5 has `bos_token_id is
+    None`) trivially satisfy it.
+    """
+    encoded = tokenizer(
+        list(texts), add_special_tokens=not render_chat, return_tensors="pt", padding=True
+    )
+    bos = tokenizer.bos_token_id
+    if bos is None:
+        return encoded
+    ids, mask = encoded["input_ids"], encoded["attention_mask"]
+    first = mask.bool().float().argmax(dim=1)           # left padding: first real
+    doubled = (ids[torch.arange(ids.shape[0]), first] == bos) & (
+        ids[torch.arange(ids.shape[0]), (first + 1).clamp(max=ids.shape[1] - 1)] == bos
+    )
+    if bool(doubled.any()):
+        raise ValueError(
+            f"row {int(doubled.nonzero()[0])} begins with TWO {tokenizer.bos_token!r} "
+            f"tokens (render_chat={render_chat}). The template and the tokenizer both "
+            "supplied one — that is the defect this function exists to prevent, and "
+            "the masking would drop the first and score the second."
+        )
+    return encoded
+
+
+def scored_positions(
+    input_ids: torch.Tensor,
+    attention_mask: torch.Tensor,
+    *,
+    # NO DEFAULT, and keyword-only, deliberately. This was a `drop_first_real:
+    # bool` that ASSERTED the first real token was BOS without ever looking at
+    # it. Passing the id makes the assertion checkable, and omitting it a
+    # TypeError rather than a guess — the same shape as `strata` on
+    # `measure_deployment` (CLAUDE.md), for the same reason.
+    bos_token_id: int | None,
+) -> torch.Tensor:
     """[batch, seq] bool: which positions may enter a reconstruction statistic.
 
     **Why this exists — it cost job `9008483` and produced a false refusal.**
@@ -227,13 +290,30 @@ def scored_positions(attention_mask: torch.Tensor, *, drop_first_real: bool) -> 
     against a dataset average that the spike would dominate, so scoring it asks
     the SAE to reconstruct the one activation its normalisation assumes away.
 
-    `drop_first_real` finds the first UNMASKED position per row rather than
-    index 0, because under left padding index 0 is a pad on every short row.
+    **It drops BOS BY IDENTITY, not by position.** The first real position is
+    located per row (under left padding index 0 is a pad on every short row) and
+    dropped ONLY IF it is the declared BOS. Three cases are all real and all
+    measured, which is why a bool could not express this:
+
+    * the row starts with BOS — dropped, as before;
+    * `bos_token_id is None` — Qwen2.5 has no BOS token at all, so there is
+      nothing to drop and the old code was removing `<|im_start|>`;
+    * the model HAS a BOS but this arm carries none — Tulu-3's chat template
+      emits none and `prepend_bos_to_chat_template: false` declares that
+      deliberate, so nothing is dropped and nothing pretends to have been.
+
+    It does not police HOW the batch was tokenised; `tokenize_for_reconstruction`
+    owns that and refuses a double BOS at source. Dropping by identity means the
+    worst a stale caller can now cause is a BOS left in, never a content token
+    taken out.
     """
     keep = attention_mask.bool().clone()
-    if drop_first_real and keep.any():
-        first_real = keep.float().argmax(dim=1)          # left padding: first 1
-        keep[torch.arange(keep.shape[0], device=keep.device), first_real] = False
+    if bos_token_id is None or not keep.any():
+        return keep
+    rows = torch.arange(keep.shape[0], device=keep.device)
+    first_real = keep.float().argmax(dim=1)              # left padding: first 1
+    is_bos = input_ids.to(keep.device)[rows, first_real] == bos_token_id
+    keep[rows[is_bos], first_real[is_bos]] = False
     return keep
 
 
@@ -341,9 +421,6 @@ def measure_reconstruction(
     control: SparseAutoencoder | None = None,
     # plumbing(batch_size): throughput only — every read is per-prompt
     batch_size: int = 8,
-    # constant: BOS carries Llama-3.1's massive-activation spike, which the
-    # dictionary's dataset-wise normalisation assumes away — see scored_positions
-    drop_bos: bool = True,
     # definitional: which DISTRIBUTION the dictionary is read on. Not a knob for
     # tuning a number — it decides what the number is ABOUT. Tuning path: none;
     # the preset declares it and `render_chat: false` is the Base arm's own
@@ -409,7 +486,9 @@ def measure_reconstruction(
 
     for start in range(0, len(rendered), batch_size):
         chunk = rendered[start : start + batch_size]
-        encoded = loaded.tokenizer(chunk, return_tensors="pt", padding=True)
+        encoded = tokenize_for_reconstruction(
+            loaded.tokenizer, chunk, render_chat=render_chat
+        )
         inputs = {key: value.to(loaded.device) for key, value in encoded.items()}
 
         captured: list[torch.Tensor] = []
@@ -431,7 +510,9 @@ def measure_reconstruction(
             # and land somewhere plausible-but-wrong, which is the same
             # half-an-invariant shape that killed job 9006846 one seam over.
             keep = scored_positions(
-                encoded["attention_mask"].cpu(), drop_first_real=drop_bos
+                encoded["input_ids"].cpu(),
+                encoded["attention_mask"].cpu(),
+                bos_token_id=loaded.tokenizer.bos_token_id,
             )
             flat = keep.reshape(-1)
             kept_hidden = hidden.reshape(-1, hidden.shape[-1])[flat]
@@ -505,9 +586,6 @@ def observed_sparsity(
     *,
     # plumbing(batch_size): throughput only — the L0 is a per-position mean
     batch_size: int = 8,
-    # constant: must MATCH `measure_reconstruction`'s masking, since the whole
-    # point is that the control is sized on the positions the run will score
-    drop_bos: bool = True,
     # definitional: must MATCH `measure_reconstruction`'s rendering for the same
     # reason — a control sized on a different distribution is not matched.
     render_chat: bool = True,
@@ -534,7 +612,9 @@ def observed_sparsity(
     total, counted = 0.0, 0.0
     for start in range(0, len(rendered), batch_size):
         chunk = rendered[start : start + batch_size]
-        encoded = loaded.tokenizer(chunk, return_tensors="pt", padding=True)
+        encoded = tokenize_for_reconstruction(
+            loaded.tokenizer, chunk, render_chat=render_chat
+        )
         inputs = {key: value.to(loaded.device) for key, value in encoded.items()}
         captured: list[torch.Tensor] = []
 
@@ -543,7 +623,11 @@ def observed_sparsity(
                 loaded.model(**inputs)
 
         hidden = captured[0]
-        keep = scored_positions(encoded["attention_mask"].cpu(), drop_first_real=drop_bos)
+        keep = scored_positions(
+            encoded["input_ids"].cpu(),
+            encoded["attention_mask"].cpu(),
+            bos_token_id=loaded.tokenizer.bos_token_id,
+        )
         kept = hidden.reshape(-1, hidden.shape[-1])[keep.reshape(-1)]
         if not kept.numel():
             continue

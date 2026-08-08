@@ -34,7 +34,7 @@ from pathlib import Path
 import pytest
 
 from internals_safety import pipeline, provenance
-from internals_safety.measurements import deployment, length_null
+from internals_safety.measurements import deployment, length_null, sae_reconstruction
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 
@@ -51,6 +51,14 @@ WATCHED = {
     "measure_deployment": deployment.measure_deployment,
     "length_strata": length_null.length_strata,
     "run_families": pipeline.run_families,
+    # Added 2026-08-08 by the same trigger: `drop_bos: bool` became
+    # `bos_token_id` keyword-only with no default, so a stale caller is now a
+    # TypeError — and this is what makes it a `pytest` TypeError rather than a
+    # cluster one. `scored_positions` itself is deliberately NOT here: no script
+    # calls it, and the watchlist's own vacuity guard rejects a name that matches
+    # nothing. It is reached through these two.
+    "measure_reconstruction": sae_reconstruction.measure_reconstruction,
+    "observed_sparsity": sae_reconstruction.observed_sparsity,
 }
 
 

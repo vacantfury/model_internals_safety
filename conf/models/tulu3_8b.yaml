@@ -57,12 +57,19 @@
 #    offset filter kept only tokens lying wholly inside the message — so the
 #    readout landed one token early, silently. Llama/Qwen/Mistral force a clean
 #    break and were never affected. Pinned by `tests/test_real_instruction_final.py`.
-# ## Provenance
-# **Tulu 3: Pushing Frontiers in Open Language Model Post-Training** — Lambert
-# et al., arXiv 2411.15124 (2024; v5 Apr 2025). Evidence tier **(B)**: arXiv
-# report with substantial independent uptake and a fully released recipe; no
-# peer-reviewed venue found (checked 2026-08-08 — a COLM listing was searched
-# for specifically and NOT found, so do not assert one).
+# ## Provenance — canonical home is `text_docs/shared/model_slate.md`
+# **TÜLU 3: Pushing Frontiers in Open Language Model Post-Training** — Lambert
+# et al., arXiv 2411.15124. Evidence tier **(A) — COLM 2025**.
+#
+# ⚠️ **CORRECTION 2026-08-08.** This block first read "tier (B), no peer-reviewed
+# venue found — a COLM listing was searched for specifically and NOT found".
+# That was WRONG, and wrong in the way the lit-search handbook already names: the
+# check was run against dblp, which records this paper as CoRR only, and a failed
+# lookup was then reported as evidence of absence. The OpenReview PDF
+# (openreview.net/pdf?id=i1uGbfHHpH) carries the header "Published as a
+# conference paper at COLM 2025". **Venue goes to OpenReview or the proceedings,
+# never to a metadata aggregator alone** — this is the strongest-provenance model
+# in the slate and it was tiered two tiers too low.
 #
 # This is the one model in the slate whose paper is load-bearing for the SCIENCE
 # rather than just for attribution: the post-training recipe (SFT -> DPO ->

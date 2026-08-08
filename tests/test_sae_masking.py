@@ -23,6 +23,7 @@ RAGGED batch, and its assertion is that padding changes nothing.
 
 from __future__ import annotations
 
+import pytest
 import torch
 
 from internals_safety.config import SAEConfig
@@ -30,42 +31,139 @@ from internals_safety.measurements.sae_reconstruction import (
     RandomDictionary,
     measure_reconstruction,
     scored_positions,
+    tokenize_for_reconstruction,
 )
+
+
+BOS = 9
 
 
 class TestScoredPositions:
     def test_pads_are_dropped(self):
+        ids = torch.tensor([[1, 1, BOS, 5, 6], [BOS, 4, 5, 6, 7]])
         mask = torch.tensor([[0, 0, 1, 1, 1], [1, 1, 1, 1, 1]])
-        keep = scored_positions(mask, drop_first_real=False)
+        keep = scored_positions(ids, mask, bos_token_id=None)
         assert keep.tolist() == [[0, 0, 1, 1, 1], [1, 1, 1, 1, 1]]
 
     def test_the_first_REAL_token_is_dropped_not_index_zero(self):
         """Under left padding, index 0 is a pad on every short row. Dropping it
         would remove a pad twice and leave BOS in — the whole point."""
+        ids = torch.tensor([[1, 1, BOS, 5, 6], [BOS, 4, 5, 6, 7]])
         mask = torch.tensor([[0, 0, 1, 1, 1], [1, 1, 1, 1, 1]])
-        keep = scored_positions(mask, drop_first_real=True)
+        keep = scored_positions(ids, mask, bos_token_id=BOS)
         assert keep.tolist() == [
             [0, 0, 0, 1, 1],   # pads out, then the BOS at index 2
             [0, 1, 1, 1, 1],   # no pads, BOS at index 0
         ]
 
-    def test_bos_survives_when_the_caller_asks_for_it(self):
-        """It is an explicit decision, not a side effect of masking — the
-        attention mask marks BOS as real."""
+    def test_a_model_with_no_bos_drops_nothing(self):
+        """Qwen2.5 has `bos_token_id is None` — measured, not assumed. The old
+        signature dropped the first real position anyway, which on Qwen removed
+        `<|im_start|>` and on the plain arm removed the first word."""
+        ids = torch.tensor([[4, 5, 6], [4, 5, 6]])
         mask = torch.ones(2, 3, dtype=torch.long)
-        assert scored_positions(mask, drop_first_real=False).all()
+        assert scored_positions(ids, mask, bos_token_id=None).all()
+
+    def test_a_row_that_does_not_start_with_bos_keeps_its_first_token(self):
+        """The assertion the old `drop_first_real: bool` made without checking.
+
+        Row 1 is Tulu-3's chat arm: the model HAS a BOS token but this arm
+        deliberately carries none (`prepend_bos_to_chat_template: false`). The
+        old code removed its first content token; identity-dropping leaves it."""
+        ids = torch.tensor([[BOS, 4, 5], [4, 5, 6]])
+        mask = torch.ones(2, 3, dtype=torch.long)
+        keep = scored_positions(ids, mask, bos_token_id=BOS)
+        assert keep.tolist() == [[0, 1, 1], [1, 1, 1]]
 
     def test_an_all_pad_row_does_not_crash(self):
+        ids = torch.full((1, 4), 1)
         mask = torch.zeros(1, 4, dtype=torch.long)
-        assert not scored_positions(mask, drop_first_real=True).any()
+        assert not scored_positions(ids, mask, bos_token_id=BOS).any()
 
     def test_the_input_mask_is_not_mutated(self):
         """`clone()` — the caller's `encoded["attention_mask"]` is reused for the
         forward pass, and silently zeroing a real token there would change what
         the model attends to."""
+        ids = torch.tensor([[BOS, 4, 5], [BOS, 4, 5]])
         mask = torch.ones(2, 3, dtype=torch.long)
-        scored_positions(mask, drop_first_real=True)
+        scored_positions(ids, mask, bos_token_id=BOS)
         assert mask.all()
+
+
+class TestWhoOwnsTheBOSDecision:
+    """The trap measured on the real tokenizers 2026-08-08.
+
+    `tokenizer(chat_rendered)` with the default `add_special_tokens=True` gives
+    `['<|begin_of_text|>', '<|begin_of_text|>', ...]` on Llama-3.1-Instruct and
+    `['<s>', '<s>', ...]` on Mistral-v0.3, because the template already emitted
+    one. This module was the only place in the repo tokenising that way.
+
+    The fix does not decide BOS itself — since `verify_bos_convention`
+    (`models/loader.py`, peer session) the CONFIG owns it for the chat arm, and
+    Tulu-3 declares a deliberate BOS-less run. So the chat arm takes the template
+    at its word and the plain arm, which has no template, lets the tokenizer's
+    post-processor supply one.
+    """
+
+    def test_the_chat_arm_takes_the_template_at_its_word(self, tiny_bos_tokenizer):
+        rendered = tiny_bos_tokenizer.apply_chat_template(
+            [{"role": "user", "content": "hi"}], tokenize=False, add_generation_prompt=True
+        )
+        ids = tokenize_for_reconstruction(
+            tiny_bos_tokenizer, [rendered], render_chat=True
+        )["input_ids"][0]
+        assert ids[0] == tiny_bos_tokenizer.bos_token_id
+        assert (ids == tiny_bos_tokenizer.bos_token_id).sum() == 1
+
+    def test_a_bos_less_chat_template_is_NOT_overruled(self, tiny_tokenizer):
+        """Tulu-3's case, and the reason this function decides nothing. Adding a
+        BOS here would silently overrule `prepend_bos_to_chat_template: false`."""
+        rendered = tiny_tokenizer.apply_chat_template(
+            [{"role": "user", "content": "hi"}], tokenize=False, add_generation_prompt=True
+        )
+        ids = tokenize_for_reconstruction(
+            tiny_tokenizer, [rendered], render_chat=True
+        )["input_ids"][0].tolist()
+        assert ids == tiny_tokenizer(rendered, add_special_tokens=False)["input_ids"]
+
+    def test_the_plain_arm_DOES_get_one(self, tiny_bos_tokenizer):
+        """No template means nothing has decided, and the dictionary was fitted
+        on a distribution that had BOS."""
+        ids = tokenize_for_reconstruction(
+            tiny_bos_tokenizer, ["user hi"], render_chat=False
+        )["input_ids"][0]
+        assert ids[0] == tiny_bos_tokenizer.bos_token_id
+
+    def test_a_model_without_bos_gets_nothing(self, tiny_tokenizer):
+        ids = tokenize_for_reconstruction(
+            tiny_tokenizer, ["user hi"], render_chat=False
+        )["input_ids"][0]
+        assert ids.tolist() == tiny_tokenizer("user hi", add_special_tokens=False)["input_ids"]
+
+    def test_a_DOUBLE_bos_is_refused(self, tiny_bos_tokenizer):
+        """THE defect. Chat-rendered text (template emits BOS) tokenised as if it
+        were the plain arm (post-processor adds another) is the exact code path
+        this module used to take on every Instruct run."""
+        rendered = tiny_bos_tokenizer.apply_chat_template(
+            [{"role": "user", "content": "hi"}], tokenize=False, add_generation_prompt=True
+        )
+        with pytest.raises(ValueError, match="TWO"):
+            tokenize_for_reconstruction(tiny_bos_tokenizer, [rendered], render_chat=False)
+
+    def test_left_padding_still_puts_bos_at_the_first_real_position(
+        self, tiny_bos_tokenizer
+    ):
+        """Under left padding BOS is not at index 0 on short rows, so both the
+        double-BOS check and the masking must find the first REAL position."""
+        encoded = tokenize_for_reconstruction(
+            tiny_bos_tokenizer, ["user hi", "user hi there now"], render_chat=False
+        )
+        keep = scored_positions(
+            encoded["input_ids"],
+            encoded["attention_mask"],
+            bos_token_id=tiny_bos_tokenizer.bos_token_id,
+        )
+        assert int(keep.sum()) == int(encoded["attention_mask"].sum()) - 2
 
 
 class TestPaddingChangesNothing:
@@ -126,8 +224,14 @@ class TestPaddingChangesNothing:
         prompts = ["hi", "a much longer prompt with many more tokens than the first"]
         quality = self._quality(tiny_model, prompts, batch_size=2)
 
-        encoded = tiny_model.tokenizer(prompts, return_tensors="pt", padding=True)
-        keep = scored_positions(encoded["attention_mask"], drop_first_real=True)
+        encoded = tokenize_for_reconstruction(
+            tiny_model.tokenizer, prompts, render_chat=False
+        )
+        keep = scored_positions(
+            encoded["input_ids"],
+            encoded["attention_mask"],
+            bos_token_id=tiny_model.tokenizer.bos_token_id,
+        )
         padded_total = encoded["attention_mask"].numel()
 
         assert int(keep.sum()) < padded_total, "fixture is not ragged — test is vacuous"

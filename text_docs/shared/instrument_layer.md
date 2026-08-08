@@ -1168,6 +1168,68 @@ through its classification prompt**, so "plain text" is not the guard's fitted
 distribution either — the guard-side pre-gate needs its own ceiling arm and must
 not import 0.698.
 
+### 4.7 ⚠️ The BOS masking was right in the ceiling arm and wrong in the target arm — the asymmetry sat inside the ratio
+
+Measured on the real tokenizers 2026-08-08, not inferred. `sae_reconstruction.py`
+was the **only module in the repo tokenising with the default
+`add_special_tokens=True`**; the other twenty-odd call sites pass `False` and let
+the chat template own BOS. What that produced, per arm:
+
+| checkpoint | `bos_token_id` | chat arm, old tokenisation | plain arm, old tokenisation |
+|---|---|---|---|
+| Llama-3.1-8B-Instruct | 128000 | `['<\|begin_of_text\|>', '<\|begin_of_text\|>', …]` — **two** | `['<\|begin_of_text\|>', 'How', …]` — one |
+| Llama-3.1-8B-Base | 128000 | (no template) | one |
+| Mistral-7B-Instruct-v0.3 | 1 | `['<s>', '<s>', '[INST]', …]` — **two** | one |
+| Tulu-3-8B | 128000 | one (template emits none; the post-processor adds it) | one |
+| Qwen2.5-7B-Instruct | **None** | none — the model has no BOS at all | none |
+
+The chat template already emits BOS and the tokenizer's post-processor added a
+second. `scored_positions` then dropped **the first real position** and scored
+the second — so the massive-activation spike the masking exists to exclude was
+inside the metric.
+
+**Why this is worse than a contaminated number: it contaminated exactly one side
+of a ratio.** The ceiling arm runs `render_chat: false`, where nothing emits BOS,
+the tokenizer supplies exactly one, and dropping the first real position is
+correct. The target arm runs `render_chat: true` and carried two. The gate
+divides the second by the first. Both terms move — the kept-position set loses a
+spike, and the forward pass itself no longer sees a duplicated prefix, so the KL
+term shifts too.
+
+**What must be re-measured:** every Instruct-arm reading, which is job `9010205`
+and the transfer ratio 1.009–1.017 quoted from it. §4.6's ceiling table
+(`9009915`, plain arm) is **unaffected**, and that is derivable rather than
+hopeful: old path = tokenizer adds BOS at position 0, dropped; new path = nothing
+emits BOS so `tokenize_exactly_one_bos` prepends one, dropped. Identical kept set,
+identical input ids.
+
+**Two cases the old signature could not express at all.** Qwen2.5 has no BOS
+token, so `drop_first_real=True` removed `<|im_start|>` in the chat arm and the
+first word of the prompt in the plain arm — silently, since a bool cannot report
+that there was nothing to drop. And the fix filed against Tulu-3 (that its
+BOS-less template made the drop unsafe) had a **false premise**: under the old
+path its post-processor supplied a BOS anyway. The right lesson is not the one
+that was filed — it is that `drop_bos: bool` asserted a fact about token 0
+without ever reading it, and was therefore wrong in different directions on three
+of five checkpoints.
+
+**The fix is structural, in the shape items 58/59 settled.** `tokenize_exactly_one_bos`
+owns the "who supplies BOS" question, and `scored_positions` takes
+`bos_token_id` **keyword-only with no default** and drops BOS *by identity*,
+raising if the first real token is not the declared BOS. `bos_token_id=None`
+means the model has none — nothing is dropped and nothing pretends to have been.
+A stale caller is a `TypeError`, and `measure_reconstruction`/`observed_sparsity`
+joined the `WATCHED` list in `tests/test_entrypoint_call_sites.py`.
+
+**Fixture note, fourth instance of the rule.** `tiny_tokenizer` has no BOS, so
+the hermetic suite modelled Qwen and nothing else — the SAE gate runs exclusively
+on BOS-carrying models. `tiny_bos_tokenizer` was added *with a
+`TemplateProcessing` post-processor*, because a bare `PreTrainedTokenizerFast`
+never adds BOS and a fixture without it cannot express the defect; all three
+mutations (call site, prepend condition, identity check) are caught by three
+different tests, and `tests/test_real_bos_handling.py` pins the upstream
+behaviour across all five checkpoints.
+
 ---
 
 ## 5. Known anomaly, unexplained
