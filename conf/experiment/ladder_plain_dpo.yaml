@@ -1,0 +1,78 @@
+# THE LADDER, IN THE SAME CURRENCY AS THE HEADLINE.
+#
+# Re-run of `ladder_tulu3_dpo` on current code. Nothing about the design
+# changed; what changed is the entrypoint. Jobs 9011347-9011349 ran before
+# `run_plain_behavior_baseline` landed (commit 5a8d2a9), so the ladder's series
+# is in ENCODED benign refusal while the paper's headline quantity (§4d) is
+# *gap lost relative to plaintext*. Legs 1 and 2 of §4e are currently in
+# different currencies and the mechanism claim is weaker for it: "benign refusal
+# falls across stages" is not yet "the discrimination the encoding destroys is
+# restored across stages".
+#
+# The baseline is model-level and MANDATORY in the entrypoint, so no knob here
+# turns it on. The re-run also picks up per-cell benign persistence (188644d),
+# which jobs 9011347-9011349 predate and which the graded regrade needs, and it
+# fixes their wrong `git_hash` (2a3a75e, written by the pre-188644d path while
+# the shared checkout moved underneath).
+entrypoint: phase0_regime_map
+description: >-
+  Tülu 3 8B DPO re-run with the plaintext behavioural baseline, so the ladder's
+  stage series and the paper's headline are the same quantity.
+
+gates: >-
+  Read as one experiment with its two siblings; a single stage gates nothing.
+
+  WHETHER LEG 2 SURVIVES BEING PUT IN LEG 1's CURRENCY. §4e's mechanism claim is
+  that post-training restores the discrimination encoding destroys. What is
+  measured so far is that ENCODED benign refusal falls monotonically across
+  stages (fullwidth 0.80->0.45->0.30, homoglyph 0.79->0.63->0.48, zero_width
+  0.91->0.43->0.37). Those are not the same statement unless each stage's
+  PLAINTEXT benign refusal is roughly constant.
+
+  If plaintext benign refusal is flat across the three stages, the encoded fall
+  is a real recovery of discrimination, leg 2 is expressible as "gap lost
+  relative to plaintext, by stage", and the mechanism claim stands as written.
+
+  If plaintext benign refusal ALSO falls across stages, the ladder is measuring
+  general de-refusal rather than anything about encoding, leg 2 collapses into a
+  restatement of "later stages refuse less", and §4e's mechanism has to be
+  withdrawn — the phenomenon in leg 1 survives, but nothing locates it.
+
+  It also settles a §4d question this repo cannot currently answer: whether the
+  harmful arm's model-independence (spread 0.08 across four families, inside the
+  0.10 noise ceiling) also holds ACROSS TRAINING STAGES of one model. If encoded
+  harmful refusal is flat along the ladder while plaintext harmful refusal moves,
+  that is the strongest form of "the harmful arm carries no information" the
+  design can produce.
+
+target: tulu3_8b_dpo
+
+# UNCHANGED from `ladder_tulu3_dpo`, deliberately. The ladder's value is the
+# DIFFERENCE between stages, and a difference taken across different rung sets is
+# not one — the same reason math_bold was kept out the first time. Changing the
+# rung set in the run that adds the baseline would confound the two changes.
+families:
+  - fullwidth
+  - homoglyph
+  - zero_width
+  - base64
+  - reverse_characters
+  - tag_block
+  - math_sans
+  - circled
+
+n_prompts: 100
+
+instruments: [lexical]
+run_name: ladder-plain-dpo
+
+# 06:00:00 rather than the original 04:00:00. The first ladder jobs ran 1:07+ and
+# 0:57+ when last observed and the baseline adds 200 generations plus 400 judge
+# calls; the margin is for the wall kill that cost a Qwen run at 8:00:26, not for
+# an expected increase.
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "06:00:00"
