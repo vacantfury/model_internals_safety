@@ -60,6 +60,39 @@ class ModelConfig(StrictModel):
     capture_batch_size: int = 8
     capture: CaptureConfig = CaptureConfig()
 
+    # Whether this model's chat template needs BOS prepended for it.
+    #
+    # ⚠️ THREE-STATE ON PURPOSE, and `None` is not "false" — it is "nobody has
+    # decided". `models/loader.verify_bos_convention` RAISES on a checkpoint
+    # whose tokenizer declares a BOS token that its chat template never emits,
+    # unless this field says which way to go. That combination is the whole
+    # point: repo-wide tokenisation runs `add_special_tokens=False` (see
+    # `models/loader.tokenize_batch`) on the premise that "the chat template
+    # already emits BOS where the architecture wants one" — and that premise is
+    # a property of the checkpoints tried so far, not a law.
+    #
+    # It is FALSE for Tulu 3, verified against the real tokenizer 2026-08-08 and
+    # confirmed by the paper's own Figure 27: its template is plain-text role
+    # markers (`<|user|>\n...` tokenising to [27, 91, 882, 91, 29], not a special
+    # token) with no BOS anywhere, while `tokenizer.bos_token` is
+    # `<|begin_of_text|>` and the fast tokenizer's post-processor adds it under
+    # `add_special_tokens=True`. Run under the repo default, a Tulu arm would see
+    # NO BOS while the Llama-3.1-8B-Instruct arm it exists to be compared against
+    # gets one from its template string — a silent distribution shift in exactly
+    # the comparison the arm is for.
+    #
+    # Exactly one model in the current slate trips the guard, checked rather than
+    # assumed: Llama-3.1-8B-Instruct, Mistral-7B-Instruct-v0.3 and gemma-2-9b-it
+    # all emit BOS in-template; Qwen2.5-7B-Instruct declares `bos_token = None`,
+    # so the question does not arise for it.
+    #
+    # `True` prepends `{{ bos_token }}` to the template at attach time — one
+    # mutation reaching every renderer, the same mechanism `chat_template_from`
+    # uses — and raises if the template already emits one, since a double BOS is
+    # the failure mode this repo already recorded for Mistral. `False` is a
+    # deliberate BOS-less run and must be argued in the config, not defaulted to.
+    prepend_bos_to_chat_template: bool | None = None
+
     # Another model config whose chat template this one borrows. Only a BASE
     # checkpoint should ever set it, and only to its own Instruct sibling: the
     # point is to make the two comparable by holding the input text fixed so the

@@ -1,0 +1,47 @@
+# Rung 2 of the post-training ladder — SFT plus length-normalised DPO.
+#
+# Full rationale, provenance and the two reporting checks owed:
+# `conf/models/tulu3_8b_sft.yaml` and `text_docs/shared/model_slate.md`. Only
+# what is SPECIFIC to this rung is stated here, so there is one home for the rest.
+#
+# What changes from rung 1: preference tuning on 425,145 preference instances
+# (paper Table 7), including the safety mixes at their DPO counts — CoCoNot
+# 10,983, WildJailbreak 26,356, WildGuardMix 26,356.
+#
+# What the paper reports moved: the 8B six-task safety average drops
+# **93.1 -> 87.2** across exactly this step (Table 6), the largest single-stage
+# safety drop in the ladder. So if comprehension-conditioned binding failure is
+# measuring something the aggregate metric is not, this is the step where the two
+# have the most room to disagree.
+name: tulu3_8b_dpo
+hf_id: allenai/Llama-3.1-Tulu-3-8B-DPO
+dtype: auto
+device: auto
+trust_remote_code: false
+system_prompt: null
+capture_batch_size: 8
+
+# Verified against this checkpoint's own config.json 2026-08-08 — not inherited
+# from its SFT sibling. Identical (32), which is the expected result and is
+# checked rather than assumed because `attach` asserts it against the real model.
+n_layers: 32
+
+capture:
+  site: resid_pre
+  layers: all
+  positions:
+    - instruction_final
+    - last
+
+# Identical chat template to the other two rungs (sha256 prefix ac7498a36a71 on
+# all three, verified 2026-08-08), so the same BOS decision applies and MUST:
+# a ladder whose rungs disagree about BOS measures BOS. See `tulu3_8b_sft.yaml`
+# for why `false` and what would settle it.
+prepend_bos_to_chat_template: false
+
+refusal_openings:
+  - "I"
+
+compliance_openings:
+  - "Sure"
+  - "Here"

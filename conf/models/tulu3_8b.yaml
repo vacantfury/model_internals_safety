@@ -17,9 +17,14 @@
 #    encoding-driven blanket refusal appears, which no cross-family comparison
 #    can ask.
 # 2. **A shared SAE dictionary.** Llama Scope is fitted on Llama-3.1-8B-Base and
-#    every model above is a fine-tune of it. Transfer to Instruct measured at
-#    ratio 1.009-1.017 (job 9010205), so one dictionary plausibly reads the whole
-#    series — I4 feature comparison ACROSS post-training recipes.
+#    every model above is a fine-tune of it, so one dictionary plausibly reads
+#    the whole series — I4 feature comparison ACROSS post-training recipes.
+#    ⚠️ The transfer ratio 1.009-1.017 (job 9010205) that this rested on is
+#    WITHDRAWN pending a re-run: its Instruct arm carried a double BOS while the
+#    ceiling arm did not, so the contamination sat on one side of that ratio.
+#    See `text_docs/shared/instrument_layer.md` §4.7. The argument for a shared
+#    dictionary is unchanged — it rests on shared base weights — but the NUMBER
+#    may not be quoted until re-measured.
 # 3. **An open recipe.** Ai2 publishes the post-training data, so a difference
 #    can be attributed to something nameable rather than left as a black box.
 #
@@ -28,10 +33,21 @@
 # a. **The template emits NO BOS.** It renders `<|user|>\n...\n<|assistant|>\n`
 #    and nothing else, so under the repo's `add_special_tokens=False` capture
 #    path token 0 is `<`, not `<|begin_of_text|>`. Llama-3.1-Instruct and Mistral
-#    both put BOS at token 0. **Any path that drops token 0 as BOS drops real
-#    content here** — that includes I4's `drop_bos=True` / `drop_first_real` in
-#    `measurements/sae_reconstruction.py`, which must be revisited BEFORE the SAE
-#    pre-gate is run on this model. The phase-0 capture path does not drop it.
+#    both put BOS at token 0. The phase-0 capture path does not drop token 0, so
+#    nothing there is affected.
+#    ⚠️ **CORRECTION 2026-08-08 — the SAE consequence first recorded here was
+#    WRONG, and measuring it found a real defect elsewhere.** This said I4's
+#    `drop_bos` would drop content on this model. It would not have: that path
+#    tokenised with the DEFAULT `add_special_tokens=True`, and this checkpoint's
+#    post-processor prepends `<|begin_of_text|>` even though the template does
+#    not — so token 0 was BOS after all. What the measurement did find is that
+#    the same default gave Llama-3.1-Instruct and Mistral a DOUBLE BOS in the
+#    chat arm, contaminating the target side of the pre-gate's transfer ratio
+#    while the plain ceiling arm stayed clean. Fixed by `tokenize_exactly_one_bos`
+#    plus dropping BOS by identity; full record in
+#    `text_docs/shared/instrument_layer.md` §4.7. The lesson kept from this entry
+#    is the general one: a BOS assumption must be READ off the checkpoint, never
+#    inferred from its template.
 # b. **`<|user|>` and `<|assistant|>` are NOT special tokens.** They shatter into
 #    five pieces each (`<`, `|`, `user`, `|`, `>\n`). Only `<|begin_of_text|>` is
 #    in the added-tokens table. So nothing may key off role markers being single
@@ -76,6 +92,19 @@ capture:
     - last
 
 # Single-token on THIS checkpoint (vocab 128264): 'I'=40, 'Sure'=40914, 'Here'=8586.
+# ⚠️ REQUIRED SINCE `verify_bos_convention` LANDED — this config could not attach
+# without it. The no-BOS fact this file already records is now ENFORCED rather
+# than documented: `models/loader.verify_bos_convention` refuses any checkpoint
+# whose tokenizer declares a BOS token its chat template never emits, until the
+# config says which way to go. Documenting the trap in a comment left the trap.
+#
+# `false` records what job 9011034 ACTUALLY DID — it ran BOS-less, since nothing
+# prepended one — so the config describes the run rather than contradicting it,
+# and its two ladder siblings (`tulu3_8b_sft`, `tulu3_8b_dpo`) match. The choice
+# is provisional and its full reasoning, including what would settle it, is in
+# `tulu3_8b_sft.yaml`.
+prepend_bos_to_chat_template: false
+
 refusal_openings:
   - "I"
 

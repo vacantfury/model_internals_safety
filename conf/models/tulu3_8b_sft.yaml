@@ -1,0 +1,106 @@
+# Rung 1 of the POST-TRAINING LADDER — the controlled test of the §4a axis.
+#
+# Provenance (owner rule 2026-08-08, `text_docs/shared/model_slate.md`):
+# TÜLU 3, Lambert et al., arXiv 2411.15124, **COLM 2025 — tier (A)**, 807 cites.
+# ⚠️ Semantic Scholar reports its venue as "arXiv.org"; that is STALE. The
+# OpenReview PDF carries the "Published as a conference paper at COLM 2025"
+# header. Checked, not inferred.
+#
+# WHY THIS LADDER RATHER THAN A FOURTH LAB.
+#
+# §4a reads a dissociation across Llama / Qwen / Mistral — three labs, so the
+# safety recipe is confounded with pretraining corpus, tokenizer and lab. Three
+# points from three vendors is still a correlation.
+#
+# Tülu 3's three checkpoints are post-trained from `meta-llama/Llama-3.1-8B` —
+# **the same base our Llama-3.1-8B-Instruct arm comes from** (paper Table 1).
+# Pretraining, architecture and layer count are held fixed and post-training is
+# the only variable. Verified against the checkpoints' own config.json
+# 2026-08-08: all three are 32 layers, vocab 128264, identical chat-template
+# hash. (Vocab is 128264 against Llama-3.1-8B-Instruct's 128256 — AI2 added 8
+# tokens, so `chat_template_from` between the two would correctly refuse.)
+#
+# Three things the paper supplies that no other model in the slate does:
+#
+#  1. **Named safety data with per-stage counts** (Table 7): Tülu 3 CoCoNot
+#     (10,983), WildJailbreak (50,000), WildGuardMix (50,000), each used in both
+#     SFT and DPO. A result here is attributable to identifiable training data.
+#  2. **A prediction our benign arm tests directly** (§4.2): "adding contrastive
+#     prompts, such as those in CoCoNot, were helpful for preventing our models
+#     from over-refusing safe prompts." AI2 trained deliberately against
+#     over-refusal on benign content, so this ladder should show a LOW benign
+#     refusal rate — which is exactly `instrument_layer.md` §3.6's measurement,
+#     built before we knew the prediction existed.
+#  3. **A published staged safety curve** (Table 6, 8B, 6-task average):
+#     SFT 93.1 -> DPO 87.2 -> final 85.5. Aggregate safety FALLS through
+#     preference tuning and RLVR.
+#
+# (3) is why this is the experiment and not just another arm. The paper's claim
+# is that conditioning on comprehension inverts safety rankings that aggregate
+# metrics produce. Here is an aggregate safety curve computed by the model's own
+# authors, over six standard tasks, across checkpoints differing only in
+# post-training. Measuring comprehension-conditioned binding failure across the
+# same three asks whether our conditioning tracks or inverts THEIR number rather
+# than one we invented.
+#
+# ⚠️ TWO CHECKS OWED BEFORE ANY TÜLU NUMBER IS REPORTED (`model_slate.md` §2.3):
+#  * WildGuardMix is BOTH this model's safety data and AS-6's guard's training
+#    corpus (same AI2 authors). Never evaluate a Tülu checkpoint against
+#    WildGuard without declaring the overlap.
+#  * Tülu 3 trained on WildJailbreak, adversarial jailbreak prompts. Whether that
+#    corpus contains ENCODING attacks is unchecked, and if it does, this model's
+#    behaviour on our ladder is partly in-distribution.
+name: tulu3_8b_sft
+hf_id: allenai/Llama-3.1-Tulu-3-8B-SFT
+dtype: auto
+device: auto
+trust_remote_code: false
+
+# Matches every other model in the slate — no arm gets a safety preamble the
+# others lack.
+system_prompt: null
+capture_batch_size: 8
+
+# `num_hidden_layers` from the checkpoint's own config.json, verified
+# 2026-08-08. Same as Llama-3.1-8B, which is what makes a layer-for-layer
+# comparison against the Instruct arm meaningful.
+n_layers: 32
+
+capture:
+  site: resid_pre
+  layers: all
+  positions:
+    - instruction_final
+    - last
+
+# ⚠️ NO BOS, AND THIS IS A PROVISIONAL CHOICE RECORDED RATHER THAN AN ARGUMENT WON.
+#
+# Tülu 3's chat template emits no BOS — verified against the real tokenizer
+# 2026-08-08, confirmed by the paper's Figure 27, and independently found by the
+# peer session (commit 70650e3). The repo tokenises `add_special_tokens=False`
+# (models/loader.tokenize_batch), so without a declaration this model runs with
+# NO BOS while every other model in the slate gets one from its template.
+# `verify_bos_convention` now refuses to attach until the config says which.
+#
+# `false` — run as AI2's own template produces, for ONE reason that outranks the
+# arguments the other way: the RLVR rung of this same ladder is ALREADY RUNNING
+# BOS-less (job 9011034), and the ladder's primary comparison is INTERNAL — SFT
+# vs DPO vs RLVR. A ladder whose rungs disagree about BOS measures BOS. Uniform
+# and provisional beats correct-in-isolation and inconsistent.
+#
+# The arguments for `true` are real and unresolved: the base was pretrained with
+# BOS, HF's default path supplies one, and the Llama-3.1-8B-Instruct arm gets one
+# — so the ladder-vs-Instruct comparison carries a BOS difference and must say so
+# until settled. It is settleable cheaply and empirically rather than by
+# argument: run one rung both ways and see whether anything moves. FILED.
+prepend_bos_to_chat_template: false
+
+# Single-token on this tokenizer, checked 2026-08-08 (not copied from the Llama
+# config — the vocab differs by 8 tokens): 'I', 'As', 'Sure', 'Here' are all one
+# token each.
+refusal_openings:
+  - "I"
+
+compliance_openings:
+  - "Sure"
+  - "Here"

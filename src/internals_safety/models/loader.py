@@ -211,6 +211,8 @@ def attach(
             )
         tokenizer.chat_template = donor.chat_template
 
+    verify_bos_convention(tokenizer, config)
+
     loaded = LoadedModel(
         config=config,
         model=model,
@@ -221,6 +223,95 @@ def attach(
     )
     verify_declared_layers(loaded)
     return loaded
+
+
+_BOS_PROBE = "probe"
+
+
+def template_emits_bos(tokenizer: PreTrainedTokenizerBase) -> bool | None:
+    """Does this tokenizer's chat template put BOS into the rendered string?
+
+    `None` when the question is undefined — no chat template, or no BOS token
+    declared. Tri-state for the usual reason: "could not be measured" is never
+    reported as the falsy end of a boolean.
+    """
+    if tokenizer.chat_template is None or tokenizer.bos_token is None:
+        return None
+    rendered = tokenizer.apply_chat_template(
+        [{"role": "user", "content": _BOS_PROBE}], tokenize=False, add_generation_prompt=True
+    )
+    return tokenizer.bos_token in rendered
+
+
+def verify_bos_convention(tokenizer: PreTrainedTokenizerBase, config: ModelConfig) -> None:
+    """Reconcile `config.prepend_bos_to_chat_template` against what the template actually renders.
+
+    **The premise this defends is stated in `tokenize_batch` and is not a law.**
+    Everything here tokenises with `add_special_tokens=False` because chat
+    templates emit BOS themselves — true of every checkpoint tried until Tulu 3,
+    whose template emits none at all. Run under the default, such a model gets no
+    BOS while the checkpoint it is being compared against gets one, and nothing
+    fails: the numbers come out, wrong.
+
+    So the omission is made inexpressible rather than documented. A tokenizer
+    that declares a BOS token whose template never emits it CANNOT be attached
+    until the config says which way to go — the fix pattern this repo has already
+    paid for three times (`strata` on `measure_deployment`, `device` on
+    `guard_working_tree`, the control floor never reaching the live entrypoint),
+    where threading a rule into callers failed and only an unrepresentable
+    omission held.
+
+    Fourth entry in the tokenizer-surprise ledger, after WildGuard shipping no
+    template, Llama Guard 3's stray leading space, and Mistral v0.3's literal
+    `<s>`. Provenance and the verified per-model table: `text_docs/shared/model_slate.md` §3.
+    """
+    emits = template_emits_bos(tokenizer)
+
+    if emits is None:
+        if config.prepend_bos_to_chat_template:
+            raise ValueError(
+                f"{config.name}: prepend_bos_to_chat_template=True but this tokenizer declares "
+                f"bos_token={tokenizer.bos_token!r} and chat_template="
+                f"{'set' if tokenizer.chat_template else 'None'}. There is no BOS token to "
+                "prepend, or no template to prepend it to — the declaration cannot be honoured, "
+                "and silently ignoring it would leave the config asserting something false."
+            )
+        return
+
+    if emits:
+        if config.prepend_bos_to_chat_template:
+            raise ValueError(
+                f"{config.name}: prepend_bos_to_chat_template=True but its chat template ALREADY emits "
+                f"{tokenizer.bos_token!r}. Prepending would produce a double BOS — the exact "
+                "defect recorded for Mistral-7B-Instruct-v0.3, where the template's literal "
+                "'<s>' plus add_special_tokens=True gave ['<s>', '<s>', '[INST]', ...]. Drop "
+                "the declaration; the default is already correct for this checkpoint."
+            )
+        return
+
+    # The template renders no BOS although the checkpoint has one.
+    if config.prepend_bos_to_chat_template is None:
+        raise ValueError(
+            f"{config.name}: tokenizer declares bos_token={tokenizer.bos_token!r} but its chat "
+            "template never emits it, and the repo tokenises with add_special_tokens=False "
+            "(models/loader.tokenize_batch) — so this model would run with NO BOS while every "
+            "other model in the slate gets one from its template. That is a silent distribution "
+            "shift, not an error, and it lands inside whatever comparison this model was added "
+            "to make.\n"
+            "Decide it in the config and say why:\n"
+            "  prepend_bos_to_chat_template: true   -> attach prepends {{ bos_token }} to the template\n"
+            "  prepend_bos_to_chat_template: false  -> a deliberate BOS-less run, argued in the config\n"
+            "See text_docs/shared/model_slate.md §3."
+        )
+
+    if config.prepend_bos_to_chat_template:
+        tokenizer.chat_template = "{{ bos_token }}" + tokenizer.chat_template
+        if not template_emits_bos(tokenizer):  # pragma: no cover - defensive
+            raise ValueError(
+                f"{config.name}: prepended {{{{ bos_token }}}} to the chat template but the "
+                "rendered output still carries no BOS. The template engine did not substitute "
+                "it, so the fix did not take — do not proceed on an unverified render."
+            )
 
 
 def verify_declared_layers(loaded: LoadedModel) -> None:

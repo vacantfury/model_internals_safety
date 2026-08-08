@@ -1,0 +1,88 @@
+# THE POST-TRAINING LADDER, rung 2 of 3 — Tülu 3 8B after SFT + DPO.
+#
+# Design, rationale and the two owed reporting checks: `ladder_tulu3_sft.yaml`
+# and `text_docs/shared/model_slate.md` §2.2. Only what is specific to this rung
+# is stated here.
+#
+# This is the step where the paper's own aggregate safety number falls furthest:
+# **93.1 -> 87.2** on the six-task average (Table 6), the largest single-stage
+# drop in the ladder. Preference tuning is also where the safety data enters at
+# its second-largest counts (CoCoNot 10,983, WildJailbreak 26,356, WildGuardMix
+# 26,356). So if comprehension-conditioned binding failure is measuring something
+# the aggregate is not, this is the step with the most room for the two to
+# disagree — and the one whose result most directly names what phase 1 would
+# intervene on.
+entrypoint: phase0_regime_map
+description: >-
+  Tülu 3 8B DPO on three substrate rungs plus five can't-decode candidates — rung 2
+  of the post-training ladder, the controlled test of the §4a axis.
+
+gates: >-
+  Read as one experiment with its two siblings; a single rung gates nothing on
+  its own, and this preset exists to be differenced against them.
+
+  WHICH POST-TRAINING STAGE INTRODUCES BINDING FAILURE — which is what phase 1
+  would have to intervene on. If comprehension-conditioned binding failure is
+  already present after SFT, the target is instruction tuning and the
+  intervention is a fine-tuning-time one. If it appears only at DPO or RLVR, the
+  target is preference optimisation and a phase-1 built against SFT-stage
+  representations would be aimed at the wrong stage.
+
+  SECOND, and this is the paper-level gate: whether our conditioning TRACKS or
+  INVERTS the paper's own published safety curve (93.1 -> 87.2 -> 85.5). Tracking
+  means the four-regime instrument is an expensive re-derivation of a number six
+  standard benchmarks already give, and the measurement contribution has to carry
+  the paper alone. Inverting means an aggregate safety metric computed by a
+  model's own authors disagrees with what the model does on inputs it
+  demonstrably understood — which is the thesis, tested on someone else's
+  numbers.
+
+  THIRD, a prediction of the paper's that our benign arm tests directly: §4.2
+  says CoCoNot contrastive prompts were added to prevent over-refusal of safe
+  prompts. So this ladder should show a LOW benign refusal rate. If it does not,
+  either the training did not do what the authors report or our benign arm is
+  measuring something else — and both are worth knowing before the arm carries
+  any more conclusions.
+
+target: tulu3_8b_dpo
+
+# EIGHT rungs — THE SAME SET THE RLVR RUNG IS ALREADY RUNNING.
+#
+# Matched deliberately to `dissociation_tulu3.yaml` (job 9011034, in flight),
+# because the ladder's value is the DIFFERENCE between the three stages and a
+# difference taken across different rung sets is not one. `math_bold` — the
+# largest (B) cell this repo has measured — and a sixth control were dropped for
+# exactly that reason; adding them to two rungs of three would buy data on the
+# wrong axis. If the ladder shows something, they go back in on all three at once.
+#
+# Three substrate rungs and five can't-decode candidates. A rung COUNTS as a
+# control only if it measures can't-decode on THIS model, which is a result of
+# the run rather than a declaration; five is the minimum for the adopted
+# `mean + 2SD` floor, below which it falls back to `max` and is labelled a
+# `bound` (instrument_layer §2.4). No headroom, which is a known weakness of this
+# set and is inherited, not chosen.
+families:
+  - fullwidth
+  - homoglyph
+  - zero_width
+  - base64
+  - reverse_characters
+  - tag_block
+  - math_sans
+  - circled
+
+n_prompts: 100
+
+# MANDATORY, not optional. `deployment.REQUIRED_CONTROLS` names the XSTest
+# vocabulary screen, so a decode reading produced without it is WITHHELD by the
+# contract. The benign judge arm is no longer opt-in — `MANDATORY_JUDGE_CONTROL`
+# in the entrypoint — so it runs without being named here.
+instruments: [lexical]
+run_name: ladder-tulu3-dpo
+
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "04:00:00"
