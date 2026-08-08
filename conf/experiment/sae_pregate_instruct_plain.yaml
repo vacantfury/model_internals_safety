@@ -1,0 +1,57 @@
+# **The clean transfer number: Base -> Instruct with the rendering held fixed.**
+#
+# Its sibling `sae_pregate_instruct.yaml` runs the same dictionaries on the same
+# model through the chat template, and the two answer DIFFERENT questions:
+#
+#   this preset      plain Instruct vs plain Base    -> does the dictionary
+#                                                       TRANSFER? The model is
+#                                                       the only variable.
+#   the templated one  templated Instruct vs plain Base -> is I4 usable on the
+#                                                       activations AS-5 actually
+#                                                       produces?
+#
+# Only THIS one isolates a single variable, which is why the transfer number of
+# record comes from here. The templated arm cannot: the templated Base ceiling
+# is -915 (job 9009783), so there is no meaningful denominator on that side.
+#
+# Neither is redundant. A clean transfer result here with a collapse there would
+# mean the dictionary transfers fine between the models and simply cannot read
+# chat-formatted activations — a constraint on how I4 may be used, not a reason
+# to abandon it. The reverse ordering would be indistinguishable from a broken
+# dictionary if only one arm ran.
+entrypoint: sae_pregate
+description: >-
+  Llama Scope dictionaries on Llama-3.1-8B-Instruct, PLAIN text — the same
+  rendering as the ceiling, so the Base-to-Instruct gap is attributable to the
+  model rather than to the prompt format.
+
+gates: >-
+  Whether the I4 FEATURE instrument gets written, and what
+  `min_transfer_ratio` is set from. A clean transfer here licenses feature-level
+  work on Instruct and makes the ratio a measured quantity instead of the
+  unearned 0.80 in measurements.yaml. A large gap ends I4 for AS-5 before the
+  feature half is built rather than after — which is the whole reason the
+  pre-gate exists.
+
+target: llama3_1_8b_instruct
+
+# Same ceiling as the templated arm, and the same rendering as it — which is
+# what makes this the attributable comparison of the two.
+source_runs:
+  llama3_1_8b_base: pregate-base-plain
+
+render_chat: false
+
+# Identical to both siblings so the three runs differ in model and rendering
+# and in nothing else.
+sae_layers: [17, 19, 21]
+
+n_prompts: 100
+run_name: pregate-instruct-plain
+
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "01:00:00"

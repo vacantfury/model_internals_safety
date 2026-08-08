@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 import torch
 
@@ -42,6 +43,7 @@ from internals_safety.config import load_measurements_config, load_model_config
 from internals_safety.data import prompt_set
 from internals_safety.measurements.sae_reconstruction import (
     RandomDictionary,
+    ceiling_from,
     measure_reconstruction,
     observed_sparsity,
     reading,
@@ -53,6 +55,7 @@ from internals_safety.paths import PROJECT_ROOT
 from internals_safety.provenance import capture_provenance, guard_working_tree, write_run_record
 
 PHASE = "sae_pregate"
+
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -75,6 +78,13 @@ def main(argv: list[str] | None = None) -> int:
         help="do NOT render prompts through the chat template. The Base arm's own "
              "training distribution — see measurements.sae_reconstruction._render",
     )
+    parser.add_argument(
+        "--ceiling-from",
+        default=None,
+        help="results.json of this layer's CEILING arm. Present = this is a TARGET arm, "
+             "judged as a fraction of that run's variance explained; absent = this run "
+             "IS the ceiling and is judged on reconstructing at all",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
@@ -87,6 +97,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"SAE              Llama Scope layer {args.sae_layer} (~540 MB download)")
         print(f"prompts          {len(prompts)}")
         print(f"rendering        {'PLAIN TEXT (dictionary training distribution)' if args.plain_text else 'chat template'}")
+        print(f"arm              {'TARGET (vs ' + args.ceiling_from + ')' if args.ceiling_from else 'CEILING (sets the bar)'}")
         # Three passes: clean, SAE-substituted, ablated. Plus the same again for
         # the matched random-dictionary control — priced, because a control the
         # estimate cannot see is a cost nobody approved.
@@ -163,8 +174,11 @@ def main(argv: list[str] | None = None) -> int:
         batch_size=model_config.capture_batch_size,
         render_chat=not args.plain_text,
     )
+    ceiling = ceiling_from(args.ceiling_from, layer) if args.ceiling_from else None
+    if ceiling is not None:
+        print(f"  ceiling {ceiling:.4f} from {args.ceiling_from}", flush=True)
     verdict = (
-        reading(quality, measurements.sae)
+        reading(quality, measurements.sae, ceiling=ceiling)
         if quality.n_prompts
         else unmeasured_reading("no prompts scored")
     )
@@ -201,6 +215,7 @@ def main(argv: list[str] | None = None) -> int:
             },
             "n_prompts": quality.n_prompts,
             "render_chat": not args.plain_text,
+            "ceiling_from": args.ceiling_from,
             "provenance": capture_provenance(str(device)),
         },
         readings=verdicts,

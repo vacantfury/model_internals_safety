@@ -13,10 +13,29 @@ gates: >-
   Whether the I4 FEATURE instrument gets written. The build plan gates it on
   this pre-gate passing, so a large transfer gap ends I4 here rather than after
   a feature analysis built on a dictionary that does not describe our model —
-  and it also sets the two SAE knobs from the gap rather than from the
-  literature-shaped 0.80 / 0.75 currently sitting in measurements.yaml.
+  and it sets `min_transfer_ratio` from the measured gap rather than from the
+  unearned 0.80 sitting in measurements.yaml.
+
+  This arm specifically answers whether I4 is usable on AS-5's REAL inputs,
+  which are chat-templated. A collapse here is not a bug — it is the finding
+  that a Base-fitted dictionary cannot read chat-formatted activations, and it
+  would end I4 for AS-5 before the feature instrument is written rather than
+  after.
 
 target: llama3_1_8b_instruct
+
+# The CEILING this arm is judged against: the plain-text Base run, the model the
+# dictionary was fitted on. Per layer — `tasks()` appends `-L<layer>`.
+#
+# ⚠️ The ceiling is PLAIN and this arm is TEMPLATED, which is deliberate and is
+# the one comparison in this pair that does NOT isolate a single variable. It
+# cannot: the templated Base ceiling is -915, so there is no meaningful
+# denominator on that side. Read this arm as "the dictionary on the distribution
+# AS-5 actually produces, against its best case", and read
+# `sae_pregate_instruct_plain` for the clean model-only transfer number.
+source_runs:
+  llama3_1_8b_base: pregate-base-plain
+
 sae_layers: [17, 19, 21]
 
 n_prompts: 100

@@ -958,7 +958,7 @@ Entrypoint = Literal[
 _CONSUMES: dict[str, frozenset[str]] = {
     "phase0_regime_map": frozenset({"target", "families", "n_prompts", "instruments"}),
     "as6_guard_probe": frozenset({"target", "families", "n_prompts", "instruments"}),
-    "sae_pregate": frozenset({"target", "n_prompts", "sae_layers", "render_chat"}),
+    "sae_pregate": frozenset({"target", "n_prompts", "sae_layers", "render_chat", "source_runs"}),
     "relicense_probes": frozenset({"targets", "families", "source_runs"}),
 }
 
@@ -1080,10 +1080,29 @@ class PresetConfig(StrictModel):
         # layer and reporting a run that was approved for three.
         if self.sae_layers:
             rows = []
+            # The CEILING is per LAYER — Base measures 0.698/0.708/0.723 at
+            # 18/20/22 — so the path is built per task rather than passed once.
+            # Exactly one source model is meaningful here: the model the
+            # dictionary was fitted on. More than one has no defined meaning, so
+            # it raises rather than picking.
+            ceiling_source = None
+            if self.source_runs:
+                if len(self.source_runs) != 1:
+                    raise ValueError(
+                        f"sae_pregate takes ONE source_runs entry (the ceiling arm); "
+                        f"got {sorted(self.source_runs)}"
+                    )
+                ceiling_source = next(iter(self.source_runs.items()))
             for layer in self.sae_layers:
                 argv = list(base) + ["--sae-layer", str(layer)]
                 if not self.render_chat:
                     argv += ["--plain-text"]
+                if ceiling_source is not None:
+                    model, run = ceiling_source
+                    argv += ["--ceiling-from", str(
+                        outputs / "runs" / "sae_pregate" / model / f"{run}-L{layer}"
+                        / "results.json"
+                    )]
                 argv += ["--run-name", f"{self.run_name or 'pregate'}-L{layer}"]
                 rows.append(argv + ["--outputs-dir", str(outputs)])
             return rows

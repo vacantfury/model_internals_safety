@@ -63,7 +63,9 @@ pre-gate licenses *naming what fires*. It licenses nothing causal.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterator, Protocol, Sequence
 
 import torch
@@ -549,6 +551,44 @@ def observed_sparsity(
         total += float((features > 0).float().sum(dim=-1).sum())
         counted += float(kept.shape[0])
     return total / counted if counted else 0.0
+
+
+def ceiling_from(path: str | Path, layer: int) -> float:
+    """The ceiling arm's variance explained, for THIS layer.
+
+    **Two guards, and both exist because the failure would be silent.**
+
+    * **The source must BE a ceiling arm.** Chaining a target reading as a
+      ceiling would compound one transfer ratio on top of another and produce a
+      confident number describing nothing. `detail.arm` says which it is.
+    * **The layer must MATCH.** The ceiling is per layer — Base measures
+      0.698 / 0.708 / 0.723 at 18 / 20 / 22 — so a ceiling read from the wrong
+      layer shifts the floor by a few percent and never errors.
+
+    Raises rather than defaulting on every failure. A missing ceiling is not a
+    ceiling of 0.0, which would license anything that reconstructs at all.
+    """
+    record = json.loads(Path(path).read_text(encoding="utf-8"))
+    readings = [r for r in record.get("readings", []) if r.get("instrument") == "sae_reconstruction"]
+    if len(readings) != 1:
+        raise ValueError(
+            f"{path} holds {len(readings)} sae_reconstruction readings; the ceiling is ambiguous"
+        )
+    detail = readings[0].get("detail", {})
+    if detail.get("arm") != "ceiling":
+        raise ValueError(
+            f"{path} is a {detail.get('arm')!r} arm, not a ceiling — a target reading "
+            "used as a ceiling compounds two transfer ratios"
+        )
+    if detail.get("layer") != layer:
+        raise ValueError(
+            f"{path} is layer {detail.get('layer')}, this run is layer {layer}; the "
+            "ceiling is per layer and a mismatch shifts the floor silently"
+        )
+    variance = detail.get("variance_explained")
+    if variance is None:
+        raise ValueError(f"{path} carries no variance_explained to use as a ceiling")
+    return float(variance)
 
 
 def loaded_model_name(quality: ReconstructionQuality) -> str:
