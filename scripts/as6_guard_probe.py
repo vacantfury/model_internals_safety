@@ -451,6 +451,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             refresh=args.refresh_activations,
         ),
         report=report,
+        # EXPLICITLY none, and this line is the decision rather than an omission
+        # (TODO 60). AS-6 must derive its OWN floor PER GUARD — the AS-5 screen
+        # is calibrated on a target model's can't-decode rungs and says nothing
+        # about what WildGuard or Llama Guard 3 reads on the same rungs. Wiring
+        # AS-5's screen here would be worse than none: a floor from the wrong
+        # instrument is a screen that passes the wrong things.
+        #
+        # The guard-side ladder must first carry enough can't-decode rungs to
+        # estimate a control DISTRIBUTION rather than bound it — n=2 yields no
+        # SD (`instrument_layer.md` §2.4). Until that lands, guard-side
+        # deployment readings carry no floor screen, which the contract's
+        # `required_controls` already treats as disqualifying, not as passing.
+        cross_rung_screen=None,
     )
 
     record = capture_provenance(

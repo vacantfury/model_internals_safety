@@ -149,7 +149,9 @@ from internals_safety.probes.directions import Direction, difference_in_means
 from internals_safety.probes.linear import probe_transfer_detail, reading_threshold
 from internals_safety.models.loader import LoadedModel, load_model, resolve_device
 from internals_safety.paths import ACTIVATIONS_DIR
+from internals_safety.measurements.control_floor import derive as derive_control_floor
 from internals_safety.pipeline import (
+    CrossRungScreen,
     add_common_arguments,
     load_contrast_sets,
     resolve_run_paths,
@@ -1343,6 +1345,93 @@ def run_family(
     }
 
 
+def control_floor_screen(measurements) -> tuple[CrossRungScreen, dict[str, Any]]:
+    """The cross-rung deployment screen, plus the evidence dict for the record.
+
+    **This is TODO 60's substance.** Permutation licensing answers *is there a
+    separation?* and the control floor answers *is it bigger than what this
+    instrument reads on rungs the model cannot decode at all?* Only the second
+    question distinguishes decoding from surface form, and until now only the
+    offline rescoring scripts asked it — so a live run licensed `tag_block` at
+    0.6445 with ability 0.00 and read `deployment=True` on 66 of 100 cells.
+
+    Two properties worth not re-deriving:
+
+    * **The control set is derived, never listed.** A rung is a control iff the
+      model could not decode it (`controls.control_ability_max`), which is a
+      measured property of this run rather than a name someone typed.
+    * **A control rung never clears its own floor** (`ControlFloor.clears`), so
+      the ability-0 rungs are themselves demoted to (U). That is correct and is
+      the fix: their deployment number is by construction not decoding, so they
+      have no deployment claim in either direction.
+
+    A run with no usable floor demotes NOTHING and says so loudly in the record.
+    Silently demoting everything would destroy a run over a missing screen, and
+    silently demoting nothing is the defect this exists to close — so the third
+    option is the honest one: the evidence dict carries `usable: false`, and the
+    deployment readings carry no floor screen, which the contract's
+    `required_controls` already treats as disqualifying rather than passing.
+    """
+    controls = measurements.controls
+    evidence: dict[str, Any] = {}
+
+    def screen(summaries: Sequence[dict[str, Any]]) -> dict[str, str]:
+        transfer_auroc = {
+            summary["family"]: summary["deployment"]["transfer_auroc"]
+            for summary in summaries
+            if (summary.get("deployment") or {}).get("transfer_auroc") is not None
+        }
+        ability_rate = {
+            summary["family"]: summary["ability_rate"]
+            for summary in summaries
+            if summary.get("ability_rate") is not None
+        }
+        floor = derive_control_floor(
+            transfer_auroc,
+            ability_rate,
+            max_ability=controls.control_ability_max,
+            sigma=controls.control_floor_sigma,
+            min_controls=controls.control_floor_min_controls,
+        )
+        evidence.update(
+            {
+                "value": floor.value,
+                "kind": floor.kind,
+                "n_controls": floor.n,
+                "controls": list(floor.controls),
+                "mean": floor.mean,
+                "stdev": floor.stdev,
+                "observed_max": floor.observed_max,
+                "sigma": controls.control_floor_sigma,
+                "usable": floor.is_usable,
+            }
+        )
+
+        demoted: dict[str, str] = {}
+        for summary in summaries:
+            family = summary["family"]
+            auroc = transfer_auroc.get(family)
+            # Nothing to demote: the permutation test already refused it, so the
+            # rung is unmeasured for a reason this screen does not improve on.
+            if auroc is None or not (summary.get("deployment") or {}).get("licensed"):
+                continue
+            if floor.clears(auroc, family) is False:
+                demoted[family] = (
+                    f"deployment AUROC {auroc:.4f} does not clear the run's control "
+                    f"floor {floor.value:.4f} ({floor.kind}, n={floor.n})"
+                    if family not in floor.controls
+                    else (
+                        f"this rung is one of the run's own controls (ability "
+                        f"{ability_rate.get(family, float('nan')):.2f}); its deployment "
+                        "reading calibrates the floor and cannot be judged against it"
+                    )
+                )
+        evidence["demoted"] = dict(demoted)
+        return demoted
+
+    return screen, evidence
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     corpus = load_corpus_config()
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -1483,6 +1572,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
     raw_path = directory / "cells.jsonl"
+    deployment_screen, control_floor_evidence = control_floor_screen(measurements)
     summaries, readings, elapsed_seconds = run_families(
         families,
         directory,
@@ -1502,6 +1592,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             xstest=xstest,
         ),
         report=lambda result: print(result["regime_map"], flush=True),
+        cross_rung_screen=deployment_screen,
     )
 
     # Budgeted, not observed: token-exact accounting would need the tokenizer
@@ -1552,6 +1643,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "lengths, and the elapsed time includes probe fitting and judge calls. "
                 "Tightens conf/cost.yaml, which currently spans 4x.",
             },
+            # The floor is a property of THIS run's ladder, not of the
+            # instrument (`instrument_layer.md` §2.4 — the statistic is
+            # n-dependent, so floors from different runs are not comparable).
+            # Recording it with its control set and n is what makes a later
+            # reader able to tell whether it may be carried anywhere.
+            "control_floor": control_floor_evidence,
             "metrics": {"families": summaries},
         },
     )

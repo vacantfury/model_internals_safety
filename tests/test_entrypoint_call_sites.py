@@ -33,21 +33,24 @@ from pathlib import Path
 
 import pytest
 
-from internals_safety import provenance
+from internals_safety import pipeline, provenance
 from internals_safety.measurements import deployment, length_null
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 
 # The shared functions whose call sites an entrypoint must get right, mapped to
 # the live object. Grow this when a signature change breaks a caller — that is
-# the trigger, and this session hit it twice in one day (`strata` on
-# `measure_deployment`, `device` on `guard_working_tree`).
+# the trigger, and this session hit it THREE times in one day (`strata` on
+# `measure_deployment`, `device` on `guard_working_tree`, and `cross_rung_screen`
+# on `run_families` — the last one being the control floor that never reached
+# the entrypoint at all, TODO 60).
 WATCHED = {
     "guard_working_tree": provenance.guard_working_tree,
     "write_run_record": provenance.write_run_record,
     "capture_provenance": provenance.capture_provenance,
     "measure_deployment": deployment.measure_deployment,
     "length_strata": length_null.length_strata,
+    "run_families": pipeline.run_families,
 }
 
 

@@ -32,11 +32,23 @@ import shutil
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from internals_safety.data import Prompt, prompt_set
 from internals_safety.measurements.contract import Reading
+from internals_safety.measurements.regimes import assign_regime, build_regime_map
 from internals_safety.paths import OUTPUTS_DIR, run_dir
+
+# A screen that can only be applied once EVERY rung has run. It receives the
+# finished summaries and returns `{family: reason}` for the rungs whose
+# deployment axis must be demoted to unmeasured.
+#
+# This type exists because the control floor is not a per-rung quantity. It is
+# derived from the run's own can't-decode rungs, so no amount of threading it
+# into `measure_deployment` would help: at the moment a rung is licensed, the
+# rungs that calibrate its floor have not run yet. That is why the floor lived
+# in three offline rescoring scripts and never reached the entrypoint.
+CrossRungScreen = Callable[[Sequence[dict[str, Any]]], Mapping[str, str]]
 
 
 def add_common_arguments(parser: argparse.ArgumentParser, *, default_n_prompts: int) -> None:
@@ -174,6 +186,8 @@ def run_families(
     directory: Path,
     run_one: Callable[[str], dict[str, Any]],
     report: Callable[[dict[str, Any]], None] | None = None,
+    *,
+    cross_rung_screen: CrossRungScreen | None,
 ) -> tuple[list[dict[str, Any]], list[Reading], float]:
     """Drive the per-family loop with a crash-durable checkpoint after each rung.
 
@@ -200,6 +214,30 @@ def run_families(
     `elapsed_seconds` is stamped on every summary because `conf/cost.yaml`'s
     throughput numbers are assumptions with exactly one tuning path — a real run
     measuring them. Gather-and-cover: the instrumentation ships with the knob.
+
+    **`cross_rung_screen` is keyword-only with NO DEFAULT, and that is the whole
+    point of it (TODO 60).** The control floor was adopted, tested, documented
+    and owner-approved on 2026-08-07 and still governed nothing that produced a
+    run, because `phase0_regime_map.py` never imported it — only the three
+    offline rescoring scripts did. It cost a rung the same day: `tag_block`
+    licensed at AUROC 0.6445 with ability 0.00 and read `deployment=True` on 66
+    of 100 cells, while `reverse_characters` 0.012 higher did not license and
+    correctly went (U). Both sat below every floor ever derived for that model.
+
+    A screen that a caller may forget is a screen that describes the instrument
+    in a document and not in a run, so passing one — or explicitly passing
+    `None` — is now the only way to call this function. That is the third time
+    this repo has fixed this class of defect the same way (`strata` on
+    `measure_deployment`, `device` on `guard_working_tree`), and the lesson each
+    time was that threading a rule into its callers is not the fix; **making the
+    omission inexpressible is.**
+
+    The screen runs AFTER the loop because the floor is derived from the run's
+    own can't-decode rungs — at the moment any single rung is licensed, the
+    rungs that calibrate it have not run yet. Demoted rungs are then rewritten
+    in place: `deployment` becomes `None` and every affected cell is re-labelled
+    through `assign_regime`, so the rules stay in one place rather than being
+    restated as a hard-coded (U).
     """
     summaries: list[dict[str, Any]] = []
     readings: list[Reading] = []
@@ -227,7 +265,97 @@ def run_families(
             if report is not None:
                 report(result)
             print(f"    ({summary['elapsed_seconds'] / 60:.1f} min)", flush=True)
+
+    # Outside the `with`: the demotion rewrites both files, so they must be
+    # closed and fsynced first. A crash here leaves the un-demoted run intact,
+    # which is the safe direction — the cells are still there to re-screen.
+    if cross_rung_screen is not None:
+        demoted = cross_rung_screen(summaries)
+        if demoted:
+            _demote_to_unmeasured(directory, summaries, demoted)
+
     return summaries, readings, time.perf_counter() - started
+
+
+def _demote_to_unmeasured(
+    directory: Path,
+    summaries: list[dict[str, Any]],
+    reasons: Mapping[str, str],
+) -> None:
+    """Re-label every cell of a screened-out rung as deployment-unmeasured.
+
+    The demotion goes through `assign_regime` rather than writing (U) directly.
+    A rung that fails the cross-rung screen is in exactly the state the tri-state
+    fix was built for — *this instrument could not read this rung* — and that is
+    already a rule, so restating it here would be a second copy free to drift
+    from the first. It also means the incoherence flags come out right: a
+    demoted rung's `deployment_without_ability` counts must DISAPPEAR, because
+    the axis that produced them is now unmeasured, and only the rules module
+    knows that.
+
+    Files are replaced atomically. A partial rewrite would leave cells.jsonl
+    holding some demoted rungs and some not, which is worse than either state.
+    """
+    cells_path = directory / "cells.jsonl"
+    rewritten: list[str] = []
+    per_family: dict[str, list[Any]] = {family: [] for family in reasons}
+
+    with cells_path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            cell = json.loads(line)
+            family = cell.get("family")
+            if family in reasons:
+                assignment = assign_regime(
+                    ability=bool(cell["ability"]),
+                    deployment=None,
+                    recognition=cell["recognition"],
+                    refused=bool(cell["refused"]),
+                    prompt_is_harmful=True,
+                )
+                cell["deployment"] = None
+                cell["regime"] = assignment.regime.value
+                cell["incoherences"] = [flag.value for flag in assignment.incoherences]
+                cell["demoted_by_cross_rung_screen"] = reasons[family]
+                per_family[family].append(assignment)
+            rewritten.append(json.dumps(cell, ensure_ascii=False))
+
+    _replace_atomically(cells_path, "\n".join(rewritten) + ("\n" if rewritten else ""))
+
+    for summary in summaries:
+        family = summary.get("family")
+        if family not in reasons:
+            continue
+        regime_map = build_regime_map(family, per_family[family])
+        summary["regimes"] = {r.value: c for r, c in regime_map.counts.items()}
+        summary["incoherences"] = {f.value: c for f, c in regime_map.incoherence_counts.items()}
+        summary["binding_failure_rate"] = regime_map.binding_failure_rate
+        summary["hard_incoherence_rate"] = regime_map.hard_incoherence_rate
+        summary["deployment_unmeasured"] = regime_map.deployment_unmeasured
+        # The reading itself is kept, not deleted: the AUROC that FAILED the
+        # screen is the evidence for the demotion, and a run record that hid it
+        # would be unable to say why the rung is unmeasured.
+        summary.setdefault("deployment", {})["cleared_control_floor"] = False
+        summary["cross_rung_screen"] = reasons[family]
+
+    partial = directory / "summaries.partial.jsonl"
+    if partial.exists():
+        # Rewritten too, or the crash artifact disagrees with the record it was
+        # a checkpoint of — the dual-truth failure this repo keeps paying for.
+        _replace_atomically(
+            partial, "".join(json.dumps(s, ensure_ascii=False) + "\n" for s in summaries)
+        )
+
+
+def _replace_atomically(path: Path, text: str) -> None:
+    """Write via a temp file in the same directory, fsync, then `os.replace`."""
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    with temporary.open("w", encoding="utf-8") as handle:
+        handle.write(text)
+        _checkpoint(handle)
+    os.replace(temporary, path)
 
 
 def _checkpoint(handle) -> None:
