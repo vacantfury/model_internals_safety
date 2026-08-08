@@ -305,11 +305,31 @@ def census_phase0(
         per_family_mean[family] = sum(combined) / len(combined) if combined else 0.0
         max_prompt_tokens = max(max_prompt_tokens, max(combined + restate_tokens, default=0))
 
+    # The PLAIN behavioural baseline, model-level and MANDATORY since
+    # 2026-08-08 (`phase0_regime_map.run_plain_behavior_baseline`,
+    # evidence_and_story.md §4c). Both arms generate and both are judged, on the
+    # BARE corpus — no encoder, so the prefill is the plain prompt census that
+    # `prefill` already opened with, charged a second time because capture and
+    # generation are separate passes over the same text.
+    #
+    # Counted OUTSIDE the family loop, which is the point: it does not scale
+    # with the ladder, so its share of a run falls as rungs are added. Adding it
+    # here rather than leaving it to the caller follows the rule the two
+    # preceding comments were written for — a mandatory arm the estimate cannot
+    # see is a cost nobody approved.
+    plain_prefill = sum(count_tokens(prompt.text) for prompt in harmful)
+    plain_prefill += sum(count_tokens(prompt.text) for prompt in harmless)
+    prefill += plain_prefill
+    decode += (len(harmful) + len(harmless)) * measurements.behavior.max_new_tokens
+    plain_judge_calls = 2 * (len(harmful) + len(harmless))
+    judge_calls += plain_judge_calls
+
     response_chars = measurements.behavior.max_new_tokens * 4
-    # Both arms are judged, so both arms' plaintexts enter the judge prompts.
+    # Both arms are judged, so both arms' plaintexts enter the judge prompts —
+    # once per family, plus once more for the model-level plain baseline.
     behaviour_chars = (
         sum(len(prompt.text) for prompt in harmful) + sum(len(prompt.text) for prompt in harmless)
-    ) * len(families)
+    ) * (len(families) + 1)
     judge_input_chars = judge_calls * (judge_template_chars + response_chars)
     judge_input_chars += 2 * behaviour_chars
 

@@ -1,0 +1,71 @@
+# THE DENOMINATOR. Does encoding CAUSE the false positives, or do these models
+# refuse this corpus anyway?
+#
+# `evidence_and_story.md` §4c is the story of record and it rests on one
+# contrast: across four independent post-training pipelines, harmful-encoded
+# refusal agrees to within 0.14 (0.85-0.99) while benign-encoded refusal spans
+# 0.70 (0.29-0.99), and benign refusal is 95% model-determined. The models
+# differ ~5x more in what they refuse when it is HARMLESS than when it is
+# harmful.
+#
+# ⚠️ Every one of those numbers is measured on ENCODED prompts only. Until
+# 2026-08-08 `phase0_regime_map` called `measure_behavior` on `encoded_harmful`
+# and `encoded_harmless` and NEVER on the plain corpora, though both were
+# already captured for the probes. So "Llama refuses 99% of benign encoded
+# requests" has nothing to be 99% more than.
+#
+# `homoglyph` runs alongside the baseline on purpose, and it is the only rung
+# here. It is the sole echo-clean rung measured on all four models (echo
+# 0.00-0.11, against 0.62-0.81 on `zero_width` and 0.66-0.76 on the fullwidth
+# family), so it is the only one whose refusal numbers are not mostly a
+# statement about echo. Running it in the SAME job as the baseline makes the
+# comparison paired — same judges, same seed, same session — instead of a
+# cross-run difference, which is the error class §4c was written to correct.
+entrypoint: phase0_regime_map
+description: >-
+  The plaintext behavioural baseline on Qwen2.5-7B-Instruct, paired with `homoglyph` in one
+  job: the denominator every encoded refusal rate in this repo has been quoted
+  without.
+
+gates: >-
+  Whether AS-5 is a paper about encoding at all. The plain benign refusal rate
+  decides between two opposite readings of §4c, and nothing on disk
+  distinguishes them:
+
+  HIGH plain benign refusal (close to the encoded rate) — the model over-refuses
+  this corpus generally, the encoded number is not an encoding effect, and the
+  harmful/benign asymmetry is a restatement of known over-refusal behaviour. The
+  paper drops the encoding framing and falls back to the measurement
+  contribution §5 recommends: seven independently measured instrument defects,
+  each with a control.
+
+  LOW plain benign refusal — the encoding manufactures the false positives, the
+  cross-model asymmetry is the result, and phase 1 targets the false-positive
+  axis rather than the (B)/(D) split. That is a different intervention design,
+  which is why this gates the build rather than decorating it.
+
+  It also answers a question the repo cannot currently answer at all: whether
+  each model's harm discrimination in PLAINTEXT (the ceiling) is what its
+  encoded gap should be read against. An encoded gap of +0.23 means one thing
+  against a plaintext gap of +0.25 and the opposite against +0.90.
+
+target: qwen2_5_7b_instruct
+
+# One rung, and it is the echo-clean one. Adding rungs here would mix a gating
+# baseline with an exploration and leave neither clean.
+families: [homoglyph]
+
+n_prompts: 100
+
+instruments: [lexical]
+run_name: plain-baseline-qwen
+
+# Measured by `cost_model.py --model qwen2_5_7b_instruct --families homoglyph`:
+# 1.0-1.7 GPU-h, judge spend $0.44-1.32, inside the 8 h wall with wide margin.
+# The plain baseline is MODEL-level, so its cost does not scale with the ladder.
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "08:00:00"

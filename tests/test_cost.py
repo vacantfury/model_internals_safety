@@ -70,16 +70,22 @@ class TestCensus:
         # that the benign arm is already captured — but capture is prefill-only
         # and the control calls `measure_behavior`, which GENERATES. It was
         # buying a second generation pass no estimate showed.
-        assert census.decode_tokens == 2 * (4 * 300 + 4 * 200)
+        # ... PLUS the model-level plain baseline: 8 prompts (both arms) x 200,
+        # charged ONCE rather than per family, since the plaintext denominator
+        # does not depend on which rung ran (evidence_and_story.md 4c).
+        assert census.decode_tokens == 2 * (4 * 300 + 4 * 200) + (4 + 4) * 200
 
     def test_two_judges_per_attack_response(self, prompts):
         harmful, harmless = prompts
         census = census_phase0(
             count_chars, harmful, harmless, load_ladder(), ["base64", "rot13"], MEASUREMENTS, 500
         )
-        # 2 judges x 2 families x (4 harmful + 4 benign). The benign arm is
-        # measurement #4's mandatory control and is judged by the same two.
-        assert census.judge_calls == 2 * 2 * (4 + 4)
+        # 2 judges x 2 families x (4 harmful + 4 benign), PLUS the model-level
+        # plain baseline's 2 judges x (4 harmful + 4 benign). The benign arm is
+        # measurement #4's mandatory control; the plain baseline is the
+        # plaintext denominator (evidence_and_story.md 4c), also mandatory, and
+        # also judged by the same two.
+        assert census.judge_calls == 2 * 2 * (4 + 4) + 2 * (4 + 4)
 
     def test_the_benign_control_arm_is_priced_at_all(self, prompts):
         """⚠️ Pinned as its own test because its absence was invisible for as
@@ -135,7 +141,12 @@ class TestCensus:
             count_chars, harmful, harmless, ladder, ["hex", "base64"], MEASUREMENTS, 500
         )
         assert two.prefill_tokens > one.prefill_tokens
-        assert two.judge_calls == 2 * one.judge_calls
+        # NOT 2x: the plain baseline is model-level, so it is charged once
+        # whatever the ladder size. Doubling the rungs doubles only the
+        # per-family term -- which is the property that makes the baseline cheap
+        # enough to be mandatory, so it is asserted rather than approximated.
+        per_family = one.judge_calls - 2 * (4 + 4)
+        assert two.judge_calls == one.judge_calls + per_family
 
 
 class TestEstimate:

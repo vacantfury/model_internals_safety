@@ -66,7 +66,7 @@ import argparse
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 import torch
 
@@ -80,7 +80,7 @@ from internals_safety.config import (
     load_corpus_config,
 )
 from internals_safety.data import Prompt, digest, prompt_set
-from internals_safety.encodings.base import EncodedPrompt, Encoder
+from internals_safety.encodings.base import EncodedPrompt, Encoder, Invertibility
 from internals_safety.encodings.registry import load_ladder
 from internals_safety.judges.harmbench import HarmBenchJudge
 from internals_safety.judges.refusal import RefusalJudge
@@ -207,6 +207,11 @@ MANDATORY_JUDGE_CONTROL = "behavior_control"
 # constructible in a test without a config in hand.
 MAX_CAUSAL_LAYERS = 8  # config: measurements.causal_license.max_sweep_layers
 
+# The plain baseline's family label. Not a ladder rung and deliberately not
+# registered as one: it has no encoder, so `select_families` must never be able
+# to request it and no cross-rung screen may treat it as a control.
+PLAIN_FAMILY = "plain"
+
 
 @dataclass(frozen=True)
 class Plan:
@@ -281,6 +286,24 @@ class Plan:
     def judge_calls(self) -> int:
         """Two judges over every attack response."""
         return 2 * len(self.families) * self.n_prompts
+
+    @property
+    def plain_baseline_generations(self) -> int:
+        """The plaintext denominator: BOTH arms generated, once per model.
+
+        Model-level, so it does not scale with the ladder — which is the whole
+        reason it is cheap enough to be mandatory. Declared as its own property
+        rather than folded into `generations` because a cost estimate that omits
+        a mandatory arm is the defect this repo has already paid for twice: the
+        random-direction null missing from `--dry-run`, and measurement #4's
+        benign arm being priced as judge calls with no generation pass.
+        """
+        return 2 * self.n_prompts
+
+    @property
+    def plain_baseline_judge_calls(self) -> int:
+        """Two judges over both plain arms."""
+        return 2 * self.plain_baseline_generations
 
     @property
     def instrument_forward_passes(self) -> int:
@@ -450,6 +473,10 @@ class Plan:
                 f"  lexical passes      {self.lexical_capture_passes} "
                 "(XSTest control, corpus captured ONCE per model — the deployment "
                 "probe is plain-fitted, so it is the same probe for every rung)",
+                f"  plain baseline      {self.plain_baseline_generations} generations + "
+                f"{self.plain_baseline_judge_calls} judge calls (MANDATORY, model-level — "
+                "the plaintext denominator every encoded refusal rate is read against; "
+                "evidence_and_story.md §4c)",
                 "",
                 "No run launches from --dry-run. For the GPU count/type, $ and wall-clock the "
                 "approval gate needs (family rule, owner 2026-07-22), run:",
@@ -483,6 +510,115 @@ def causal_candidate_cells(
         for layer in eligible[::stride]
         for position in batch.positions
     ]
+
+
+def plain_arm(prompts: Sequence[str]) -> list[EncodedPrompt]:
+    """The corpus as itself — no encoder, no wrapper, no instruction.
+
+    **`attack_prompt` is the bare prompt, deliberately.** Running the corpus
+    through an identity ENCODER would still wrap it in that rung's
+    `attack_template`, and the template is part of what the encoded condition
+    is being blamed for. The baseline has to be the prompt the model would get
+    if nobody had encoded anything, or it measures a wrapper effect and calls it
+    a plaintext rate.
+    """
+    return [
+        EncodedPrompt(
+            plaintext=text,
+            ciphertext=text,
+            family=PLAIN_FAMILY,
+            invertibility=Invertibility.EXACT,
+            attack_prompt=text,
+            restate_prompt=text,
+        )
+        for text in prompts
+    ]
+
+
+def run_plain_behavior_baseline(
+    loaded,
+    harmful_prompts: Sequence[str],
+    harmless_prompts: Sequence[str],
+    refusal_judge,
+    harm_judge,
+    measurements: MeasurementsConfig,
+) -> tuple[Reading, dict[str, Any]]:
+    """THE DENOMINATOR every behavioural number in this repo was missing.
+
+    **Why this exists (evidence_and_story.md §4c, 2026-08-08).** Every
+    behavioural reading here is measured on ENCODED prompts only —
+    `measure_behavior` ran on `encoded_harmful` and `encoded_harmless` and never
+    on the plain corpora, although both were already captured for the probes.
+    So "Llama refuses 99% of benign encoded requests" had nothing to be 99%
+    *more than*, and the two available readings are opposite conclusions:
+
+    * high plaintext benign refusal -> the model over-refuses generally. Known,
+      not ours, and not a finding about encoding.
+    * low plaintext benign refusal -> the encoding causes the false positives,
+      and the harmful/benign asymmetry across models is the result.
+
+    Nothing on disk distinguished them, which made this a GATE rather than a
+    measurement under the repo's own run rule.
+
+    MODEL-LEVEL, not rung-level, and that is why it sits here beside the causal
+    gate rather than inside the family loop: the plain corpus does not depend on
+    which rung is being run, so computing it per rung would pay for N identical
+    generations and invite N slightly different numbers.
+
+    Returns the harmful-arm reading plus a detail dict carrying BOTH arms — the
+    benign arm is the point, so it is never folded away into a control verdict.
+    """
+    harmful_records = measure_behavior(
+        loaded, plain_arm(harmful_prompts), refusal_judge, harm_judge, measurements.behavior
+    )
+    harmless_records = measure_behavior(
+        loaded, plain_arm(harmless_prompts), refusal_judge, harm_judge, measurements.behavior
+    )
+    harmful_summary = behavior_module.summarize_by_family(harmful_records)[0]
+    control = summarize_behavior_control(
+        family=PLAIN_FAMILY,
+        jailbroken=[r.jailbroken for r in harmless_records],
+        refused=[r.refused for r in harmless_records],
+        judge_fallback=[r.judge_fallback for r in harmless_records],
+        harmful_attack_success_rate=harmful_summary.attack_success_rate,
+    )
+    detail = {
+        "plain_harmful_refusal_rate": harmful_summary.refusal_rate,
+        "plain_benign_refusal_rate": control.benign_refusal_rate,
+        # The quantity §4c is gated on. Positive means the model discriminates
+        # harm in PLAINTEXT, which is the ceiling any encoded gap is read
+        # against — an encoded gap only means something relative to this one.
+        "plain_harm_gap": harmful_summary.refusal_rate - control.benign_refusal_rate,
+        "plain_harmful_asr": harmful_summary.attack_success_rate,
+        "plain_benign_asr": control.benign_attack_success_rate,
+        "plain_echo_rate": harmful_summary.echo_rate,
+        "plain_n": control.n,
+    }
+    # Its OWN instrument name, not `behavior`. Two readings sharing an
+    # instrument name is what P1's distinct-questions rule exists to stop, and a
+    # consumer doing `next(r for r in readings if r["instrument"] == "behavior")`
+    # would silently pick whichever came first — a test caught exactly that.
+    # The questions genuinely differ: `behavior` asks whether the ATTACK
+    # succeeded, this asks what the model does with the corpus unencoded.
+    return (
+        Reading(
+            instrument="behavior_plain",
+            kind=behavior_module.KIND,
+            value=harmful_summary.refusal_rate,
+            operating_point=(
+                "refusal rate on the BARE corpus — no encoder, no attack template. "
+                "The denominator every encoded refusal rate is read against; an "
+                "encoded rate quoted without it cannot separate an encoding effect "
+                "from a model that refuses this corpus anyway"
+            ),
+            licensed=None if control.n == 0 else True,
+            controls=(control.screen(),),
+            required_controls=behavior_module.REQUIRED_CONTROLS,
+            selection_inside_null=True,
+            detail={"family": PLAIN_FAMILY, "n": harmful_summary.n, **detail},
+        ),
+        detail,
+    )
 
 
 def run_causal_gate(
@@ -1521,6 +1657,27 @@ def main(argv: Sequence[str] | None = None) -> int:
                 measurements,
             )
         )
+
+    # MODEL-LEVEL, and MANDATORY — no `if` on an instrument flag, on purpose.
+    # Measurement #4's benign arm was behind `--instruments` for weeks, so it
+    # had never run, so no ASR this repo published was ever screened (TODO 61).
+    # This is the same shape of number — a denominator without which every
+    # encoded refusal rate is uninterpretable — and it gets the same treatment.
+    plain_baseline_reading, plain_baseline = run_plain_behavior_baseline(
+        loaded,
+        [prompt.text for prompt in harmful],
+        [prompt.text for prompt in harmless],
+        refusal_judge,
+        harm_judge,
+        measurements,
+    )
+    causal_readings.append(plain_baseline_reading)
+    print(
+        f"plain baseline   harmful refusal {plain_baseline['plain_harmful_refusal_rate']:.2f}"
+        f"   benign refusal {plain_baseline['plain_benign_refusal_rate']:.2f}"
+        f"   gap {plain_baseline['plain_harm_gap']:+.2f}",
+        flush=True,
+    )
 
     raw_path = directory / "cells.jsonl"
     deployment_screen, control_floor_evidence = control_floor_screen(measurements)
