@@ -152,6 +152,38 @@ def l0_sparsity(features: torch.Tensor) -> float:
     return float((features != 0).float().sum(dim=-1).mean())
 
 
+def scored_positions(attention_mask: torch.Tensor, *, drop_first_real: bool) -> torch.Tensor:
+    """[batch, seq] bool: which positions may enter a reconstruction statistic.
+
+    **Why this exists — it cost job `9008483` and produced a false refusal.**
+    The pre-gate reduced over EVERY position of a padded batch, and both things
+    it swept in are catastrophic for this particular metric:
+
+    * **PAD.** `models/loader.py` sets `padding_side = "left"`, so the pad run
+      sits at the START of every short row. The reduction summed pads into the
+      error AND counted them in the denominator.
+    * **BOS.** Llama-3.1 carries a massive-activation / attention-sink spike at
+      the first real token, orders of magnitude above a normal residual. Llama
+      Scope declares `dataset_average_activation_norm: 13.8125`; the norm implied
+      by the failed run's `MSE 7.6M` at `variance_explained -936` is ~5,700.
+
+    BOS is dropped by an EXPLICIT decision, not as a side effect: the attention
+    mask marks it as real, so a pure padding fix would leave it in. Whether the
+    spike belongs in the metric is a question about what the dictionary is being
+    asked to reconstruct, and the answer is no — the dictionary was normalised
+    against a dataset average that the spike would dominate, so scoring it asks
+    the SAE to reconstruct the one activation its normalisation assumes away.
+
+    `drop_first_real` finds the first UNMASKED position per row rather than
+    index 0, because under left padding index 0 is a pad on every short row.
+    """
+    keep = attention_mask.bool().clone()
+    if drop_first_real and keep.any():
+        first_real = keep.float().argmax(dim=1)          # left padding: first 1
+        keep[torch.arange(keep.shape[0], device=keep.device), first_real] = False
+    return keep
+
+
 @contextmanager
 def _substitute(loaded: LoadedModel, layer: int, transform) -> Iterator[None]:
     """Apply `transform` to the residual stream entering `layer`.
@@ -220,6 +252,9 @@ def measure_reconstruction(
     control: SparseAutoencoder | None = None,
     # plumbing(batch_size): throughput only — every read is per-prompt
     batch_size: int = 8,
+    # constant: BOS carries Llama-3.1's massive-activation spike, which the
+    # dictionary's dataset-wise normalisation assumes away — see scored_positions
+    drop_bos: bool = True,
 ) -> ReconstructionQuality:
     """Run the three checks the foundational paper reports, on OUR model.
 
@@ -227,6 +262,12 @@ def measure_reconstruction(
     write side: an SAE validated on bare instruction text has been validated on
     inputs the instruct-tuned target never receives, which is the same
     distribution error the pre-gate exists to catch one level up.
+
+    **Only real, non-BOS positions are scored** (`scored_positions`). The first
+    version reduced over every position of a left-padded batch and produced
+    `variance_explained` of -936 to -1819 on the model the dictionary was FITTED
+    ON — a false refusal that cost job `9008483`. Padding and the attention-sink
+    spike were in both the numerator and the denominator.
     """
     rendered = [prompt.text for prompt in prepare_prompts(loaded, prompts, positions=[])]
 
@@ -234,6 +275,7 @@ def measure_reconstruction(
     originals: list[torch.Tensor] = []
     reconstructions: list[torch.Tensor] = []
     control_reconstructions: list[torch.Tensor] = []
+    kept_masks: list[torch.Tensor] = []
 
     def round_trip(dictionary: SparseAutoencoder, hidden: torch.Tensor) -> torch.Tensor:
         features = dictionary.encode(hidden.float())
@@ -282,11 +324,27 @@ def measure_reconstruction(
 
             hidden = captured[0]
             reconstruction, features = round_trip(sae, hidden)
-            originals.append(hidden.reshape(-1, hidden.shape[-1]))
-            reconstructions.append(reconstruction.reshape(-1, reconstruction.shape[-1]))
-            totals["sq_err"] += float((hidden - reconstruction).pow(2).sum())
-            totals["n_tokens"] += float(hidden.shape[0] * hidden.shape[1])
-            totals["l0"] += l0_sparsity(features) * hidden.shape[0]
+
+            # EVERY statistic below sees the same positions, and the denominator
+            # is the kept count — not `batch * seq_len`. Masking only the
+            # numerator would put a correct error over an inflated denominator
+            # and land somewhere plausible-but-wrong, which is the same
+            # half-an-invariant shape that killed job 9006846 one seam over.
+            keep = scored_positions(
+                encoded["attention_mask"].cpu(), drop_first_real=drop_bos
+            )
+            flat = keep.reshape(-1)
+            kept_hidden = hidden.reshape(-1, hidden.shape[-1])[flat]
+            kept_reconstruction = reconstruction.reshape(-1, reconstruction.shape[-1])[flat]
+
+            originals.append(kept_hidden)
+            reconstructions.append(kept_reconstruction)
+            totals["sq_err"] += float((kept_hidden - kept_reconstruction).pow(2).sum())
+            totals["n_tokens"] += float(flat.sum())
+            totals["l0"] += l0_sparsity(
+                features.reshape(-1, features.shape[-1])[flat]
+            ) * hidden.shape[0]
+            kept_masks.append(flat)
 
             with _substitute(loaded, layer, lambda h: round_trip(sae, h.float().cpu())[0].to(h.device, h.dtype)):
                 sae_logits = loaded.model(**inputs).logits[:, -1, :].float().cpu()
@@ -303,8 +361,10 @@ def measure_reconstruction(
                 )
 
             if control is not None:
+                # Filtered with the SAME mask: a control scored over different
+                # positions than the dictionary is not a matched control.
                 control_reconstructions.append(
-                    round_trip(control, hidden)[0].reshape(-1, hidden.shape[-1])
+                    round_trip(control, hidden)[0].reshape(-1, hidden.shape[-1])[flat]
                 )
 
     stacked = torch.cat(originals)
