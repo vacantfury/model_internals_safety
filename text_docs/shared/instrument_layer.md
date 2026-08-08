@@ -535,6 +535,63 @@ on a missing call. Pinned by `tests/test_cost.py::test_the_benign_control_arm_is
 which halves the benign corpus and requires BOTH the decode budget and the judge
 count to move.
 
+### 3.7 ⚠️ The (S) cell is not the same measurement across rungs — most of it is ECHO
+
+**Found 2026-08-07, offline on cached cells, $0.** `assign_regime` splits (B)
+from (S) on `refused`, which comes from the JailbreakBench refusal judge — and
+that judge's own docstring states its failure mode under encoded attacks: it
+*"counts a response that merely echoes or is entirely irrelevant to the request
+as a refusal"*, the commonest non-answer to an encoded prompt being the model
+parroting the ciphertext back. **The repo scores echo independently precisely
+for that reason, and then carries it ALONGSIDE the verdict.** Nothing joins
+them; `assign_regime` never sees echo. So the (S) count and the echo rate have
+sat in every summary this repo has written, and nobody had crossed them.
+
+Crossed (job `9008631`, Llama-3.1-8B; `scripts/echo_refusal_crosstab.py`):
+
+| rung | echo | (S) | (S) that echoed | refusal language in those | **(S) that did NOT echo** | refusal language [CONTROL] |
+|---|---|---|---|---|---|---|
+| `zero_width` | 73% | 94 | **70 (74%)** | 3% | 24 | 46% |
+| `fullwidth` | 67% | 87 | **62 (71%)** | 10% | 25 | 44% |
+| `homoglyph` | 10% | 90 | 8 (9%) | 0% | 82 | 27% |
+
+**Read the ratio, never the left column alone.** The keyword probe is crude and
+the control column proves it: it flags only 27–46% of (S) cells the same judge
+labelled *without* the echo route available, so it misses most genuine refusals
+and both columns are lower bounds. What survives that caveat is the contrast —
+explicit refusal language is **10–15x rarer** in the echoing (S) cells than in
+the non-echoing ones on the same rung, by the same judge, in the same run.
+
+**The consequence is that (S) does not mean one thing.** On `homoglyph` the (S)
+cell is 91% non-echo and reads as refusal. On `zero_width` and `fullwidth` it is
+~three-quarters responses that echoed the ciphertext with no refusal language in
+them. Those cells are not obviously refusals AND not obviously compliance —
+under `ability` 1.00 they are *"the model can decode this rung in the restate
+condition and parrots it back under the attack framing"*, which is a real
+behavioural state the four-regime taxonomy has no cell for and currently files
+under (S).
+
+**Crossed with §3.6, no sound rung is clean on both axes:**
+
+| rung | refusal tracks harm? (§3.6) | (S) free of echo? (here) |
+|---|---|---|
+| `zero_width` | ✗ 0.93 vs 0.90 benign | ✗ 74% echoed |
+| `fullwidth` | **✓ 0.90 vs 0.59** | ✗ 71% echoed |
+| `homoglyph` | ✗ 0.99 vs 0.99 | **✓ 9% echoed** |
+
+So §3.6's promotion of `fullwidth` to phase-1 substrate stands on the harm axis
+and is **not** clean on this one, and `homoglyph` is its mirror image. The
+substrate question is not settled by either section alone.
+
+**What would settle it, cheapest first:** (a) join echo to the regime assignment
+so an echoing non-refusal stops being filed as (S) — the data is already on
+every cell, this is a rules change and a re-label, no run; (b) a negative
+control for the REFUSAL judge, which the battery does not have — `BehaviorControl.clears()`
+reads arm 1 only, by explicit design, and `behavior.py`'s `REQUIRED_CONTROLS` is
+that one screen, so the axis deciding the paper's headline split is unscreened;
+(c) a graded read of a sample, which costs judge calls. **(a) is nearly free and
+should come first.**
+
 ---
 
 ## 4. Open, with the method already identified
