@@ -35,15 +35,28 @@ Nineteen rungs exist. What survives every control is **one**.
 | `reverse_characters`, `tag_block` | **can't-decode controls** | ability 0.00; `tag_block` is EXACTLY invertible and still unreadable |
 | `reverse_words` | **control** | lexically transparent — probe reads L3-L5, not the L18-L22 cluster |
 | `combining_marks` | not sound | below the control floor on Llama |
-| `zero_width` | **demoted to control** (§3.6) | benign refusal 0.90 vs harmful 0.93 |
-| `homoglyph` | **demoted to control** (§3.6) | benign refusal 0.99 vs harmful 0.99 |
-| **`fullwidth`** | **the substrate** | benign 0.59 vs harmful 0.90 — a 31-point harm-sensitive gap |
+| `zero_width` | ~~demoted~~ **Llama-only artefact** (job 9010201) | Llama benign 0.90 vs 0.93; **Qwen 0.30 vs 0.87** |
+| `homoglyph` | ~~demoted~~ **Llama-only artefact** (job 9010201) | Llama 0.99 vs 0.99; **Qwen 0.29 vs 0.89** |
+| **`fullwidth`** | **substrate on both models** | Llama 0.61 vs 0.88; Qwen 0.21 vs 0.83 |
+| **`math_bold`** | **new substrate** (job 9010200) | ability 1.00, gap +0.18, harmful refusal only 0.61 |
+| `fullwidth_letters` | **substrate** (job 9010200) | ability 1.00, gap +0.25 |
 
-**No sound rung is clean on both screens.** §3.6 (does refusal track harm?)
-passes only `fullwidth`; §3.7 (is the (S) cell free of echo?) passes only
-`homoglyph`, which is the rung §3.6 demoted. The alphabet band exists to find
-out whether that is a property of the *encoding family* or an accident of one
-script — `../../conf/experiment/naturalness_band_llama.yaml`.
+⚠️ **THE §3.6 DEMOTION DID NOT REPLICATE, AND THAT IS THE MOST IMPORTANT
+RESULT ON THIS PAGE (2026-08-08, job `9010201`).** §3.6 demoted `zero_width` and
+`homoglyph` because their refusal did not track harm on Llama. On Qwen2.5-7B
+**all three sound rungs show a large harm-sensitive gap** — `fullwidth` +0.62,
+`homoglyph` +0.60, `zero_width` +0.57 — against Llama's +0.27, +0.00, +0.03.
+
+So *"refusal is encoding-driven"* is a fact about **Llama-3.1-8B-Instruct**, not
+about models. Llama blanket-refuses encoded benign content (0.59-0.99); Qwen
+does not (0.21-0.30). The demotion is withdrawn: those rungs are substrate on
+Qwen and their (B) counts there regain their meaning. **The transferable lesson
+is the one the gate named in advance — no harm-sensitivity conclusion may be
+drawn from a single model, which is exactly what this repo did for a day.**
+
+**Section 2 as first written claimed the ladder had collapsed to ONE rung. That
+was true of Llama and was never checked on a second family.** The honest count
+is three harm-sensitive rungs per model, and they are not the same three.
 
 ## 3. Reportable and not
 

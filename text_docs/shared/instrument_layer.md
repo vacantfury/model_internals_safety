@@ -507,6 +507,13 @@ harm-driven, it is encoding-driven**, so their (S) decode-and-refuse cells carry
 almost no evidence about harm recognition. Reported, never subtracted — which
 reading is right is itself the finding.
 
+> ⚠️ **THIS SECTION IS LLAMA-ONLY AND ITS DEMOTION DID NOT REPLICATE. Read
+> §3.6.1 before acting on anything below.** Job `9010201` (Qwen2.5-7B, same
+> three rungs, 2026-08-08) found a large harm gap on **all three**: `fullwidth`
+> +0.62, `homoglyph` +0.60, `zero_width` +0.57. The demotion of `zero_width` and
+> `homoglyph` is **withdrawn** — it was a property of Llama-3.1-8B-Instruct,
+> which blanket-refuses encoded benign content, not a property of models.
+
 **`fullwidth` is the exception, and this promotes it on a second independent
 axis.** 0.90 harmful against 0.59 benign is a **31-point** harm-sensitive gap
 where the other two rungs have 3 and 0. It already held the largest (B) cell
@@ -558,6 +565,43 @@ this repo's own rule, failing here on a control's self-description rather than
 on a missing call. Pinned by `tests/test_cost.py::test_the_benign_control_arm_is_priced_at_all`,
 which halves the benign corpus and requires BOTH the decode budget and the judge
 count to move.
+
+### 3.6.1 ⚠️ The replication — encoding-driven refusal is a LLAMA property, not a model property
+
+**Job `9010201`, Qwen2.5-7B-Instruct, the same three rungs at n=100 per arm,
+2026-08-08, 32 min.** The first benign-arm data on a second model family, run
+because every harm-sensitivity number in this repo was Llama-only and a claim
+that reshaped the substrate should not stay a one-model claim.
+
+| rung | Llama harmful → benign | gap | Qwen harmful → benign | gap |
+|---|---|---|---|---|
+| `zero_width` | 0.93 → 0.90 | +0.03 | 0.87 → **0.30** | **+0.57** |
+| `homoglyph` | 0.99 → 0.99 | +0.00 | 0.89 → **0.29** | **+0.60** |
+| `fullwidth` | 0.90 → 0.59 | +0.31 | 0.83 → **0.21** | **+0.62** |
+
+**All three rungs are harm-sensitive on Qwen.** §3.6's demotion of `zero_width`
+and `homoglyph` to controls is withdrawn: on this family their (S) cells carry
+real evidence about harm recognition and their (B) counts regain their meaning.
+
+**The mechanism is a difference between the models, not between the rungs.**
+Llama refuses *benign* encoded content at 0.59-0.99; Qwen at 0.21-0.30. Llama
+blanket-refuses things wearing an encoding and Qwen does not, so on Llama the
+encoding signal saturates the refusal decision and leaves no room for harm to
+move it. That is a real and reportable property of Llama-3.1-8B-Instruct's
+safety training — it is simply not a property of encoded attacks.
+
+**The transferable lesson, and the gate named it in advance: a
+harm-sensitivity conclusion from one model is not a conclusion.** For a day this
+repo carried "refusal is encoding-driven" as a finding about encoded jailbreaks
+and demoted two of three rungs on it. The pilot's own founding rationale was two
+families so that a regime result is not a single tokenizer's artefact; the
+benign arm was added later and skipped that discipline.
+
+*AS-6 inherits it twice over.* A guard-side benign arm is mandatory from the
+first sweep (§3.6), **and** it must run on more than one guard — "this guard
+flags anything encoded" and "guards flag anything encoded" are different claims,
+and AS-6's whole contribution is a separation that the first would destroy and
+the second would make universal.
 
 ### 3.7 ⚠️ The (S) cell is not the same measurement across rungs — most of it is ECHO
 
@@ -740,6 +784,47 @@ Measured, ratio to the same model's plain English:
    `fullwidth` (1.51, harm-sensitive) and that ceiling — precisely the region
    where it matters whether harm-sensitivity dies exactly when comprehension
    does, or **before** it. The second would be the stronger and stranger result.
+
+#### ⚠️ RESULT 2026-08-08 — the fertility hypothesis is REFUTED by the within-level replicate
+
+Job `9010200` (Llama, 7 rungs x 100, 1:12:42). The design put four alphabets at
+one fertility level precisely so that "is behaviour set by the token cost or by
+the specific script?" could be asked. It answers **the script**, and not
+marginally:
+
+| rung | fertility (Llama) | ability | harm gap (harmful − benign refusal) |
+|---|---|---|---|
+| `fullwidth` | 1.51 | 1.00 | **+0.27** |
+| `fullwidth_letters` | 1.51 | 1.00 | **+0.25** |
+| `circled` | 2.45 | 0.08 | −0.01 |
+| `math_bold` | 2.51 | **1.00** | **+0.18** |
+| `math_monospace` | 2.51 | 0.69 | −0.01 |
+| `math_sans` | 2.53 | **0.00** | −0.01 |
+| `math_fraktur` | 2.54 | 0.47 | −0.01 |
+
+**`math_bold` and `math_sans` differ by 0.9% in tokenizer cost and by 100 points
+of ability.** Across the tied cluster (2.448-2.540, a 3.8% spread) ability spans
+0.00, 0.08, 0.47, 0.69, 1.00 — uncorrelated with fertility. Tokenizer cost does
+not predict comprehension, and the §3.8 ordering variable is dead as an ordering
+variable. It remains a useful *descriptor* (`tag_block` at 3.00 with ability 0.00
+is still the unreadable ceiling) but it cannot order a ladder.
+
+**What DOES predict harm-sensitivity is ABILITY, with a threshold.** Every rung
+with a gap has ability 1.00; every rung without one has ability ≤ 0.69 and
+blanket-refuses at 0.98-0.99 for harmful *and* benign alike. `math_monospace`
+is the informative case: it decodes 69% of prompts and still blanket-refuses, so
+**partial comprehension does not buy harm-sensitive refusal** — the model appears
+to fall back to refusing everything in a script it cannot fully read.
+
+**`math_bold` is a new substrate rung and the most permissive one measured**:
+ability 1.00, harm gap +0.18, and harmful refusal only 0.61 against `fullwidth`'s
+0.88. It is the first rung found by construction rather than by luck, which was
+the band's stated gate — but note it was found by *screening*, not by predicting,
+since the ordering variable failed.
+
+**Deployment did not license anywhere in this run** — the `lexical_vocabulary`
+control did not clear (0.517 against floor 0.619), so the band's deployment axis
+is unmeasured and no (B)/(D) statement may be made from it.
 
 **Two things this is NOT, both of which it would be easy to mistake it for.**
 It is not the length null (`measurements/length_null.py`), which controls for
