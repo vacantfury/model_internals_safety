@@ -43,11 +43,12 @@
 #    not — so token 0 was BOS after all. What the measurement did find is that
 #    the same default gave Llama-3.1-Instruct and Mistral a DOUBLE BOS in the
 #    chat arm, contaminating the target side of the pre-gate's transfer ratio
-#    while the plain ceiling arm stayed clean. Fixed by `tokenize_exactly_one_bos`
-#    plus dropping BOS by identity; full record in
+#    while the plain ceiling arm stayed clean. Fixed by
+#    `tokenize_for_reconstruction` plus dropping BOS by identity; full record in
 #    `text_docs/shared/instrument_layer.md` §4.7. The lesson kept from this entry
-#    is the general one: a BOS assumption must be READ off the checkpoint, never
-#    inferred from its template.
+#    is the general one, and it was later confirmed from the opposite direction
+#    (see `prepend_bos_to_chat_template` below): a BOS assumption must be READ
+#    off the checkpoint's tokenizer.json, never inferred from its template.
 # b. **`<|user|>` and `<|assistant|>` are NOT special tokens.** They shatter into
 #    five pieces each (`<`, `|`, `user`, `|`, `>\n`). Only `<|begin_of_text|>` is
 #    in the added-tokens table. So nothing may key off role markers being single

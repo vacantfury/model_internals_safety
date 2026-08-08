@@ -21,13 +21,17 @@ and is upstream's to change. `tests/conftest.py` now models it (that is what
 `tiny_bos_tokenizer` is for) and the hermetic suite catches our own regressions,
 but only this file can catch THEIRS. Tokenizers only, no weights, seconds.
 
-**Sibling: `tests/test_bos_convention.py`.** The two are opposite ends of one
-axis and neither subsumes the other — that one catches ZERO BOS (a checkpoint
-whose template emits none, so it runs BOS-less against models that do not), this
-one catches TWO. Both carry a per-model row table, so **a model joining the slate
-must be added to BOTH**.
+**Sibling: `tests/test_bos_convention.py`.** The two are opposite ends of ONE
+property — *exactly one BOS reaches the model* — and neither subsumes the other:
+that one refuses ZERO, this one refuses TWO. The property is canonical in
+`text_docs/shared/model_slate.md` §3.1, and the reason it is stated there rather
+than in either file is that stating it as "the chat template emits BOS" gets it
+wrong. One BOS can come from the template OR from the tokenizer's
+post-processor, and reading only the template produced a wrong answer in each
+direction on the same day.
 
-Add a row whenever a model joins the slate.
+The slate here is DERIVED from `conf/models/`, so a new model joins this test
+automatically.
 """
 
 from __future__ import annotations
@@ -35,35 +39,51 @@ from __future__ import annotations
 import pytest
 from transformers import AutoTokenizer
 
+from internals_safety.config import CONF_DIR, load_model_config
 from internals_safety.measurements.sae_reconstruction import (
     scored_positions,
     tokenize_for_reconstruction,
 )
+from internals_safety.models.loader import verify_bos_convention
 
 pytestmark = pytest.mark.slow
 
-# `has_bos` is MEASURED (2026-08-08), not assumed, and it is not uniform:
-# Qwen2.5 has no BOS token at all (`bos_token_id is None`), which is why the
-# masking must treat "no BOS" as a real case rather than an impossible one.
+# The one fact that cannot be derived from the config: Qwen2.5 declares no BOS
+# token at all (`bos_token_id is None`), which is why the masking must treat "no
+# BOS" as a real case rather than an impossible one. Measured 2026-08-08, and
+# asserted below rather than trusted.
+_NO_BOS = {"qwen2_5_7b_instruct", "qwen2_5_0_5b_instruct"}
+
+# DERIVED from conf/models/, never hand-listed. The first version of this file
+# carried a hand-written table and the Tulu ladder gained two rungs the same
+# afternoon — a hand-list silently stops covering the slate it claims to cover,
+# which is the vacuity failure `test_entrypoint_call_sites` guards one file over.
 SLATE = [
-    ("llama3_1_8b_instruct", "meta-llama/Llama-3.1-8B-Instruct", True),
-    ("llama3_1_8b_base", "meta-llama/Llama-3.1-8B", True),
-    ("qwen2_5_7b_instruct", "Qwen/Qwen2.5-7B-Instruct", False),
-    ("mistral_7b_instruct", "mistralai/Mistral-7B-Instruct-v0.3", True),
-    ("tulu3_8b", "allenai/Llama-3.1-Tulu-3-8B", True),
+    (path.stem, path.stem not in _NO_BOS)
+    for path in sorted((CONF_DIR / "models").glob("*.yaml"))
 ]
 
 MESSAGE = "How do I pick a lock?"
 
 
-def _load(hf_id):
-    """The tokenizer as `models/loader.attach` hands it over — left padding and a
-    pad token. Loading it any other way tests a configuration production never
-    sees, which is the fixture rule one level up."""
-    tokenizer = AutoTokenizer.from_pretrained(hf_id)
+def _load(name):
+    """The tokenizer as `models/loader.attach` hands it over.
+
+    **Through the real config, and through `verify_bos_convention`.** Loading the
+    raw checkpoint would test what upstream ships rather than what we RUN, and
+    those came apart on 2026-08-08: Tulu-3 declares
+    `prepend_bos_to_chat_template: true`, so `attach` rewrites its chat template
+    to emit BOS. A test reading the shipped template sees a BOS-less model that
+    no run will ever use — the fixture rule applied to configuration rather than
+    to fakes. No weights are touched; `verify_bos_convention` takes a tokenizer
+    and a config.
+    """
+    config = load_model_config(name)
+    tokenizer = AutoTokenizer.from_pretrained(config.hf_id)
     tokenizer.padding_side = "left"
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
+    verify_bos_convention(tokenizer, config)
     return tokenizer
 
 
@@ -82,21 +102,20 @@ def _texts(tokenizer) -> list[tuple[str, str]]:
     return arms
 
 
-@pytest.mark.parametrize("name,hf_id,has_bos", SLATE, ids=[n for n, _, _ in SLATE])
+@pytest.mark.parametrize("name,has_bos", SLATE, ids=[n for n, _ in SLATE])
 class TestExactlyOneBOSReachesTheModel:
-    def test_the_declared_bos_matches_what_we_expect(self, name, hf_id, has_bos):
-        tokenizer = _load(hf_id)
+    def test_the_declared_bos_matches_what_we_expect(self, name, has_bos):
+        tokenizer = _load(name)
         assert (tokenizer.bos_token_id is not None) is has_bos, (
             f"{name}: bos_token_id is {tokenizer.bos_token_id!r}, which contradicts "
             "the slate. Upstream changed the tokenizer — re-read the masking."
         )
 
-    def test_neither_arm_carries_a_double_bos(self, name, hf_id, has_bos):
-        """At most one, never two. Not "exactly one": Tulu-3's chat template
-        emits none and `prepend_bos_to_chat_template: false` declares that
-        deliberate, so zero is a legitimate reading here — it is the SIBLING
-        file's business, not this one's."""
-        tokenizer = _load(hf_id)
+    def test_neither_arm_carries_a_double_bos(self, name, has_bos):
+        """At most one, never two. Zero is the sibling file's business — this
+        one owns the upper bound only, so the two can disagree about policy
+        without either weakening."""
+        tokenizer = _load(name)
         for arm, text in _texts(tokenizer):
             ids = tokenize_for_reconstruction(
                 tokenizer, [text], render_chat=(arm == "chat")
@@ -107,13 +126,13 @@ class TestExactlyOneBOSReachesTheModel:
                 f"first four: {[tokenizer.decode([i]) for i in ids[:4]]}"
             )
 
-    def test_the_chat_arm_tokenised_as_plain_IS_a_double_bos(self, name, hf_id, has_bos):
+    def test_the_chat_arm_tokenised_as_plain_IS_a_double_bos(self, name, has_bos):
         """The defect, reproduced against the live tokenizer and refused.
 
         Chat-rendered text plus the post-processor is exactly the old code path.
-        Skipped where the checkpoint cannot express it — Qwen has no BOS, and
-        Tulu-3's template emits none, so nothing can double."""
-        tokenizer = _load(hf_id)
+        Skipped where the checkpoint cannot express it — Qwen has no BOS, and a
+        template that emits none has nothing to double."""
+        tokenizer = _load(name)
         if not has_bos or not tokenizer.chat_template:
             pytest.skip("no BOS or no template — the trap is not expressible here")
         rendered = tokenizer.apply_chat_template(
@@ -127,14 +146,14 @@ class TestExactlyOneBOSReachesTheModel:
             tokenize_for_reconstruction(tokenizer, [rendered], render_chat=False)
 
     def test_the_default_tokenisation_is_the_thing_we_stopped_doing(
-        self, name, hf_id, has_bos
+        self, name, has_bos
     ):
         """The measurement that motivated the fix, asserted so it cannot silently
         stop being true. On a chat-templated string, `tokenizer(text)` with the
         DEFAULT flag duplicates BOS on exactly the checkpoints whose
         post-processor adds one — that is the code path this module used to take.
         """
-        tokenizer = _load(hf_id)
+        tokenizer = _load(name)
         if not has_bos or not tokenizer.chat_template:
             pytest.skip("no BOS or no template — the trap is not expressible here")
         rendered = tokenizer.apply_chat_template(
@@ -152,7 +171,7 @@ class TestExactlyOneBOSReachesTheModel:
         )
 
     def test_the_masking_drops_exactly_the_bos_that_is_there(
-        self, name, hf_id, has_bos
+        self, name, has_bos
     ):
         """End to end, against a RAGGED batch so left padding is exercised.
 
@@ -160,7 +179,7 @@ class TestExactlyOneBOSReachesTheModel:
         off the tokenised ids rather than asserted from the slate, because the
         answer legitimately differs BY ARM on the same checkpoint — which is the
         whole reason the old bool was wrong."""
-        tokenizer = _load(hf_id)
+        tokenizer = _load(name)
         for arm, text in _texts(tokenizer):
             encoded = tokenize_for_reconstruction(
                 tokenizer, [text, text + " Explain."], render_chat=(arm == "chat")

@@ -1199,9 +1199,9 @@ term shifts too.
 **What must be re-measured:** every Instruct-arm reading, which is job `9010205`
 and the transfer ratio 1.009–1.017 quoted from it. §4.6's ceiling table
 (`9009915`, plain arm) is **unaffected**, and that is derivable rather than
-hopeful: old path = tokenizer adds BOS at position 0, dropped; new path = nothing
-emits BOS so `tokenize_exactly_one_bos` prepends one, dropped. Identical kept set,
-identical input ids.
+hopeful: the plain arm has no template, so both the old and the new path tokenise
+it with `add_special_tokens=True` and the post-processor puts exactly one BOS at
+position 0, which is dropped. Identical kept set, identical input ids.
 
 **Two cases the old signature could not express at all.** Qwen2.5 has no BOS
 token, so `drop_first_real=True` removed `<|im_start|>` in the chat arm and the
@@ -1213,13 +1213,35 @@ that was filed — it is that `drop_bos: bool` asserted a fact about token 0
 without ever reading it, and was therefore wrong in different directions on three
 of five checkpoints.
 
-**The fix is structural, in the shape items 58/59 settled.** `tokenize_exactly_one_bos`
-owns the "who supplies BOS" question, and `scored_positions` takes
-`bos_token_id` **keyword-only with no default** and drops BOS *by identity*,
-raising if the first real token is not the declared BOS. `bos_token_id=None`
-means the model has none — nothing is dropped and nothing pretends to have been.
-A stale caller is a `TypeError`, and `measure_reconstruction`/`observed_sparsity`
-joined the `WATCHED` list in `tests/test_entrypoint_call_sites.py`.
+**The fix is structural, in the shape items 58/59 settled.**
+`tokenize_for_reconstruction` owns which side supplies BOS — the chat arm takes
+the template at its word, the plain arm has no template so the post-processor
+supplies it — and refuses a double at source. `scored_positions` takes
+`bos_token_id` **keyword-only with no default** and drops BOS *by identity*, so
+the worst a stale caller can cause is a BOS left in, never a content token taken
+out. `bos_token_id=None` means the model has none; a row that simply does not
+begin with BOS keeps its first token. A stale caller is a `TypeError`, and
+`measure_reconstruction`/`observed_sparsity` joined the `WATCHED` list in
+`tests/test_entrypoint_call_sites.py`.
+
+**It decides nothing itself, deliberately.** A first draft prepended BOS whenever
+a row lacked one, which would have silently overruled
+`prepend_bos_to_chat_template` — the config field that owns exactly this question
+since `verify_bos_convention` landed the same day. Two enforcement points, one
+property: `verify_bos_convention` refuses **zero** BOS, `tokenize_for_reconstruction`
+refuses **two**.
+
+**The generalisation, and it is the part worth keeping.** The repo's convention
+was written as *"the chat template already emits BOS"*. The property that
+actually matters is **exactly one BOS reaches the model**, and that can be
+satisfied by the template OR by the tokenizer's post-processor. Reading only the
+template answers the wrong question, and it produced a wrong answer in each
+direction on the same day: this section's double BOS (template emits one, the
+post-processor adds a second) and, one seam over, a proposed BOS-less Tulu-3 run
+justified by its template while its `tokenizer.json` post-processor is
+byte-identical to Llama-3.1-Instruct's — Ai2 never disabled BOS, they simply did
+not duplicate it in the template. Canonical statement of the invariant and the
+per-model table: `text_docs/shared/model_slate.md` §3.1.
 
 **Fixture note, fourth instance of the rule.** `tiny_tokenizer` has no BOS, so
 the hermetic suite modelled Qwen and nothing else — the SAE gate runs exclusively
