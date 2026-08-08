@@ -219,3 +219,28 @@ class TestTheEntrypointRunsItsRealPath:
         script = self._script()
         assert script.main([str(run_dir), "--dry-run"]) == 0
         assert not (run_dir / "refusal_judge_control.json").exists()
+
+    def test_a_second_invocation_MERGES_rather_than_clobbering(self, run_dir, monkeypatch):
+        """The full pass was SIGKILLed by the login-node watchdog with nothing
+        written, so it has to be runnable per-rung — and per-rung runs that
+        overwrite each other are worse than one that dies."""
+        from internals_safety.config import JudgeConfig
+        from internals_safety.judges.refusal import RefusalJudge
+
+        from judge_stubs import StubService, yes_verdict
+
+        script = self._script()
+        monkeypatch.setattr(script, "load_judge_config", lambda: JudgeConfig())
+        monkeypatch.setattr(
+            script,
+            "RefusalJudge",
+            lambda config: RefusalJudge(config, service=StubService(default=yes_verdict())),
+        )
+        out = run_dir / "refusal_judge_control.json"
+        out.write_text(json.dumps({"already_done": {"n": 7}}), encoding="utf-8")
+
+        assert script.main([str(run_dir)]) == 0
+        written = json.loads(out.read_text())
+        assert "already_done" in written, "a prior rung's result was clobbered"
+        assert written["already_done"]["n"] == 7
+        assert "zero_width" in written

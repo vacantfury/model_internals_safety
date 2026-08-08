@@ -118,7 +118,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     judge = RefusalJudge(load_judge_config())
-    results = {}
+    # MERGE, never overwrite, and checkpoint after every rung. Two reasons, both
+    # already paid for in this repo: a full 500-item pass was SIGKILLed by the
+    # login-node watchdog with nothing written, and running it per-rung to stay
+    # under that limit would otherwise have each invocation clobber the last.
+    # Same rule as `run_families` — a rung that finished must survive the run
+    # that did not.
+    out = args.run_dir / "refusal_judge_control.json"
+    results = json.loads(out.read_text(encoding="utf-8")) if out.exists() else {}
     for family, cells in selected.items():
         triples = [conditions(cell) for cell in cells]
 
@@ -163,12 +170,12 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"\n{family}: n={control.n}  parrot_flip={control.parrot_flip_rate:.2f}  "
             f"appended_flip={control.appended_flip_rate:.2f} (n={control.n_appended})  "
-            f"anchor_disagreement={disagreement:.2f}  clears={control.clears()}"
+            f"anchor_disagreement={disagreement:.2f}  clears={control.clears()}",
+            flush=True,
         )
+        out.write_text(json.dumps(results, indent=2), encoding="utf-8")
 
-    out = args.run_dir / "refusal_judge_control.json"
-    out.write_text(json.dumps(results, indent=2), encoding="utf-8")
-    print(f"\nwrote {out}")
+    print(f"\nwrote {out} ({len(results)} rungs)")
     print(
         "\nRead `echo_route_dominates` against TODO 62a: True supports nulling "
         "echoing cells to (P); False means the nulling was too aggressive and "
