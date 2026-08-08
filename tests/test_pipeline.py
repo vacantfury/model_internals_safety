@@ -450,3 +450,88 @@ class TestDemotionRelabelsThroughTheRules:
             cross_rung_screen=screen,
         )
         assert seen == [["a", "b", "c"]]
+
+
+class TestTheBenignArmIsPersistedPerCell:
+    """§3.5.1 — the control the graded regrade needs was generated on every run
+    since 2026-08-07 and thrown away.
+
+    `band2-20260805` yielded **2 valid control cells against 22 objects** for a
+    graded compliance claim, because §3.4's valid control (`refused=False,
+    ability=False`) is nearly empty by construction of the taxonomy — while the
+    benign arm's ~100 responses per rung, which are selected on the REQUEST's
+    harmlessness rather than on refusal, had been computed, used for four
+    aggregate rates and dropped. The judge bill was already paid; only the write
+    was missing.
+    """
+
+    @staticmethod
+    def with_benign(family: str, n: int = 2) -> dict:
+        result = cells(family, n)
+        result["benign_cells"] = [
+            {"family": family, "prompt_id": i, "arm": "benign", "refused": False}
+            for i in range(n)
+        ]
+        return result
+
+    def test_the_responses_reach_disk(self, tmp_path):
+        run_families(
+            ["a", "b"], tmp_path, lambda f: self.with_benign(f, 3), cross_rung_screen=None
+        )
+        rows = [
+            json.loads(line)
+            for line in (tmp_path / "benign_cells.jsonl").read_text().splitlines()
+        ]
+        assert len(rows) == 6
+        assert {row["family"] for row in rows} == {"a", "b"}
+        assert all(row["arm"] == "benign" for row in rows)
+
+    def test_benign_rows_never_enter_the_harmful_file(self, tmp_path):
+        """The reason for a separate file rather than an `arm` column.
+
+        Every existing consumer of cells.jsonl (`rescore_ability`,
+        `rebaseline_pilot`, `regrade_compliance`) treats each row as a harmful
+        object, so a shared file would double their denominators silently."""
+        run_families(
+            ["a"], tmp_path, lambda f: self.with_benign(f, 3), cross_rung_screen=None
+        )
+        rows = [json.loads(line) for line in (tmp_path / "cells.jsonl").read_text().splitlines()]
+        assert len(rows) == 3
+        assert all(row.get("arm") != "benign" for row in rows)
+
+    def test_a_demotion_does_not_relabel_the_benign_arm_as_harmful(self, tmp_path):
+        """The concrete hazard the separate file exists to prevent.
+
+        `_demote_to_unmeasured` rewrites every row of cells.jsonl through
+        `assign_regime(..., prompt_is_harmful=True)`. A benign row sharing that
+        file would come back out carrying a harmful-prompt regime label."""
+
+        def run_one(family):
+            result = screened_cells(family, ability=False, deployment=True)
+            result["benign_cells"] = [
+                {"family": family, "prompt_id": i, "arm": "benign", "refused": False}
+                for i in range(2)
+            ]
+            return result
+
+        run_families(
+            ["a"],
+            tmp_path,
+            run_one,
+            cross_rung_screen=lambda summaries: {"a": "below the control floor"},
+        )
+        harmful = [json.loads(l) for l in (tmp_path / "cells.jsonl").read_text().splitlines()]
+        benign = [
+            json.loads(l) for l in (tmp_path / "benign_cells.jsonl").read_text().splitlines()
+        ]
+        assert all(row["deployment"] is None for row in harmful), "the demotion ran"
+        assert all("regime" not in row for row in benign), (
+            "the benign arm was relabelled through a harmful-prompt rule"
+        )
+        assert all("demoted_by_cross_rung_screen" not in row for row in benign)
+
+    def test_an_entrypoint_that_supplies_none_still_runs(self, tmp_path):
+        """AS-6's guard probe has no benign generation arm — a guard emits a
+        verdict, never a response — so the key is optional, not defaulted."""
+        run_families(["a"], tmp_path, lambda f: cells(f), cross_rung_screen=None)
+        assert (tmp_path / "benign_cells.jsonl").read_text() == ""

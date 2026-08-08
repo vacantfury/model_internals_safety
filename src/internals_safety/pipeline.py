@@ -203,9 +203,19 @@ def run_families(
     """Drive the per-family loop with a crash-durable checkpoint after each rung.
 
     `run_one(family)` returns `{"cells": [...], "summary": {...}}` and MAY return
-    `"readings"`; `report` gets the whole result for whatever the paper wants
-    printed. Returns the summaries, every `Reading` collected across rungs, and
-    the total elapsed seconds.
+    `"readings"` and `"benign_cells"`; `report` gets the whole result for
+    whatever the paper wants printed. Returns the summaries, every `Reading`
+    collected across rungs, and the total elapsed seconds.
+
+    **`benign_cells` is in the spine for the reason the spine exists.** The
+    benign arm's per-prompt responses were generated on every run since
+    2026-08-07, consumed for four aggregate rates, and dropped — so
+    `band2-20260805` offered **2 valid control cells against 22 objects** for the
+    graded regrade, while the ~70-79 cells per rung that would have worked had
+    been computed and thrown away (`instrument_layer.md` §3.5.1). The judge bill
+    was already paid; only the write was missing. That is precisely "anything
+    whose absence in ONE script would be a defect", and AS-6 needs the same file
+    for the same reason, so it belongs here rather than in either entrypoint.
 
     **Readings are accumulated here rather than in each script** for the same
     reason the checkpoint is: a run whose instruments emit verdicts and whose
@@ -255,7 +265,9 @@ def run_families(
     started = time.perf_counter()
     with (directory / "cells.jsonl").open("w", encoding="utf-8") as handle, (
         directory / "summaries.partial.jsonl"
-    ).open("w", encoding="utf-8") as partial_handle:
+    ).open("w", encoding="utf-8") as partial_handle, (
+        directory / "benign_cells.jsonl"
+    ).open("w", encoding="utf-8") as benign_handle:
         for family in families:
             print(f"\n=== {family}", flush=True)
             family_started = time.perf_counter()
@@ -264,6 +276,19 @@ def run_families(
             for cell in result["cells"]:
                 handle.write(json.dumps(cell, ensure_ascii=False) + "\n")
             _checkpoint(handle)
+
+            # A SEPARATE file, deliberately, and the reason is one function down:
+            # `_demote_to_unmeasured` rewrites every row of cells.jsonl through
+            # `assign_regime(..., prompt_is_harmful=True)`. A benign row sharing
+            # that file would be silently relabelled as a harmful one on any run
+            # where a rung is demoted. Same-file with an `arm` column would also
+            # double the row count under every existing consumer that assumes
+            # otherwise (`rescore_ability`, `rebaseline_pilot`,
+            # `regrade_compliance`), which is a silent corruption rather than a
+            # loud one.
+            for cell in result.get("benign_cells", ()):
+                benign_handle.write(json.dumps(cell, ensure_ascii=False) + "\n")
+            _checkpoint(benign_handle)
 
             summary = result["summary"]
             summary["elapsed_seconds"] = round(time.perf_counter() - family_started, 1)

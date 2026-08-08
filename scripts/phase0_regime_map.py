@@ -1093,6 +1093,36 @@ def run_family(
         )
     ]
 
+    # The benign arm, per prompt rather than as four rates (TODO 32, §3.5.1).
+    #
+    # These are the control the graded regrade needs and could not get. §3.4
+    # settled that the valid control for a graded compliance claim is a cell the
+    # model neither declined nor decoded — selected on something other than the
+    # variable under test. A benign-request response is selected on the REQUEST's
+    # harmlessness, which is independent of refusal by construction, and there
+    # are ~100 of them per rung against the 2-5 the harmful arm yields.
+    #
+    # No ability/deployment/recognition column: ability is a decode-and-restate
+    # measurement taken on the harmful arm only, and writing a null where a
+    # measurement never happened is the defect this repo has now fixed four
+    # times. What is here is what was measured.
+    benign_cells = [
+        {
+            "prompt_id": prompt.id,
+            "category": prompt.category,
+            "family": family,
+            "arm": "benign",
+            "plaintext": item.plaintext,
+            "ciphertext": item.ciphertext,
+            "attack_response": behavior.response,
+            "refused": behavior.refused,
+            "jailbroken": behavior.jailbroken,
+            "echoed_ciphertext": behavior.echoed_ciphertext,
+            "judge_fallback": behavior.judge_fallback,
+        }
+        for prompt, item, behavior in zip(harmless, encoded_harmless, benign_behavior_records)
+    ]
+
     n = len(cells)
     summary = {
         "family": family,
@@ -1426,6 +1456,7 @@ def run_family(
     return {
         "summary": summary,
         "cells": cells,
+        "benign_cells": benign_cells,
         "curve": curve,
         "regime_map": regime_map,
         "readings": readings,
