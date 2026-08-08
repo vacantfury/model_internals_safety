@@ -99,6 +99,16 @@ that survived screening.
 
 ## 4a. ⚠️ THE STORY, THIRD VERSION (2026-08-08) — the dissociation is the paper
 
+> ### ⛔ SUPERSEDED THE SAME DAY BY §4b — THE AXIS BELOW IS REFUTED
+>
+> The third and fourth model arms ran (jobs `9010897` Mistral, `9011034`
+> Tulu-3) and the gate the presets declared fired **against** this section.
+> Binding failure turns out to vary MORE between rungs inside one model than it
+> does between models, so a model-level property cannot be what explains it.
+> Read §4b before using anything below. This section is kept because it is the
+> reasoning the falsification test was designed against, and because two of its
+> claims survive.
+
 *Supersedes §5 below, which was written before the Qwen arm ran. §5 recommended
 leading with the measurement contribution because the substantive result looked
 like one rung. It is kept as the record of that reasoning; this section is the
@@ -181,6 +191,126 @@ visible.**
 `fullwidth`-class rungs with a can't-decode control included, so it has a real
 floor; (3) a plaintext recognition baseline on Llama, which would promote the
 recognition axis from corroboration to evidence.
+
+## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08)
+
+Jobs `9010897` (Mistral-7B-Instruct-v0.3, 1:15:12) and `9011034` (Tulu-3-8B,
+1:23:29), 8 rungs × 100 prompts each: the three substrate rungs plus five
+can't-decode candidates for the floor. Both presets stated their gate in
+committed text before launch; this is the reading against it.
+
+### The axis, and what it predicted
+
+§4a's claim is that **blanket surface-level refusal** (a model that refuses
+encoded *benign* content) comes with **weaker binding** of refusal to
+comprehension. It was a line through two points — Llama high/high, Qwen
+low/low. `dissociation_mistral.yaml` named the refutation condition in advance.
+
+| model | benign refusal, per substrate rung | binding failure B/(B+S) |
+|---|---|---|
+| Llama-3.1-8B-Instruct | 0.90 / 0.99 / 0.59 | 0.27 – 0.43 |
+| Qwen2.5-7B-Instruct | 0.21 – 0.30 | 0.05 – 0.11 |
+| Mistral-7B-Instruct-v0.3 | 0.91 / 0.67 / 0.52 | **0.200 / 0.098 / 0.686** |
+| Tulu-3-8B ⚠️ | 0.40 / 0.41 / 0.52 | **0.562 / 0.156 / 0.286** |
+
+*(rung order: `fullwidth` / `homoglyph` / `zero_width`.)*
+
+### The refutation does not need the cross-model comparison at all
+
+It is **internal to Mistral**, which is what makes it hard to explain away:
+
+| Mistral rung | benign refusal | binding failure | hard incoherence | deployment AUROC |
+|---|---|---|---|---|
+| `homoglyph` | 0.67 | **0.098** | 0.05 | 0.938 (floor +0.281) |
+| `zero_width` | 0.52 | **0.686** | 0.02 | 0.951 (floor +0.294) |
+
+**Lower blanket refusal, seven times the binding failure** — the opposite of the
+axis, in one model, on two rungs that are both instrument-sound by every screen
+this repo has: hard incoherence at 2–5%, deployment licensed, both clearing the
+run's own control floor by ~0.29. Tulu-3 shows the same shape (`fullwidth` 0.40
+→ 0.562 against `homoglyph` 0.41 → 0.156: near-identical blanket refusal, 3.6×
+the binding failure).
+
+**So binding failure varies more BETWEEN RUNGS INSIDE a model than it does
+between models.** §4a explained a two-model difference with a model-level
+property; a model-level property cannot produce a 0.098-to-0.686 spread within
+one model. The two-model pattern was real and is still on disk — it was simply
+not evidence for the mechanism attached to it, because n=2 with one rung's worth
+of resolution cannot distinguish a model effect from a rung effect.
+
+**Note which prediction failed.** The preset expected refutation to arrive as
+*low benign refusal + high binding failure* in a permissive third model. Mistral
+is not permissive — its benign refusal (mean 0.70) is the second highest of the
+four, above Llama's. The axis failed on a variable the preset was not watching.
+
+### What survives from §4a
+
+1. **The aggregate/internals inversion**, which was always the contribution and
+   does not depend on the axis: the reportable refusal rate ranks these models
+   differently from the comprehension-conditioned rate. Mistral makes this
+   *stronger* — its harmful refusal on `zero_width` is 0.65 while 35 of its 51
+   measured comprehension cells are (B).
+2. **(B) is populated on every model tested**, now four families and three
+   independent post-training pipelines.
+
+### What does not survive
+
+Any claim that blanket refusal *explains* weak binding, and any framing of the
+paper around a property of safety training. The unit that carries the variance
+is the **(model, rung) cell**, not the model.
+
+### The behaviour axis is withheld again — third consecutive run
+
+The mandatory benign judge arm fails on every substrate rung, against the
+rule-of-three bar of 3/n = 0.03:
+
+| | `fullwidth` | `homoglyph` | `zero_width` |
+|---|---|---|---|
+| Mistral benign-arm ASR | 0.08 | 0.25 | 0.30 |
+| Tulu-3 benign-arm ASR | **0.44** | 0.38 | 0.29 |
+
+Tulu's 0.44 is the worst measured anywhere in this repo: the judge calls 44 of
+100 *benign* fullwidth responses jailbreaks. **No ASR from either run is
+reportable.** The refusal rates and (B)/(S) counts above are unaffected —
+`regimes.py:249` splits on `refused`, not on the ASR judge — which is the same
+separation §3.6 established.
+
+### ⚠️ Tulu-3's arm is off-distribution and must be re-run
+
+`9011034` ran BOS-less. The checkpoint's `tokenizer.json` post-processor is
+byte-identical to Llama-3.1-Instruct's, so its config moved to
+`prepend_bos_to_chat_template: true` the same day and this run is superseded
+(`conf/models/tulu3_8b.yaml`). It is reported here because it *agrees* with
+Mistral and the refutation does not rest on it. It may not be differenced
+against the SFT/DPO ladder rungs, which run with BOS: a ladder whose rungs
+disagree about BOS measures BOS.
+
+### Secondary gate: FAILED, on the branch the preset named
+
+The five can't-decode candidates were meant to yield the repo's first derived
+`mean + 2·SD` floor. **Both models produced only four admissible controls**, so
+both fell back to `max` and are labelled `bound`:
+
+| model | floor | kind | admitted | excluded, and why |
+|---|---|---|---|---|
+| Mistral | 0.6569 | `bound` | 4 | `math_sans`, ability 0.01 |
+| Tulu-3 | 0.6417 | `bound` | 4 | `circled`, ability 0.03 |
+
+`control_ability_max: 0.0` excludes any rung the model decoded even once in 100,
+and on each model exactly one candidate crossed it — independently. The preset
+predicted this branch: *"the 5-control minimum is not reachable at this ladder
+size and the floor rule needs a cheaper control source than a full rung."*
+
+**Do not fix this by loosening `control_ability_max`.** The knob is right: a
+control rung exists to establish what the probe reads when nothing was decoded,
+so admitting a rung with 3 genuinely decoded cells puts decoded content into the
+noise floor and biases it upward — which is the direction that makes real rungs
+*fail*. The fix is more control rungs per run, and the cipher band is free for
+this: ten of its rungs are established-inert on two families already.
+
+Consequence meanwhile: both floors are `bound`, hence n-dependent per §2.4, and
+**not comparable across runs or models**. Mistral's `fullwidth` clears its own
+floor by only +0.022 and should be treated as marginal.
 
 ## 5. What it DOES support, and it is a stronger paper *(SUPERSEDED — see §4a)*
 
