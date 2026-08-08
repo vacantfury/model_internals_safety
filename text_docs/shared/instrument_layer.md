@@ -304,6 +304,61 @@ derived by the offline scripts, which do consult the floor); what is affected is
 **every per-cell regime any live run has emitted**, because licensing decided
 which cells were (U) and which were labelled.
 
+### 2.6 ⚠️ The floor does not port to a guard, because a guard has no ability measurement
+
+**Found 2026-08-08, before the run rather than after, and it invalidates a claim
+two committed presets were carrying.** AS-6 has been told since §2.4 that it
+"must derive its OWN floor per guard". That instruction is right and the route to
+it is not the obvious one.
+
+`control_floor.derive(transfer_auroc, ability_rate, ...)` selects its control set
+by **ability** — rungs the model demonstrably cannot decode. That choice is the
+whole reason the floor is not circular: ability is measured from generated text
+and the floor screens a probe's transfer AUROC, so the selector and the screened
+statistic are independent quantities. §3.4 is the same rule stated from its
+failure side, and it cost a quarantined $0.85 run.
+
+**On the guard side that selector does not exist.** `as6_guard_probe.py`'s
+docstring settles it: Llama Guard 3's template hard-wires the classification task
+and ends "First line must read 'safe' or 'unsafe'", so there is no
+in-distribution channel through which a guard can be asked to restate a payload.
+No restatement, no ability, no control set.
+
+What both benign-arm presets said instead — that their cipher rungs are "six
+ability-0 controls" — selects controls by *what the decode probe reads there*,
+which is precisely the statistic a floor screens. That is §3.4's vacuity one
+instrument over, and it would have produced a floor that passes whatever the
+probe happens to be quiet about. Corrected in both files 2026-08-08; the runs
+themselves are unaffected, because the benign block rate they exist to measure
+never consults a floor.
+
+**The non-circular route, and it is asymmetric between the two guards.** Both are
+fine-tunes of models we can measure ability on directly:
+
+| guard | base | ability coverage for its control rungs |
+|---|---|---|
+| Llama Guard 3 8B | Llama-3.1-8B | **all 19 rungs**, from the pilot + band runs; 0.00 on every cipher |
+| WildGuard | Mistral-7B-v0.3 | **`base64` only**, from `dissociation_mistral` (job `9010897`) |
+
+A base model's ability is an estimate of the fine-tune's, not a measurement of
+it — fine-tuning can move decoding capability, and the honest label for a floor
+derived this way is inherited, with the assumption stated. But it is
+*independent* of the guard's probe, which is what §3.4 requires and what
+selecting on the probe can never be.
+
+So the Llama Guard arm could carry a derived floor today and the WildGuard arm
+could not, and closing that gap means extending the Mistral ability measurement
+across the five cipher rungs it never ran (`ascii_decimal`, `base32`, `binary`,
+`vigenere`, `hex`) — one job, no judge, and it buys the second guard's floor.
+Deliberately not wired into either preset: the benign arm is the gate these runs
+exist for, and bolting an unvalidated floor onto it would repeat §2.5's mistake
+in the other direction, shipping a screen before its calibration is sound.
+
+**The general form, which is the part that outlives AS-6.** A control-calibrated
+floor is portable only where its *selector* is. Moving a screen to a new object
+of study means asking what independent variable identifies a control there —
+never assuming the old one survives the move.
+
 ---
 
 ## 3. Validated diagnostics

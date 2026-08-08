@@ -40,15 +40,20 @@ gates: >-
   the decode axis alone — which would also explain the 50-point WildGuard spread
   between `combining_marks` and `homoglyph` without invoking harm at all.
 
-  It also supplies the guard-side control floor. AS-6 must derive its own floor
-  per guard (§2.4), and this rung set carries six ability-0 controls so the
-  floor is a floor rather than a bound.
+  ⚠️ It does NOT supply the guard-side control floor, though this text said it
+  did until 2026-08-08. See `instrument_layer.md` §2.6: a guard has no ability
+  measurement, so "six ability-0 controls" is a category error here — the rungs
+  below were picked by what the decode probe reads, which is the statistic a
+  floor would screen. WildGuard's non-circular route is its base model
+  (Mistral-7B-v0.3) and only `base64` of these six currently has that ability
+  number measured.
 
 target: wildguard
 
 # ELEVEN rungs: five where WildGuard blocks something, six where its decode
-# probe reads nothing. The second group does double duty — benign anchors for
-# this control, and the >=5 controls the derived floor needs.
+# probe reads nothing. The second group are the benign anchors — and NOT the
+# controls a derived floor needs, per the correction in `gates:` above and
+# `instrument_layer.md` §2.6.
 families:
   - zero_width
   - homoglyph

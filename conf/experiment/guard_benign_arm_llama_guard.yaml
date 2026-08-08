@@ -50,13 +50,26 @@ target: llama_guard_3_8b
 # TWELVE rungs, and the split differs from WildGuard's because the two guards
 # license different rungs (`phase1_map.md` §1). The first six are Llama Guard's
 # OWN measurable set under the length-matched null at 5/10/20 strata; the last
-# six are ciphers it does not license, which serve as the benign anchors and as
-# the >=5 controls a derived floor needs rather than a bound.
+# six are ciphers it does not license, which serve as the benign anchors.
 #
 # `caesar3` is here and absent from the WildGuard preset for exactly that reason;
-# `morse` is deliberately EXCLUDED as a control despite being a cipher, because
-# it is Llama Guard's one borderline rung (`--L`, p=0.055) and a control that
-# might carry signal is not a control.
+# `morse` is deliberately EXCLUDED despite being a cipher, because it is Llama
+# Guard's one borderline rung (`--L`, p=0.055).
+#
+# ⚠️ THESE SIX ARE NOT YET THE CONTROLS A DERIVED FLOOR NEEDS, and this comment
+# said they were until it was checked (§2.6). `control_floor.derive` selects
+# controls by ABILITY — a rung the model cannot decode — which is a variable
+# independent of the transfer AUROC being screened. A guard has no ability
+# measurement at all (`as6_guard_probe.py`'s own docstring: there is no
+# in-distribution channel through which a guard can be asked to restate). Picking
+# the controls by "the decode probe reads nothing here" would select them on the
+# very statistic the floor screens, which §3.4 already names as vacuous.
+#
+# The non-circular route exists and this preset does not need it: Llama Guard 3
+# is a Llama-3.1-8B fine-tune, and ability IS measured for all 19 rungs on
+# Llama-3.1-8B-Instruct, 0.00 on every cipher here. That estimate is independent
+# of anything this run computes. It is deliberately NOT wired yet — see §2.6 for
+# what it would take and why the WildGuard arm is worse off.
 families:
   - zero_width
   - homoglyph
