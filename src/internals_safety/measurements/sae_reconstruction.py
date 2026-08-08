@@ -553,8 +553,21 @@ def observed_sparsity(
     return total / counted if counted else 0.0
 
 
-def ceiling_from(path: str | Path, layer: int) -> float:
-    """The ceiling arm's variance explained, for THIS layer.
+@dataclass(frozen=True)
+class Ceiling:
+    """What the ceiling arm achieved at one layer — BOTH terms the gate reads.
+
+    It carries the KL term as well as variance explained because both are
+    relative bars, and shipping only one is what left `min_kl_recovered`
+    absolute for a day after `min_variance_explained` was fixed.
+    """
+
+    variance_explained: float
+    kl_recovered: float
+
+
+def ceiling_from(path: str | Path, layer: int) -> Ceiling:
+    """The ceiling arm's achieved variance AND KL, for THIS layer.
 
     **Two guards, and both exist because the failure would be silent.**
 
@@ -588,7 +601,13 @@ def ceiling_from(path: str | Path, layer: int) -> float:
     variance = detail.get("variance_explained")
     if variance is None:
         raise ValueError(f"{path} carries no variance_explained to use as a ceiling")
-    return float(variance)
+    kl = readings[0].get("value")
+    if kl is None:
+        raise ValueError(
+            f"{path} carries no KL-recovered value to use as a ceiling; a target arm "
+            "judged against an absolute KL bar is the defect this record exists to fix"
+        )
+    return Ceiling(variance_explained=float(variance), kl_recovered=float(kl))
 
 
 def loaded_model_name(quality: ReconstructionQuality) -> str:
@@ -620,7 +639,7 @@ def unmeasured_reading(reason: str) -> Reading:
 def reading(
     quality: ReconstructionQuality,
     config: SAEConfig,
-    ceiling: float | None = None,
+    ceiling: "Ceiling | None" = None,
 ) -> Reading:
     """The pre-gate's verdict. `licensed=True` means I4 MAY be read on this model.
 
@@ -638,9 +657,25 @@ def reading(
     An absolute `min_variance_explained` was applied to both until 2026-08-07,
     and it failed the ceiling arm: the guessed 0.75 sat above the measured
     ceiling of 0.698-0.723, so the run whose job is to SET the bar was being
-    judged against a guess at it. The KL term keeps an absolute bar because it
-    is already relative by construction — a fraction of the layer's own
-    downstream contribution — while variance explained is not.
+    judged against a guess at it.
+
+    ⚠️ **The KL term had the SAME defect and kept it for a day (fixed
+    2026-08-08).** The argument for leaving it absolute was that KL-recovered is
+    already relative by construction — a fraction of the layer's own downstream
+    contribution, 1.0 = perfect. The measurement refutes that as *sufficient*:
+    the ceiling arm, the model the dictionary was actually fitted on, reads
+    **0.910-0.920, not ~1.0**. So an absolute 0.80 silently meant "87% of what
+    is achievable", and it landed a knife-edge from a real threshold — job
+    9010205 read 0.7983 at L18 and failed by **0.0017**, while L20 and L20
+    passed at 0.819 and 0.804. Against their own ceilings all three retain
+    87-89%: they are the same result, and the licensing split between them was
+    an artefact of the bar's units. `conf/measurements.yaml` had already named
+    this experiment as the knob's tuning path — "Base is the ceiling; the bar
+    comes from the transfer gap" — so the fix is the prescribed one, not a
+    number fitted to a result.
+
+    Both bars are now fractions of the ceiling arm on the target arm, and both
+    stay absolute on the ceiling arm, where there is nothing above to compare to.
 
     ⚠️ `licensed=True` here licenses NAMING, never a causal claim — see the
     module docstring's policy note. It is a gate on admissibility, not evidence
@@ -659,15 +694,17 @@ def reading(
     beats_control = margin is not None and margin > 0.0
     if ceiling is None:
         floor = 0.0
+        kl_floor = config.min_kl_recovered
         passes = (
-            recovered >= config.min_kl_recovered
+            recovered >= kl_floor
             and quality.variance_explained > floor
             and beats_control
         )
     else:
-        floor = ceiling * config.min_transfer_ratio
+        floor = ceiling.variance_explained * config.min_transfer_ratio
+        kl_floor = ceiling.kl_recovered * config.min_transfer_ratio
         passes = (
-            recovered >= config.min_kl_recovered
+            recovered >= kl_floor
             and quality.variance_explained >= floor
             and beats_control
         )
@@ -679,13 +716,14 @@ def reading(
             f"fraction of downstream KL recovered by substituting the SAE round trip "
             f"at layer {quality.layer} (1.0 = perfect, 0.0 = no better than deleting "
             f"the layer, negative = worse than deleting it); passes at "
-            f">= {config.min_kl_recovered} with variance explained "
+            f">= {kl_floor:.4f} with variance explained "
             + (
                 "> 0 (CEILING arm — the model the dictionary was fitted on, judged on "
                 "reconstructing at all rather than against a bar it is meant to set)"
                 if ceiling is None
-                else f">= {floor:.4f} = {config.min_transfer_ratio} of the "
-                     f"{ceiling:.4f} ceiling (TARGET arm)"
+                else f">= {floor:.4f}; BOTH bars are {config.min_transfer_ratio} of the "
+                     f"ceiling arm's own {ceiling.variance_explained:.4f} variance and "
+                     f"{ceiling.kl_recovered:.4f} KL (TARGET arm)"
             )
             + " and above a matched-shape random dictionary"
         ),
@@ -716,8 +754,10 @@ def reading(
             # cannot say whether it set the bar or was measured against one is
             # not interpretable later.
             "arm": "ceiling" if ceiling is None else "target",
-            "ceiling_variance_explained": ceiling,
+            "ceiling_variance_explained": ceiling.variance_explained if ceiling else None,
+            "ceiling_kl_recovered": ceiling.kl_recovered if ceiling else None,
             "variance_floor_applied": floor,
+            "kl_floor_applied": kl_floor,
             # ⚠️ The whole reason this gate exists. Llama Scope is trained on
             # Llama-3.1-8B-Base and our target is Instruct. The checkpoint's own
             # claim wins over the config string when it has one.

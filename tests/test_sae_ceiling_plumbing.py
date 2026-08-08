@@ -23,9 +23,10 @@ from internals_safety.measurements.sae_reconstruction import ceiling_from
 RESOURCES = {"partition": "gpu", "cpus": 8, "mem": "64G", "time": "01:00:00"}
 
 
-def record(tmp_path, *, arm="ceiling", layer=18, variance=0.6979, n=1):
+def record(tmp_path, *, arm="ceiling", layer=18, variance=0.6979, kl=0.9189, n=1):
     reading = {
         "instrument": "sae_reconstruction",
+        "value": kl,
         "detail": {"arm": arm, "layer": layer, "variance_explained": variance},
     }
     path = tmp_path / f"{arm}-{layer}-{n}.json"
@@ -35,7 +36,21 @@ def record(tmp_path, *, arm="ceiling", layer=18, variance=0.6979, n=1):
 
 class TestTheCeilingIsReadCorrectly:
     def test_it_returns_the_ceiling_arms_variance(self, tmp_path):
-        assert ceiling_from(record(tmp_path), layer=18) == pytest.approx(0.6979)
+        assert ceiling_from(record(tmp_path), layer=18).variance_explained == pytest.approx(0.6979)
+
+    def test_it_ALSO_returns_the_ceiling_arms_KL(self, tmp_path):
+        """Both bars are fractions of the ceiling from 2026-08-08. Shipping only
+        the variance term is what left the KL bar absolute for a day."""
+        assert ceiling_from(record(tmp_path), layer=18).kl_recovered == pytest.approx(0.9189)
+
+    def test_a_record_with_no_KL_raises_rather_than_falling_back_to_absolute(self, tmp_path):
+        path = tmp_path / "nokl.json"
+        path.write_text(json.dumps({"readings": [
+            {"instrument": "sae_reconstruction",
+             "detail": {"arm": "ceiling", "layer": 18, "variance_explained": 0.6979}}
+        ]}))
+        with pytest.raises(ValueError, match="no KL-recovered"):
+            ceiling_from(str(path), layer=18)
 
 
 class TestEveryWrongCeilingRAISES:
