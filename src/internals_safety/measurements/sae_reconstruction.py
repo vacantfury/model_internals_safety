@@ -189,8 +189,10 @@ def scored_positions(attention_mask: torch.Tensor, *, drop_first_real: bool) -> 
       error AND counted them in the denominator.
     * **BOS.** Llama-3.1 carries a massive-activation / attention-sink spike at
       the first real token, orders of magnitude above a normal residual. Llama
-      Scope declares `dataset_average_activation_norm: 13.8125`; the norm implied
-      by the failed run's `MSE 7.6M` at `variance_explained -936` is ~5,700.
+      Scope declares `dataset_average_activation_norm: 13.8125` **at layer 17**
+      — the value is PER LAYER (17.125 and 21.5 at 19 and 21), not global — while
+      the norm implied by the failed run's `MSE 7.6M` at `variance_explained -936`
+      is ~5,700, orders of magnitude above every one of them.
 
     BOS is dropped by an EXPLICIT decision, not as a side effect: the attention
     mask marks it as real, so a pure padding fix would leave it in. Whether the

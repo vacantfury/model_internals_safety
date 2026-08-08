@@ -10,7 +10,9 @@ contaminants, both in the numerator AND the denominator:
   START of every short row, adjacent to BOS.
 * **BOS.** Llama-3.1 carries a massive-activation spike there, orders of
   magnitude above a normal residual. The checkpoint declares
-  `dataset_average_activation_norm: 13.8125`; the failed run implies ~5,700.
+  `dataset_average_activation_norm: 13.8125` at layer 17 — it is PER LAYER
+  (17.125, 21.5 at 19 and 21) — and the failed run implies ~5,700, which is
+  orders of magnitude above all three.
 
 Why no existing test caught it: **every one uses a single prompt or equal-length
 prompts**, where padding is invisible. That is the fixture blind spot CLAUDE.md

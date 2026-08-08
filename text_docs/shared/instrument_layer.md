@@ -600,7 +600,8 @@ observed norm beside the declared one:
 
 **~1.5x, not the ~5x a scale bug would need.** Two further points argue this is
 corpus difference rather than a defect: the declared norm is **per layer** (not
-the single 13.8125 quoted elsewhere in this repo), and the ratio *falls*
+the single 13.8125 that two docstrings in this repo quoted unqualified, now
+fixed), and the ratio *falls*
 monotonically with depth while both norms rise — the shape of a systematic
 distribution offset between their training corpus and our chat-templated prompts,
 not of an arithmetic error.
