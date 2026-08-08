@@ -369,11 +369,21 @@ def run_family(
 def describe_plan(config: GuardConfig, families: Sequence[str], n: int, device: str) -> str:
     """The approval-gate estimate, printed before anything loads.
 
-    Forward passes only: 2 capture passes per rung plus one verdict pass, over n
-    prompts, with NO generation and NO judge call anywhere. That is why the money
-    line is exactly zero rather than a small number.
+    Forward passes only: 2 capture passes per rung plus TWO verdict passes —
+    harmful and benign — over n prompts, with NO generation and NO judge call
+    anywhere. That is why the money line is exactly zero rather than a small
+    number.
+
+    ⚠️ **The benign verdict pass is counted here, and that is not a detail.**
+    When the benign arm landed (2026-08-08) this function still read `3 * n`,
+    so the estimate would have under-reported the run by a quarter and the
+    approval gate would have been shown a number for a run that no longer
+    existed. `behavior_control` had to make exactly this correction about itself
+    on 2026-08-07 — a control the cost estimate cannot see is a control nobody
+    approved — and pinning it costs one line. `guard_benign_control.verdict_passes`
+    is the same count stated where the control lives.
     """
-    per_rung = 3 * n
+    per_rung = 4 * n
     total = per_rung * len(families) + 2 * n
     return "\n".join(
         [

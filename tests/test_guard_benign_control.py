@@ -171,3 +171,34 @@ class TestTheEntrypointActuallyReadsBenignVerdicts:
     def test_the_summary_carries_the_benign_arm(self):
         assert '"benign_arm"' in self._source()
         assert "is_format_detector" in self._source()
+
+
+class TestTheEstimateSeesTheControl:
+    """A control the cost estimate cannot see is a control nobody approved.
+
+    `behavior_control` had to correct exactly this about itself on 2026-08-07.
+    When the benign verdict pass landed here the following day, `describe_plan`
+    still read `3 * n` — so the approval gate would have been shown a number for
+    a run that no longer existed, under-reporting it by a quarter.
+    """
+
+    def test_the_dry_run_counts_four_passes_per_rung_not_three(self):
+        from internals_safety.config import load_guard_config
+
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "as6_guard_probe", SCRIPTS / "as6_guard_probe.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        config = load_guard_config("wildguard")
+        plan = module.describe_plan(config, ["zero_width", "homoglyph"], 100, "cpu")
+        # 2 capture + 2 verdict = 4 passes over n, per rung.
+        assert "400 per rung" in plan, plan
+        assert "money          $0.00" in plan
+
+    def test_it_agrees_with_the_control_modules_own_count(self):
+        """Two statements of one number, pinned equal rather than hoped equal."""
+        assert verdict_passes(100) == 100

@@ -307,5 +307,9 @@ def test_dry_run_plan_reports_zero_money_and_zero_judge_calls(sweep, tiny_guard_
     assert "money          $0.00" in plan
     assert "judge calls    0" in plan
     assert "generations    0" in plan
-    # 3 passes per rung (2 captures + 1 verdict) x 100, plus 200 plain captures.
-    assert "forward passes 800" in plan
+    # FOUR passes per rung x 100, plus 200 plain captures: 2 captures, plus a
+    # verdict pass on EACH arm. The benign verdict pass landed 2026-08-08
+    # (`measurements/guard_benign_control.py`) and this assertion is what would
+    # have caught the estimate not following it — a control the cost estimate
+    # cannot see is a control nobody approved.
+    assert "forward passes 1000" in plan
