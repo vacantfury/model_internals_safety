@@ -1,6 +1,13 @@
 # Phase-0 pilot candidate (gated HF repo — needs an accepted licence on the
 # account running it). Second family alongside Qwen so a regime result is not a
 # single tokenizer's artifact. Slate settled at S2.
+# ## Provenance
+# **The Llama 3 Herd of Models** — Grattafiori et al., arXiv 2407.21783 (2024).
+# Evidence tier **(B)**: arXiv technical report, very large independent uptake;
+# dblp records CoRR only, no peer-reviewed venue found (checked 2026-08-08).
+# The report covers pre-training and post-training together; the safety
+# fine-tuning it describes is one arm of this repo's post-training comparison
+# against `tulu3_8b`, which shares this model's base weights.
 name: llama3_1_8b_instruct
 hf_id: meta-llama/Llama-3.1-8B-Instruct
 dtype: auto

@@ -1,6 +1,12 @@
 # Phase-0 pilot candidate. The pilot's final 2-model slate is an S2 decision
 # (TODO item 1) — this file exists so the harness has a real config to run
 # against, not because the choice is settled.
+# ## Provenance
+# **Qwen2.5 Technical Report** — Qwen Team, arXiv 2412.15115 (2024).
+# Evidence tier **(B)**: arXiv technical report, large independent uptake; dblp
+# records CoRR only, no peer-reviewed venue found (checked 2026-08-08).
+# Qwen-Scope (arXiv 2605.11887) is the matching SAE suite for this family, and
+# is the reason a Qwen arm is reachable for I4 at all.
 name: qwen2_5_7b_instruct
 hf_id: Qwen/Qwen2.5-7B-Instruct
 dtype: auto

@@ -25,6 +25,18 @@
 # Lineage matters too: Llama is Meta RLHF, Qwen is Alibaba, Mistral is a third
 # independent post-training pipeline. "A property of safety training" is not a
 # claim two labs can support.
+# ## Provenance
+# **Mistral 7B** — Jiang et al., arXiv 2310.06825 (2023). Evidence tier **(B)**:
+# arXiv technical report, very large independent uptake; dblp records CoRR only,
+# no peer-reviewed venue found (checked 2026-08-08).
+#
+# ⚠️ **VERSION TRAP — the paper describes v0.1 and we run v0.3.** v0.2/v0.3 were
+# released as weights with release notes, NOT as papers: v0.3 extends the
+# vocabulary to 32768 and drops the sliding-window attention the paper presents
+# as a headline contribution. So the paper is the right citation for the MODEL
+# FAMILY and is NOT a description of this checkpoint. Any claim about this
+# model's architecture must be checked against its own config.json, never read
+# off the paper.
 name: mistral_7b_instruct
 hf_id: mistralai/Mistral-7B-Instruct-v0.3
 dtype: auto

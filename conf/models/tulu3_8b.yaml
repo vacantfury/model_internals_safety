@@ -41,6 +41,19 @@
 #    offset filter kept only tokens lying wholly inside the message — so the
 #    readout landed one token early, silently. Llama/Qwen/Mistral force a clean
 #    break and were never affected. Pinned by `tests/test_real_instruction_final.py`.
+# ## Provenance
+# **Tulu 3: Pushing Frontiers in Open Language Model Post-Training** — Lambert
+# et al., arXiv 2411.15124 (2024; v5 Apr 2025). Evidence tier **(B)**: arXiv
+# report with substantial independent uptake and a fully released recipe; no
+# peer-reviewed venue found (checked 2026-08-08 — a COLM listing was searched
+# for specifically and NOT found, so do not assert one).
+#
+# This is the one model in the slate whose paper is load-bearing for the SCIENCE
+# rather than just for attribution: the post-training recipe (SFT -> DPO ->
+# RLVR) is published with its data, so a behavioural difference against
+# `llama3_1_8b_instruct` on identical base weights can be traced to a named
+# stage. RLVR is the paper's own novel contribution and is the stage with no
+# counterpart in Meta's pipeline.
 name: tulu3_8b
 hf_id: allenai/Llama-3.1-Tulu-3-8B
 dtype: auto

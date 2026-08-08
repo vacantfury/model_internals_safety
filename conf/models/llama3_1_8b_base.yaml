@@ -7,6 +7,13 @@
 # reconstruct the model it was trained on" — which is simultaneously the check
 # on `models/sae_loader.py`, since a dictionary cannot fail to transfer to its
 # own training distribution.
+# ## Provenance
+# **The Llama 3 Herd of Models** — Grattafiori et al., arXiv 2407.21783 (2024).
+# Evidence tier **(B)**: arXiv technical report with very large independent
+# uptake; dblp records it as CoRR only and no peer-reviewed venue was found
+# (checked 2026-08-08). Cite the arXiv version; do not imply a venue it has not
+# got. This config is the BASE checkpoint — the model Llama Scope's SAEs were
+# fitted on, which is why it is the I4 ceiling arm.
 name: llama3_1_8b_base
 hf_id: meta-llama/Llama-3.1-8B
 dtype: auto
