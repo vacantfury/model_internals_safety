@@ -543,13 +543,30 @@ It is thrown away. `cells.jsonl` carries `attack_response` and `restate_response
 `phase0_regime_map.py:823`, consumed at 1085–1090 for four aggregate rates, and
 never persisted per cell. The generations were paid for, judged, and dropped.
 
-**Fix: persist the benign arm per cell.** No GPU, no new judge calls at run
-time, no re-run — the data is in memory when it is discarded. Then the graded
-regrade gets a real floor and the ASR/(B) numbers become reportable.
-⚠️ **Deliberately NOT landed 2026-08-08**: it changes the run spine and two of
-the three ladder jobs had already started, so landing it would split the ladder
-across two code versions — the same error as mixing BOS. It goes in after the
-ladder completes. Filed.
+**Fix: persist the benign arm per cell. ✅ LANDED 2026-08-08 (`188644d`), 1447
+tests green.** No GPU, no new judge calls at run time, no re-run — the data was
+in memory when it was discarded. `run_family` returns `benign_cells` and the
+spine writes `benign_cells.jsonl`.
+
+**It is a SEPARATE file, and that is the load-bearing decision.**
+`_demote_to_unmeasured` rewrites every row of `cells.jsonl` through
+`assign_regime(..., prompt_is_harmful=True)`, so a benign row sharing that file
+would be relabelled with a harmful-prompt regime on any run where a rung is
+demoted. An `arm` column in the shared file would also silently double the
+denominator under every existing consumer (`rescore_ability`,
+`rebaseline_pilot`, `regrade_compliance`), which is corruption that reads as a
+larger sample. Both hazards are pinned by mutation-verified tests: routing the
+benign rows into `handle` instead of `benign_handle` fails three of them.
+
+⚠️ **What this does NOT do: it is not retroactive.** Every run before `188644d`
+— the pilot, `band2-20260805`, the benign-arm and naturalness runs — has no
+`benign_cells.jsonl`, so the graded regrade's control mass stays at 2/5/5 for
+existing data. The numbers become reportable for runs from here on, or after a
+re-run of a rung we care about. The ladder jobs in flight when this landed
+(`9011348`/`9011349`) are on older code and produce none.
+
+The key is optional rather than defaulted, because AS-6's guard probe has no
+benign generation arm at all — a guard emits a verdict, never a response.
 
 **The pattern, which is now three for three this week.** `guard_working_tree`
 read the git state at exactly the right moment and threw it away; AS-6 read the
