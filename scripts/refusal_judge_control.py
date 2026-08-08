@@ -42,11 +42,18 @@ from internals_safety.measurements.refusal_control import judge_calls, summarize
 
 
 def eligible_cells(cells_path: Path, family: str | None = None) -> dict[str, list[dict]]:
-    """Cells whose RECORDED verdict was not-refused, grouped by rung.
+    """Every cell carrying a ciphertext and a response, grouped by rung.
 
-    Only these can demonstrate an echo-induced flip; an item the judge already
-    called a refusal has nowhere to move. Cells with no ciphertext are skipped —
-    the manipulation is undefined without one.
+    ⚠️ **Deliberately NOT filtered on the recorded verdict.** The first version
+    kept only cells whose anchor read "not refused" and that collapsed the
+    control to 18 items across 4 rungs — 6 on the decisive one — because the
+    judge calls almost everything refused, which is the very defect under
+    investigation. A control conditioned on the absence of the behaviour it
+    measures is self-defeating.
+
+    The parrot arm needs no filter: its ground truth is by construction, since a
+    bare ciphertext contains no refusal whatever the model did. The appended arm
+    applies its own filter downstream, in `summarize_control`.
     """
     by_family: dict[str, list[dict]] = defaultdict(list)
     for line in cells_path.read_text(encoding="utf-8").splitlines():
@@ -55,7 +62,7 @@ def eligible_cells(cells_path: Path, family: str | None = None) -> dict[str, lis
         cell = json.loads(line)
         if family is not None and cell["family"] != family:
             continue
-        if cell.get("refused") or not cell.get("ciphertext"):
+        if not cell.get("ciphertext"):
             continue
         if not (cell.get("attack_response") or "").strip():
             continue
@@ -92,9 +99,10 @@ def main(argv: list[str] | None = None) -> int:
     }
     total = sum(len(cells) for cells in selected.values())
 
-    print(f"eligible items (anchor did NOT refuse): {total} across {len(selected)} rungs")
+    print(f"items (every cell with a ciphertext): {total} across {len(selected)} rungs")
     for family, cells in selected.items():
-        print(f"  {family:20s} {len(cells):4d}")
+        movable = sum(1 for cell in cells if not cell.get("refused"))
+        print(f"  {family:20s} {len(cells):4d}   (arm B movable: {movable})")
     print(f"judge calls           {judge_calls(total)} (3 conditions x 1 judge)")
     print("GPU                   none — no generation, no model load")
 
@@ -118,11 +126,15 @@ def main(argv: list[str] | None = None) -> int:
 
         # The control's own control: the judge must reproduce its recorded
         # verdict on UNMODIFIED text, or every flip measured against it is noise.
-        disagreement = sum(bool(flag) for flag in anchor) / len(anchor) if anchor else 0.0
+        recorded = [bool(cell.get("refused")) for cell in cells]
+        disagreement = (
+            sum(a != r for a, r in zip(anchor, recorded)) / len(anchor) if anchor else 0.0
+        )
 
         control = summarize_control(family, anchor, parrot, appended)
         results[family] = {
-            "n_eligible": control.n,
+            "n": control.n,
+            "n_appended": control.n_appended,
             "anchor_disagreement_rate": disagreement,
             "parrot_flip_rate": control.parrot_flip_rate,
             "appended_flip_rate": control.appended_flip_rate,
@@ -131,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
         }
         print(
             f"\n{family}: n={control.n}  parrot_flip={control.parrot_flip_rate:.2f}  "
-            f"appended_flip={control.appended_flip_rate:.2f}  "
+            f"appended_flip={control.appended_flip_rate:.2f} (n={control.n_appended})  "
             f"anchor_disagreement={disagreement:.2f}  clears={control.clears()}"
         )
 

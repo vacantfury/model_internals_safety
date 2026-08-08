@@ -81,26 +81,49 @@ class TestItAdjudicatesTheTaxonomyChange:
 
 
 class TestSummarize:
-    def test_only_items_whose_ANCHOR_did_not_refuse_can_flip(self):
-        """An item the judge already called a refusal cannot demonstrate an
-        echo-INDUCED flip — including it would dilute the rate with cells that
-        were never eligible to move."""
+    def test_the_two_arms_use_DIFFERENT_denominators(self):
+        """Arm C is unconditioned — its ground truth is by construction, so every
+        item counts. Arm B is conditioned on the anchor, because an induced flip
+        needs somewhere to move. Conflating them collapsed the first version of
+        this control to n=6 on the decisive rung."""
         result = summarize_control(
             "zero_width",
             anchor_refused=[True, True, False, False],
             parrot_refused=[True, True, True, False],
             appended_refused=[True, True, True, True],
         )
-        assert result.n == 2
-        assert result.parrot_flip_rate == 0.5
+        assert result.n == 4                    # arm C: everything
+        assert result.parrot_flip_rate == 0.75  # 3 of 4
+        assert result.n_appended == 2           # arm B: the two movable items
         assert result.appended_flip_rate == 1.0
+
+    def test_arm_C_survives_a_corpus_where_every_anchor_refused(self):
+        """⚠️ The self-defeating filter, pinned. The judge calling everything
+        refused is the DEFECT under investigation, so a control that needs
+        non-refusals to function would go blind exactly when it is needed."""
+        # n=100, not a handful: at n=4 the zero-count bound is 0.75 and the
+        # screen cannot reject anything, which is a real property of the rule of
+        # three and not a thing to assert around.
+        result = summarize_control(
+            "zero_width",
+            anchor_refused=[True] * 100,
+            parrot_refused=[True] * 74 + [False] * 26,
+            appended_refused=[True] * 100,
+        )
+        assert result.n == 100
+        assert result.parrot_flip_rate == 0.74
+        assert result.clears() is False
+        assert result.echo_route_dominates is True
+        # Arm B alone is unmeasurable, and says so rather than reading 0.0.
+        assert result.n_appended == 0
+        assert math.isnan(result.appended_flip_rate)
 
     def test_pairing_is_positional_and_mismatched_lengths_raise(self):
         with pytest.raises(ValueError):
             summarize_control("x", [True], [True, False], [True])
 
-    def test_every_anchor_refusing_yields_an_unmeasurable_control(self):
-        result = summarize_control("x", [True, True], [True, True], [True, True])
+    def test_an_empty_corpus_is_unmeasurable_not_clean(self):
+        result = summarize_control("x", [], [], [])
         assert result.n == 0
         assert math.isnan(result.parrot_flip_rate)
         assert result.clears() is None
