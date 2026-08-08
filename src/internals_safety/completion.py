@@ -134,6 +134,15 @@ CONTROLS: tuple[Item, ...] = (
     # axis not at all — while refusal is what (B) is split from (S) on, so the
     # paper's contribution rested on the unscreened one.
     Item("refusal-judge", "paired echo-flip control (62b)", ("measurements.refusal_control",)),
+    # Added 2026-08-08. The battery screened the TARGET's judges and left the
+    # GUARD's own verdict unscreened — while `blocked` is what AS-6's central
+    # cell is split on, so the guard paper's contribution rested on the
+    # unscreened axis. Same sentence as the line above, one object of study over.
+    Item(
+        "guard-benign",
+        "benign-arm guard control (AS-6)",
+        ("measurements.guard_benign_control",),
+    ),
     Item("random-direction", "matched-norm null", ("measurements.causal_license",)),
     Item("pairing", "derangement primitives", ("pairing",)),
 )

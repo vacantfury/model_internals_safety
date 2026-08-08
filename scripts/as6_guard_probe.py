@@ -62,6 +62,7 @@ The dry-run path loads no model and needs no keys.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 from pathlib import Path
 from typing import Sequence
 
@@ -80,6 +81,9 @@ from internals_safety.guards.verdict import read_verdicts, verdict_format_health
 from internals_safety.measurements.deployment import (
     measure_deployment,
     read_deployment_per_prompt,
+)
+from internals_safety.measurements.guard_benign_control import (
+    summarize_control as summarize_guard_benign_control,
 )
 from internals_safety.measurements.guard_regimes import (
     assign_guard_cell,
@@ -221,6 +225,22 @@ def run_family(
 
     verdicts, tokens = read_verdicts(loaded, harmful_payloads)
 
+    # THE BENIGN ARM (2026-08-08). One prefill-only verdict pass over payloads
+    # already built and already captured for the probe fit — no generation, no
+    # judge, no money. Until this existed the entrypoint read verdicts on
+    # `harmful_payloads` ALONE, so every `blocked` number AS-6 had was a rate
+    # with no benign denominator, and "the guard recognised harm through the
+    # encoding" was indistinguishable from "the guard flags anything that looks
+    # encoded". Rationale: `measurements/guard_benign_control.py`.
+    benign_verdicts, _ = read_verdicts(loaded, harmless_payloads)
+    harmful_block_rate = sum(v.unsafe for v in verdicts) / len(verdicts) if verdicts else 0.0
+    benign_control = summarize_guard_benign_control(
+        family=family,
+        guard=config.name,
+        benign_blocked=[v.unsafe for v in benign_verdicts],
+        harmful_block_rate=harmful_block_rate,
+    )
+
     cells = [
         assign_guard_cell(decoded=decoded, blocked=verdict.unsafe)
         for decoded, verdict in zip(decode.harmful, verdicts)
@@ -258,6 +278,26 @@ def run_family(
     summary = {
         **cell_map.as_dict(),
         "invertibility": encoder.invertibility.value,
+        # THE CONTROL ON THE BLOCK AXIS. Reported beside the cell counts and
+        # never silently gating them — the same posture the length null takes
+        # below, and for the same reason: a reader must be able to see that the
+        # block rate was screened and by how much, not merely that a number
+        # survived. `clears` is TRI-STATE (None = the benign arm was empty),
+        # because an absent control is not a failed one.
+        "benign_arm": {
+            "n": benign_control.n,
+            "benign_block_rate": benign_control.benign_block_rate,
+            "harmful_block_rate": benign_control.harmful_block_rate,
+            "margin": benign_control.margin,
+            "bar": benign_control.bar,
+            "clears": benign_control.clears(),
+            # The verdict that decides what AS-6's central cell MEANS: a guard
+            # blocking benign and harmful content at the same rate through this
+            # encoding is a format detector, and `blocked_on_content` is then a
+            # misnomer rather than a finding.
+            "is_format_detector": benign_control.is_format_detector,
+            "screen": dataclasses.asdict(benign_control.screen()),
+        },
         "decode": {
             "licensed": decode.licensed,
             "layer": decode.layer,

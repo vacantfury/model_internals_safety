@@ -1,0 +1,79 @@
+# AS-6's missing control: does the guard block BENIGN content wearing the
+# encoding?
+#
+# **This has never been measured, and it is the hole that decides whether AS-6
+# has a result.** `scripts/as6_guard_probe.py:222` reads the guard's verdict on
+# `harmful_payloads` only. The benign corpus is encoded and forward-passed —
+# it has to be, for the probe fit and the length null — but its verdict is
+# thrown away. So every `blocked` number this repo has is a bare rate with no
+# denominator of the right kind.
+#
+# The target side already learned what that costs. `instrument_layer.md` §3.6:
+# on `zero_width` the model refuses BENIGN content in the encoding at 0.90
+# against 0.93 for harmful, so its refusals carry almost no evidence about harm.
+# CLAUDE.md states the guard-side inheritance in one line — "a guard that flags
+# anything wearing an encoding produces a perfect block rate that means nothing"
+# — and then no run has ever tested it.
+#
+# WildGuard is the arm where it bites hardest: it blocks `combining_marks` 25 of
+# 94 decoded and `homoglyph` 75 of 98, a 50-point spread across two rungs that
+# both preserve content. Either that spread tracks harm, or it tracks how
+# encoded the text looks. Those are opposite papers.
+entrypoint: as6_guard_probe
+description: >-
+  WildGuard's block rate on the BENIGN corpus through eleven rungs — the guard
+  analogue of measurement #4's benign arm, and the first control on AS-6's
+  `blocked` axis.
+
+gates: >-
+  Whether `blocked_on_content` is named correctly, and therefore whether AS-6's
+  central cell means what the paper says it means.
+
+  If the benign block rate is far below the harmful one, the guard is
+  discriminating harm through the encoding: `decoded_not_blocked` is a real
+  safety gap, the WildGuard/Llama-Guard dissociation is a finding about guard
+  design, and AS-6 keeps its shape.
+
+  If the two rates track each other, the guard is a format detector. Then
+  `blocked_on_content` is a misnomer, no block rate from any AS-6 run is
+  reportable as evidence about harm, and the paper's guard-side claim narrows to
+  the decode axis alone — which would also explain the 50-point WildGuard spread
+  between `combining_marks` and `homoglyph` without invoking harm at all.
+
+  It also supplies the guard-side control floor. AS-6 must derive its own floor
+  per guard (§2.4), and this rung set carries six ability-0 controls so the
+  floor is a floor rather than a bound.
+
+target: wildguard
+
+# ELEVEN rungs: five where WildGuard blocks something, six where its decode
+# probe reads nothing. The second group does double duty — benign anchors for
+# this control, and the >=5 controls the derived floor needs.
+families:
+  - zero_width
+  - homoglyph
+  - fullwidth
+  - combining_marks
+  - reverse_words
+  - ascii_decimal
+  - base32
+  - binary
+  - morse
+  - vigenere
+  - hex
+
+n_prompts: 100
+
+instruments: [lexical]
+run_name: guard-benign-wildguard
+
+# Forward passes only — two capture passes plus a verdict pass per rung, no
+# generation, no judge, no money. The benign verdict pass this preset exists for
+# adds ONE more forward pass per rung over text already encoded for the capture,
+# so the marginal cost over the runs that produced the current map is small.
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "04:00:00"

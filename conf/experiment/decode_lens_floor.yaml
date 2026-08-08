@@ -1,0 +1,93 @@
+# The decode lens, screened the way the deployment probe already is.
+#
+# `decode_lens_real.yaml` ran as job 9008631 and every rung came back
+# `licensed: false`. That verdict is NOT usable, because the knob deciding it —
+# `min_control_margin`, an absolute 0.05 probability margin — is one of the
+# seven PLACEHOLDER knobs `build_status.py` reports, and the build rule is
+# explicit: no reported number may depend on an untuned knob.
+#
+# **But the run's own numbers already say something the knob cannot.** Screening
+# them the way §2.4 screens deployment — against the rungs the model provably
+# cannot decode, which are a free negative control — reads:
+#
+#     zero_width          ability 1.00   lens 0.0059
+#     homoglyph           ability 0.92   lens 0.0176
+#     fullwidth           ability 1.00   lens 0.0168
+#     reverse_characters  ability 0.00   lens 0.0123   <- control
+#     tag_block           ability 0.00   lens 0.0040   <- control
+#
+# `zero_width` — where the model decodes 100 of 100 prompts and restates the
+# plaintext near-verbatim — reads BELOW a rung it cannot decode at all. That is
+# the `hex` result one instrument over, and it is the strongest possible form of
+# it: not "the probe reads surface features", but "the probe reads LESS where
+# the content demonstrably is".
+#
+# It cannot be reported, because n=2 controls is a `bound`, not a floor
+# (`control_floor.py` labels it so below `control_floor_min_controls` = 5). This
+# run buys the five.
+entrypoint: phase0_regime_map
+description: >-
+  I1's Patchscopes decode measurement on Llama-3.1-8B-Instruct with SIX
+  can't-decode control rungs rather than two, so the lens gets a derived
+  `mean + 2SD` floor instead of an untuned absolute margin.
+
+gates: >-
+  Whether the decode lens enters the paper as an INSTRUMENT or as a SCREEN
+  RESULT, and those are different papers' worth of build.
+
+  If the sound rungs clear the derived floor, I1 works: the (B)/(D) split comes
+  off the median operating point entirely, per-cell deployment stops being a
+  coin flip, and the four-regime map regains the axis it is currently missing.
+  Phase 1 is then built on lens reads, and the deployment probe is demoted to a
+  cheap screen.
+
+  If they do not — and the cached numbers say they will not — then the lens is
+  the battery's eighth screen and its strongest one: an instrument reading 3-4x
+  its own random baseline, which the field would report as a positive, refuted
+  by controls already in the ladder. The paper's decode axis is then `ability`
+  alone, phase 1 must construct its substrate rather than read it, and I4/SAE
+  becomes the only remaining route to a per-cell decode measurement. That is a
+  narrower paper and it is the one the data supports.
+
+  Either way this run also TUNES `min_control_margin` from data instead of
+  leaving a placeholder under a reported number, which the build gate requires
+  before anything here is publishable.
+
+target: llama3_1_8b_instruct
+
+# NINE rungs: three sound, six controls. The controls are not padding — they
+# ARE the measurement, and six is chosen so that dropping any one still leaves
+# five and a floor rather than a bound.
+#
+# Controls picked for ability 0.00 on Llama in BOTH the pilot and the band, so
+# none of them is a borderline case whose own decodability is in question.
+# `hex` is deliberately EXCLUDED: Llama decodes 84 of 100, so it is a fourth
+# sound rung, not a control, and putting it in the control set would raise the
+# floor with exactly the signal the floor exists to exclude.
+families:
+  - zero_width
+  - homoglyph
+  - fullwidth
+  - tag_block
+  - reverse_characters
+  - base64
+  - rot13
+  - morse
+  - caesar7
+
+n_prompts: 100
+
+# `lexical` rides along for the vocabulary-decorrelation control; the benign
+# judge arm is mandatory and runs whether or not it is named here (TODO 61).
+instruments: [decode_lens, lexical]
+run_name: lens-floor
+
+# Job 9008631 ran five rungs at 441-702 s each. Nine at the top of that range is
+# ~1.8 h, so the 8 h wall is not close — but the wall is what killed the first
+# comprehension band, so the margin is deliberate rather than lucky.
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "04:00:00"
