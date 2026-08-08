@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
               "approval gate before running for real.")
         return 0
 
-    judge = RefusalJudge.from_config(load_judge_config())
+    judge = RefusalJudge(load_judge_config())
     results = {}
     for family, cells in selected.items():
         triples = [conditions(cell) for cell in cells]

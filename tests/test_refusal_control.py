@@ -11,7 +11,9 @@ from a keyword probe.
 
 from __future__ import annotations
 
+import json
 import math
+from pathlib import Path
 
 import pytest
 
@@ -137,3 +139,83 @@ class TestSummarize:
         # Arm B only where it can move: 18 movable of 500 on the real run, so
         # the naive 3*n would spend 482 calls no rate would ever read.
         assert judge_calls(500, 18) == 1018
+
+
+class TestTheEntrypointRunsItsRealPath:
+    """⚠️ Written after the script died on `RefusalJudge.from_config`, a method
+    that does not exist — with 1122 tests green and its own `--dry-run` clean.
+
+    `--dry-run` returns before the judge is ever constructed, so it exercised
+    selection and a cost printout and no line of the path that spends money.
+    That is the job-8995805 lesson (`CLAUDE.md`) repeated by the session that
+    wrote the lesson down. The static call-site binder could not catch it
+    either: it matches on the attribute name, and `from_config` was simply not
+    a watched name.
+
+    So the guard is an end-to-end call of `main()` with the REAL judge class
+    constructed exactly as the script constructs it, stubbing only the network
+    service underneath. Anything wrong with the construction expression fails
+    here in milliseconds instead of after a credential dance on the cluster.
+    """
+
+    @pytest.fixture
+    def run_dir(self, tmp_path):
+        cells = [
+            {
+                "prompt_id": f"p{i}",
+                "family": "zero_width",
+                "plaintext": f"harmful request {i}",
+                "ciphertext": f"c\u200bi\u200bp\u200bh\u200be\u200br {i}",
+                "attack_response": f"some response {i}",
+                "refused": i % 2 == 0,
+            }
+            for i in range(4)
+        ]
+        (tmp_path / "cells.jsonl").write_text(
+            "\n".join(json.dumps(c) for c in cells) + "\n", encoding="utf-8"
+        )
+        return tmp_path
+
+    def _script(self):
+        import importlib.util
+        import sys
+
+        path = Path(__file__).resolve().parents[1] / "scripts" / "refusal_judge_control.py"
+        spec = importlib.util.spec_from_file_location("refusal_judge_control", path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["refusal_judge_control"] = module
+        spec.loader.exec_module(module)
+        return module
+
+    def test_main_completes_and_writes_its_record(self, run_dir, monkeypatch):
+        from internals_safety.config import JudgeConfig
+        from internals_safety.judges.refusal import RefusalJudge
+
+        from judge_stubs import StubService, yes_verdict
+
+        script = self._script()
+        # The REAL class, constructed the way the script constructs it. Only the
+        # service underneath is stubbed — swapping the class would hide exactly
+        # the defect this test exists to catch.
+        monkeypatch.setattr(script, "load_judge_config", lambda: JudgeConfig())
+        monkeypatch.setattr(
+            script,
+            "RefusalJudge",
+            lambda config: RefusalJudge(config, service=StubService(default=yes_verdict())),
+        )
+        assert script.main([str(run_dir)]) == 0
+
+        written = json.loads((run_dir / "refusal_judge_control.json").read_text())
+        assert "zero_width" in written
+        result = written["zero_width"]
+        assert result["n"] == 4
+        # Stub says refused to everything, so a bare ciphertext reads refused:
+        # the exact failure mode, end to end through the real wiring.
+        assert result["parrot_flip_rate"] == 1.0
+        assert result["clears"] is False
+        assert result["echo_route_dominates"] is True
+
+    def test_the_dry_run_stops_before_spending(self, run_dir):
+        script = self._script()
+        assert script.main([str(run_dir), "--dry-run"]) == 0
+        assert not (run_dir / "refusal_judge_control.json").exists()
