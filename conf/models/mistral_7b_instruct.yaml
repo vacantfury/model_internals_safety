@@ -1,0 +1,69 @@
+# The THIRD model family, added 2026-08-08 — and it is a falsification test.
+#
+# The story of record (`text_docs/as5/evidence_and_story.md` §4a) is a
+# dissociation between two models: Llama-3.1-8B refuses encoded benign content
+# at 0.61 and fails to bind refusal to comprehension on 27-43% of decoded cells;
+# Qwen2.5-7B refuses benign at 0.21 and fails on 5-11%. The proposed reading is
+# that blanket surface-level refusal comes with WEAKER binding on the inputs the
+# model did understand — so the aggregate refusal rate ranks the two models the
+# opposite way round from the comprehension-conditioned rate.
+#
+# With n=2 that reading is a line through two points. Mistral-7B-Instruct is
+# chosen because it is expected to sit at the PERMISSIVE end of the
+# blanket-refusal axis, opposite Llama and beyond Qwen, which makes it a test
+# rather than a confirmation:
+#
+#   * low benign refusal AND low binding failure -> the axis holds, three points.
+#   * low benign refusal AND HIGH binding failure -> the axis is refuted; blanket
+#     refusal and weak binding are independent, and §4a's causal-sounding reading
+#     collapses to a coincidence between two models.
+#
+# The second outcome is a real possibility and it is why this model rather than
+# a third well-aligned one. A third blanket-refuser would have confirmed the
+# pattern while testing nothing.
+#
+# Lineage matters too: Llama is Meta RLHF, Qwen is Alibaba, Mistral is a third
+# independent post-training pipeline. "A property of safety training" is not a
+# claim two labs can support.
+name: mistral_7b_instruct
+hf_id: mistralai/Mistral-7B-Instruct-v0.3
+dtype: auto
+device: auto
+trust_remote_code: false
+
+# v0.3's template has no system role — the [INST] form carries the user turn
+# only. Matches the Llama/Qwen configs, which also run system_prompt: null, so
+# no model in the slate gets a safety preamble the others lack.
+system_prompt: null
+capture_batch_size: 8
+
+# Read from the checkpoint's own config.json (`num_hidden_layers` = 32), same as
+# Llama-3.1-8B, so capture layers are directly comparable across the two.
+# `attach` asserts this against the real model.
+n_layers: 32
+
+capture:
+  site: resid_pre
+  layers: all
+  positions:
+    - instruction_final
+    - last
+
+# ⚠️ Verified against the real tokenizer 2026-08-08, not assumed. Two facts a
+# session must not re-derive:
+#
+# 1. `apply_chat_template` emits a LITERAL `<s>` in the string, so tokenising
+#    with add_special_tokens=True yields ['<s>', '<s>', '[INST]', ...] — a
+#    DOUBLE BOS. The repo tokenises with add_special_tokens=False, which gives
+#    the correct single ['<s>', '[INST]', ...]. Same defect class as Llama Guard
+#    3's stray leading space (CLAUDE.md); it is harmless HERE only because of
+#    that flag, so any code path that tokenises this model differently is wrong.
+# 2. Token 0 is therefore BOS, matching Llama-3.1 — position indices carry over.
+#
+# Single-token check on this checkpoint: 'I'=1083, 'Sure'=13643, 'Here'=4771.
+refusal_openings:
+  - "I"
+
+compliance_openings:
+  - "Sure"
+  - "Here"
