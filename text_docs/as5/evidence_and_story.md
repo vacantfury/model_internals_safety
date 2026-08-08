@@ -1,5 +1,12 @@
 # AS-5 — the evidence in hand, and what it will actually support
 
+> **Story and title of record: §4e** (settled by owner go, 2026-08-08).
+> Title: *"Refusal without discrimination: what encoded prompts do to
+> safety-trained models."* Sections §4a–§4d are the derivation that produced it
+> and are kept for their evidence, not as live proposals; §5 is superseded.
+> `proposal.md`'s 2026-08-02 scope and the old title "Can't, didn't, or
+> wouldn't?" are both retired.
+
 *Written 2026-08-07, after the benign judge arm (§3.6) and the echo crosstab
 (§3.7) landed within hours of each other and between them changed which rungs
 AS-5 has left. This is the paper-level synthesis: what is on disk, what may be
@@ -393,6 +400,76 @@ map is unaffected by the paragraph above.
 - **AS-6 inherits the sharpest version of this.** A guard whose block rate rises
   on benign encoded content has the same defect with none of the visibility: a
   perfect block rate and no benign arm reads as a perfect guard.
+
+## 4e. ✅ THE STORY AND TITLE ARE SETTLED (owner go, 2026-08-08) — and §4d gained its mechanism
+
+**This section is the story of record. §4a–§4d are kept as the derivation, not as
+live proposals.** The change §4e makes over §4d is not the phenomenon — §4d had
+that right — but the addition of a *mechanism* and the retirement of the title.
+
+### The title, and why the old one had to go
+
+**"Can't, didn't, or wouldn't?" is RETIRED.** It titles the four-regime
+decomposition, and §2 already recorded that the frame no longer carries the
+paper: the ladder collapsed to essentially one substantive rung, (C) is empty,
+(B)/(D) rests on an operating point and may not be given as a point estimate, and
+recognition is unreportable. A title promising a three-way diagnosis the evidence
+cannot deliver is the kind reviewers check first.
+
+**Title of record: "Refusal without discrimination: what encoded prompts do to
+safety-trained models."** It names the finding, covers both the collapse and the
+false-positive axis, and — the reason it beats a punchier "encoding breaks
+safety" — it survives the Mistral inversion in §4d, where encoding *raises*
+refusal. A title asserting a direction would be refuted by our own slate.
+
+### The three legs, in order
+
+1. **The phenomenon (§4d).** Encoding does not defeat refusal; it defeats
+   discrimination. Benign refusal rises 2–10× over plaintext on four models, and
+   on Llama-3.1-8B the harm gap goes **+0.82 → 0.00** — benign and harmful
+   `homoglyph` prompts refused at an identical 0.99. No probe required.
+2. **The mechanism — NEW, and it is what §4e adds.** §4d could only say the
+   effect "varies ~5× across post-training pipelines", which is a correlation
+   across four unrelated models with everything else varying too. The Tülu
+   ladder (`instrument_layer.md` §3.6.2, jobs `9011347`/`9011348`/`9011349`)
+   makes it a controlled series on **identical base weights** along a
+   **published** recipe: benign refusal falls monotonically at every stage and
+   every rung (`fullwidth` 0.80→0.45→0.30, `homoglyph` 0.79→0.63→0.48,
+   `zero_width` 0.91→0.43→0.37) while harmful refusal stays roughly flat. The
+   harm gap therefore grows **from the bottom, not the top** — post-training buys
+   back benign utility under encoding rather than adding refusal. That is the
+   difference between observing a spread and locating it.
+3. **The instrument.** None of the above is measurable without controls the field
+   does not run — the benign arm, the echo screen, the length null, the control
+   floor. Every defect found on the behaviour axis inflated apparent safety,
+   which is structural rather than coincidental: "no attack succeeded" is what a
+   broken safety evaluation returns by default.
+
+**Demotion recorded:** `CLAUDE.md` has recommended leading with the measurement
+contribution (leg 3) since 2026-08-07. That was correct when the ladder had
+collapsed and nothing positive had replaced it. It is now the third leg — still
+in the paper, no longer the lead.
+
+### ⚠️ The one gap this story has, and it is the next run
+
+**The ladder has no plaintext arm.** Jobs `9011347`–`9011349` ran before
+`run_plain_behavior_baseline` landed (peer commit `5a8d2a9`), so leg 2's series
+is in *encoded* benign refusal while leg 1's headline quantity is *gap lost
+relative to plaintext*. The two legs are currently in different currencies, and
+the mechanism claim is weaker for it — "benign refusal falls across stages" is
+not yet "the discrimination the encoding destroys is restored across stages".
+
+Re-running the three stages on current code closes it: the plain baseline is
+model-level and MANDATORY, so no preset change is needed, and the re-run also
+picks up per-cell benign persistence (`188644d`) that the graded regrade needs.
+
+### What AS-6 contributes to this story
+
+The same phenomenon in the defence, where end-to-end ASR structurally cannot see
+it. And the guards land on the same axis: `phase1_map.md` §0.5 measures Llama
+Guard's benign block rate at 0.29–0.53 against WildGuard's 0.05–0.29, so the
+guard-side benign arm is not only a control — it measures a property of the
+guard's own post-training, exactly as leg 2 does for targets.
 
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
