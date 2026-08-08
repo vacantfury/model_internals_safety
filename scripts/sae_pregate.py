@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import replace
 
 import torch
 
@@ -82,7 +83,15 @@ def main(argv: list[str] | None = None) -> int:
         # Three passes: clean, SAE-substituted, ablated. Plus the same again for
         # the matched random-dictionary control — priced, because a control the
         # estimate cannot see is a cost nobody approved.
-        print(f"forward passes   {6 * len(prompts)} (clean/SAE/ablated x real + control)")
+        #
+        # DOUBLED since 2026-08-07: the run measures both selection rules
+        # (jumprelu and topk) on the same weights, which is a second full
+        # `measure_reconstruction`. Same rule as the control — work the estimate
+        # cannot see is work nobody approved, and this is the larger half.
+        print(f"forward passes   {12 * len(prompts)} "
+              f"(clean/SAE/ablated x real + control, x2 selection rules)")
+        print("selection rules  jumprelu (derived) AND topk (nominal_top_k) — "
+              "the comparison IS the gate")
         print("judge calls      0 — no spend")
         print("\n⚠️  Run --model llama_3_1_8b_base FIRST. A poor Base result is a")
         print("    loader bug, not a transfer finding, and reading the Instruct arm")
@@ -133,25 +142,49 @@ def main(argv: list[str] | None = None) -> int:
         generator=torch.Generator().manual_seed(measurements.probes.seed),
     )
 
-    quality = measure_reconstruction(
-        loaded, sae, prompts, layer=layer, config=measurements.sae, control=control,
-        batch_size=model_config.capture_batch_size,
-    )
-    verdict = (
+    # BOTH selection rules, on the same weights and the same activations.
+    #
+    # The loader DERIVED `jumprelu` from the artifact and never verified it
+    # against upstream's forward pass; `top_k: 50` sits in the same hyperparams
+    # file, dismissed in a comment as a training-schedule leftover. Job 9009119
+    # made that dismissal the leading suspect: the normalisation is off by only
+    # 1.4-1.7x (corpus offset) while the round trip emits a vector ~90x too
+    # large, and jumprelu selects 549 features where nominal is 50.
+    #
+    # Run as ONE job rather than two, because the question is a comparison and a
+    # within-run comparison holds the weights, the prompts, the activations and
+    # the control fixed. Two jobs would differ by whatever else drifted.
+    qualities = {
+        variant.selection: measure_reconstruction(
+            loaded, variant, prompts, layer=layer, config=measurements.sae,
+            control=control, batch_size=model_config.capture_batch_size,
+        )
+        for variant in (sae, replace(sae, selection="topk"))
+    }
+    verdicts = [
         reading(quality, measurements.sae)
         if quality.n_prompts
-        else unmeasured_reading("no prompts scored")
-    )
+        else unmeasured_reading(f"no prompts scored ({name})")
+        for name, quality in qualities.items()
+    ]
 
-    print(f"\nvariance explained  {quality.variance_explained:.4f}")
-    print(f"control (random)    {quality.control_variance_explained}")
-    print(f"KL recovered        {quality.kl_recovered}")
-    print(f"L0                  {quality.l0:.1f}")
-    print(f"\nLICENSED: {verdict.licensed}")
-    for why in verdict.why_not_reportable():
-        print(f"  - {why}")
-    if verdict.licensed is not True:
-        print("\n⚠️  Feature-level claims are NOT licensed on this model.")
+    for name, quality in qualities.items():
+        print(f"\n--- selection: {name}")
+        print(f"variance explained  {quality.variance_explained:.4f}")
+        print(f"control (random)    {quality.control_variance_explained}")
+        print(f"KL recovered        {quality.kl_recovered}")
+        print(f"L0                  {quality.l0:.1f}  (nominal {sae.nominal_top_k})")
+        print(f"activation norm     {quality.observed_activation_norm:.3f} observed "
+              f"vs {quality.declared_input_norm} declared (ratio {quality.norm_ratio:.3f})")
+
+    for verdict, (name, _) in zip(verdicts, qualities.items()):
+        print(f"\nLICENSED ({name}): {verdict.licensed}")
+        for why in verdict.why_not_reportable():
+            print(f"  - {why}")
+    if not any(verdict.licensed is True for verdict in verdicts):
+        print("\n⚠️  Feature-level claims are NOT licensed on this model under EITHER rule.")
+
+    quality = qualities[sae.selection]
 
     directory = (
         (PROJECT_ROOT / args.outputs_dir if args.outputs_dir else PROJECT_ROOT / "outputs")
@@ -173,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
             "n_prompts": quality.n_prompts,
             "provenance": capture_provenance(str(device)),
         },
-        readings=[verdict],
+        readings=verdicts,
     )
     print(f"\nwrote {directory / 'results.json'}")
     return 0

@@ -71,8 +71,18 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import torch
+
+# Which rule turns pre-activations into features. NOT a tunable: exactly one of
+# these is what the checkpoint was trained with, and the pre-gate's job is to
+# find out which. Tuning path: the Base arm of `scripts/sae_pregate.py`, which
+# runs both on the same weights and the same activations — a dictionary
+# reconstructs the model it was fitted on, so whichever rule does that is the
+# rule it was trained with. Once that run settles it, the loser is deleted
+# rather than left as a knob.
+Selection = Literal["jumprelu", "topk"]
 
 # Llama Scope names a layer's SAE by the block whose `resid_post` it reads.
 # Our capture site is `resid_pre`, and `resid_post` of block N IS `resid_pre` of
@@ -111,6 +121,22 @@ class LlamaScopeSAE:
     # Training-schedule leftover. Carried ONLY so a caller can see that it is not
     # the activation function; never used to select features here.
     nominal_top_k: int
+
+    # Which rule selects features. `jumprelu` is what this loader DERIVED from
+    # the artifact (threshold magnitude, decoder-bias norm) and it has never been
+    # verified against upstream's forward pass — so the alternative reading of the
+    # same checkpoint, that `top_k: 50` is the real rule and the threshold is the
+    # leftover, is expressible here rather than argued in prose.
+    #
+    # It exists because job 9009119 excluded the other candidate: the observed
+    # activation norm sits 1.4-1.7x from the declared one (corpus offset, not a
+    # scale bug), while the round trip emits a vector ~90x too large. A linear
+    # decoder cannot turn 1.7 into 90 — but selecting 549 features where 50 were
+    # intended can, and jumprelu on this checkpoint selects 549.
+    #
+    # `dataclasses.replace(sae, selection="topk")` gives the counterfactual on the
+    # SAME weights, so the comparison holds everything else fixed.
+    selection: Selection = "jumprelu"
 
     @property
     def our_layer(self) -> int:
@@ -158,6 +184,17 @@ class LlamaScopeSAE:
         activations = activations.to(self.encoder_weight.device)
         weight = self.encoder_weight.to(activations.dtype)
         pre = self._normalise(activations) @ weight.T + self.encoder_bias.to(activations.dtype)
+        if self.selection == "topk":
+            # The competing reading of the same checkpoint: `top_k` is the rule
+            # and the threshold is the leftover. Keeps EXACTLY nominal_top_k
+            # features, so L0 is fixed by construction rather than by the data —
+            # which is the whole difference being tested.
+            kept = torch.zeros_like(pre)
+            values, indices = pre.topk(min(self.nominal_top_k, pre.shape[-1]), dim=-1)
+            # Still gated at zero: a TopK autoencoder does not reconstruct from
+            # negative activations, and keeping them would make this variant a
+            # third rule rather than the documented one.
+            return kept.scatter_(-1, indices, values.clamp(min=0.0))
         # JumpReLU: pass values above the threshold through UNCHANGED, zero the
         # rest. Not ReLU (which would keep small positives) and not TopK (which
         # would keep a fixed count) — both change the sparsity the gate measures.

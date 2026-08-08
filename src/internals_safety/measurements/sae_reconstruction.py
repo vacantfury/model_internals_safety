@@ -266,6 +266,9 @@ class ReconstructionQuality:
     # wins, because a mislabelled config is exactly the error that would make
     # this gate compare a dictionary against the wrong baseline.
     trained_on: str | None = None
+    # Which rule selected the features. Two readings from one run differ ONLY in
+    # this, so a record without it cannot say which reading it is.
+    selection: str | None = None
 
     @property
     def norm_ratio(self) -> float | None:
@@ -459,6 +462,7 @@ def measure_reconstruction(
         declared_input_norm=getattr(sae, "input_norm", None),
         evaluated_on=loaded.config.hf_id,
         trained_on=getattr(sae, "trained_on", None),
+        selection=getattr(sae, "selection", None),
     )
 
 
@@ -547,6 +551,9 @@ def reading(quality: ReconstructionQuality, config: SAEConfig) -> Reading:
             "observed_activation_norm": quality.observed_activation_norm,
             "declared_input_norm": quality.declared_input_norm,
             "norm_ratio": quality.norm_ratio,
+            # Which feature-selection rule produced this reading. Two readings
+            # from one run differ only here.
+            "selection": quality.selection,
             # ⚠️ The whole reason this gate exists. Llama Scope is trained on
             # Llama-3.1-8B-Base and our target is Instruct. The checkpoint's own
             # claim wins over the config string when it has one.
