@@ -19,6 +19,9 @@ import pytest
 from internals_safety.measurements.ability_control import (
     zero_count_margin as ability_rule_of_three,
 )
+from internals_safety.measurements.refusal_control import (
+    zero_count_margin as refusal_rule_of_three,
+)
 from internals_safety.measurements.behavior_control import (
     SCREEN_NAME,
     BehaviorControl,
@@ -58,6 +61,10 @@ class TestTheDerivedBar:
         """
         for n in (0, 1, 7, 100, 200, 5358):
             assert zero_count_margin(n) == ability_rule_of_three(n)
+            # THIRD copy since 2026-08-07 (refusal_control). Same trade, same
+            # safety condition — pinned here so one test covers all copies
+            # rather than each new one bringing its own half-check.
+            assert zero_count_margin(n) == refusal_rule_of_three(n)
 
 
 class TestTheJudgeControl:

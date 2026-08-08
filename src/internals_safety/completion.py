@@ -128,6 +128,10 @@ CONTROLS: tuple[Item, ...] = (
     Item("lexical", "XSTest vocabulary decorrelation", ("measurements.lexical_decorrelation",)),
     Item("ability", "mismatched-plaintext derangement", ("measurements.ability_control",)),
     Item("judge", "benign-arm judge control (#4)", ("measurements.behavior_control",)),
+    # Added 2026-08-07. The battery screened the ASR axis twice and the REFUSAL
+    # axis not at all — while refusal is what (B) is split from (S) on, so the
+    # paper's contribution rested on the unscreened one.
+    Item("refusal-judge", "paired echo-flip control (62b)", ("measurements.refusal_control",)),
     Item("random-direction", "matched-norm null", ("measurements.causal_license",)),
     Item("pairing", "derangement primitives", ("pairing",)),
 )

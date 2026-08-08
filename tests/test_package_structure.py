@@ -38,6 +38,7 @@ PURE_MODULES = (
     "lexical_decorrelation",
     "ability_control",
     "behavior_control",
+    "refusal_control",
     "contract",
     "causal_license",
 )
