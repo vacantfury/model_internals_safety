@@ -510,7 +510,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.dry_run:
         return 0
 
-    guard_working_tree(device, allow_dirty=args.allow_dirty)
+    tree = guard_working_tree(device, allow_dirty=args.allow_dirty)
 
     harmful, harmless = load_contrast_sets(corpus.harmful_set, corpus.harmless_set, args.n_prompts)
 
@@ -639,6 +639,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "summaries": summaries,
             "cells_path": str(raw_path),
         },
+        tree=tree,
     )
     path = write_run_record(directory, record, readings)
     print(f"\nwrote {path}")

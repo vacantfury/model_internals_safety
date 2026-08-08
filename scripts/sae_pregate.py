@@ -122,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
     # ENTIRELY rather than downgrade it to a warning, so no diff would have been
     # recorded alongside the results.
     device = resolve_device(model_config.device, allow_cpu_in_job=args.allow_cpu)
-    guard_working_tree(str(device), allow_dirty=args.allow_dirty)
+    tree = guard_working_tree(str(device), allow_dirty=args.allow_dirty)
     print(f"loading {model_config.hf_id} on {device} ...", flush=True)
     loaded = load_model(model_config)
 
@@ -216,7 +216,14 @@ def main(argv: list[str] | None = None) -> int:
             "n_prompts": quality.n_prompts,
             "render_chat": not args.plain_text,
             "ceiling_from": args.ceiling_from,
-            "provenance": capture_provenance(str(device)),
+            # ⚠️ `config` used to receive `str(device)`, so every pre-gate run
+            # record on disk reads `provenance.config: "cuda"`. The resolved
+            # settings were never LOST — they are the sibling keys above — but
+            # the slot meant for them held a device string, and `device` had no
+            # home at all. Found 2026-08-08 while threading `tree`.
+            "provenance": capture_provenance(
+                {"model": model_config.model_dump(), "device": str(device)}, tree=tree
+            ),
         },
         readings=verdicts,
     )

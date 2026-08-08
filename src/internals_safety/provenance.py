@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import json
 import platform
+from dataclasses import dataclass
 import subprocess
 import sys
 from dataclasses import asdict
@@ -66,15 +67,56 @@ def file_digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
 
 
-def guard_working_tree(device: str, allow_dirty: bool = False) -> bool:
-    """Enforce the dirty-tree posture. Returns whether the tree is dirty.
+@dataclass(frozen=True)
+class TreeState:
+    """The git state observed at run START, carried to the write at run END.
+
+    ⚠️ THE DEFECT THIS TYPE EXISTS TO MAKE IMPOSSIBLE, measured 2026-08-08.
+    `capture_provenance` used to re-read git itself, and every entrypoint calls it
+    AFTER the family loop — `phase0_regime_map.py` at line 1559 against
+    `run_families` at 1527. So the recorded hash described the tree at WRITE time,
+    not at run time, and the two differ whenever anything touches the checkout
+    mid-run.
+
+    That is not hypothetical here. Two sessions share this working directory and
+    this repo's runs last hours: jobs `9010200` and `9010201` recorded `4563807`,
+    a commit that **did not exist when either job started** — one of them by 19
+    seconds. Both actually executed the superseded symmetric echo rule, so their
+    own run records pointed at code that would have produced different numbers.
+    Then it happened AGAIN the same day, to `9010897`/`9011034`/`9010530`, when
+    the cluster checkout was pulled from `70650e3` to `b27b2b3` to submit the
+    ladder.
+
+    A run record whose hash is wrong is worse than one with no hash: it invites
+    the re-derivation it cannot support. So the start state becomes a VALUE that
+    has to be threaded, and `capture_provenance` requires it keyword-only with no
+    default — omitting it is a `TypeError`, not a silently-fresh read. Same fix
+    shape as `strata` on `measure_deployment` and `device` on
+    `guard_working_tree`; threading a rule into callers is what failed the three
+    times before those.
+    """
+
+    git_hash: str
+    dirty: bool
+    diff: str
+
+
+def guard_working_tree(device: str, allow_dirty: bool = False) -> TreeState:
+    """Enforce the dirty-tree posture AND capture the state for the run record.
 
     Raises `DirtyWorkingTree` for a result-bearing device unless `allow_dirty`;
     warns to stderr otherwise. Never silently proceeds.
+
+    Returns the observed `TreeState` rather than a bare bool. It already had to
+    read git at exactly the right moment — run start — so the state the run
+    record needs was being computed here and thrown away, then re-read hours
+    later at the wrong moment. Handing it back is what closes that gap; see
+    `TreeState`.
     """
     dirty = is_dirty()
+    state = TreeState(git_hash=git_hash(), dirty=dirty, diff=_git("diff") if dirty else "")
     if not dirty:
-        return False
+        return state
     if device in RESULT_BEARING_DEVICES and not allow_dirty:
         raise DirtyWorkingTree(
             "working tree has uncommitted changes, so the git hash this run would "
@@ -86,24 +128,30 @@ def guard_working_tree(device: str, allow_dirty: bool = False) -> bool:
         "the diff is recorded in results.json alongside the hash.",
         file=sys.stderr,
     )
-    return True
+    return state
 
 
 def capture_provenance(
     config: dict[str, Any],
     seed: int | None = None,
     extra: dict[str, Any] | None = None,
+    *,
+    tree: TreeState,
 ) -> dict[str, Any]:
     """The run record's provenance half, per the skill's schema.
 
     `config` should be the *resolved* config the run actually used — snapshot the
     frozen pydantic objects with `.model_dump()`; re-reading the YAML would
     record the file rather than the run.
+
+    `tree` is KEYWORD-ONLY WITH NO DEFAULT on purpose — it is the state
+    `guard_working_tree` observed at run start, and a caller that omits it gets a
+    `TypeError` instead of a hash describing whatever the checkout looks like now.
+    See `TreeState` for the two occasions that made this necessary.
     """
-    dirty = is_dirty()
     record: dict[str, Any] = {
-        "git_hash": git_hash(),
-        "git_dirty": dirty,
+        "git_hash": tree.git_hash,
+        "git_dirty": tree.dirty,
         "config": config,
         "seed": seed,
         "python": sys.version.split()[0],
@@ -114,10 +162,10 @@ def capture_provenance(
         },
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
-    if dirty:
+    if tree.dirty:
         # The whole diff, not a path: the record has to stay self-contained when
         # results are rsynced down from the cluster without the tree.
-        record["git_diff"] = _git("diff")
+        record["git_diff"] = tree.diff
     if extra:
         record.update(extra)
     return record

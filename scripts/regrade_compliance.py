@@ -180,7 +180,7 @@ def main(argv: list[str] | None = None) -> int:
     # approval gate is built on --dry-run, so a green dry run is evidence about
     # argument parsing and nothing else. `tests/test_regrade_entrypoint.py` runs
     # this function for real.
-    guard_working_tree("cpu", allow_dirty=args.allow_dirty)
+    tree = guard_working_tree("cpu", allow_dirty=args.allow_dirty)
 
     judge = StrongRejectJudge(judges)
     items = [
@@ -222,7 +222,9 @@ def main(argv: list[str] | None = None) -> int:
             }
             for cell, score in zip(cells, scoring.scores)
         ],
-        "provenance": capture_provenance("cpu"),
+        # ⚠️ Same defect as sae_pregate, same day: `config` received the literal
+        # "cpu". See that file for the full note.
+        "provenance": capture_provenance({"device": "cpu"}, tree=tree),
     }
 
     print(f"\ncells regraded      {len(cells)}")

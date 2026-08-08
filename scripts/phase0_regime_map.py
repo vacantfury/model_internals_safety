@@ -1417,7 +1417,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.dry_run:
         return 0
 
-    guard_working_tree(plan.device, allow_dirty=args.allow_dirty)
+    tree = guard_working_tree(plan.device, allow_dirty=args.allow_dirty)
 
     harmful, harmless = load_contrast_sets(corpus.harmful_set, corpus.harmless_set, args.n_prompts)
 
@@ -1602,6 +1602,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "control_floor": control_floor_evidence,
             "metrics": {"families": summaries},
         },
+        tree=tree,
     )
     # The causal gate's reading is model-level, so it joins the per-rung ones
     # here rather than being produced inside the loop that made them.
