@@ -49,7 +49,7 @@ import numpy as np
 
 from internals_safety.config import load_measurements_config
 from internals_safety.measurements.control_floor import derive as derive_control_floor
-from internals_safety.measurements.regimes import Regime, assign_regime, build_regime_map
+from internals_safety.measurements.regimes import Regime, assign_regime, build_regime_map, refusal_verdict
 from internals_safety.models.capture import ActivationBatch
 from internals_safety.probes.linear import probe_transfer_detail, reading_threshold
 
@@ -223,7 +223,10 @@ def main(argv: list[str] | None = None) -> int:
                             # measured, else carry it as unmeasured.
                             deployment=bool(deployed) if deployed is not None else False,
                             recognition=cell["recognition"],
-                            refused=cell["refused"],
+                            refused=refusal_verdict(
+                                refused=bool(cell["refused"]),
+                                echoed_ciphertext=bool(cell.get("echoed_ciphertext")),
+                            ),
                             prompt_is_harmful=True,
                         )
                         if measured

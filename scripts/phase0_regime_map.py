@@ -143,7 +143,11 @@ from internals_safety.measurements.reply_inversion import (
     null_separations,
     reading as inversion_reading,
 )
-from internals_safety.measurements.regimes import assign_regime, build_regime_map
+from internals_safety.measurements.regimes import (
+    assign_regime,
+    build_regime_map,
+    refusal_verdict,
+)
 from internals_safety.models.capture import capture_or_load
 from internals_safety.probes.directions import Direction, difference_in_means
 from internals_safety.probes.linear import probe_transfer_detail, reading_threshold
@@ -984,7 +988,12 @@ def run_family(
             ability=recovered(ability.score),
             deployment=deployed,
             recognition=recognized,
-            refused=behavior.refused,
+            # Tri-state via the ONE home for the rule (TODO 62a): an echoing
+            # response does not identify refusal, because the judge counts an
+            # echo AS a refusal.
+            refused=refusal_verdict(
+                refused=behavior.refused, echoed_ciphertext=behavior.echoed_ciphertext
+            ),
             prompt_is_harmful=True,
         )
         for ability, behavior, deployed, recognized in zip(

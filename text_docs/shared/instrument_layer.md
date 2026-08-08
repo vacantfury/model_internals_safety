@@ -583,14 +583,42 @@ So §3.6's promotion of `fullwidth` to phase-1 substrate stands on the harm axis
 and is **not** clean on this one, and `homoglyph` is its mirror image. The
 substrate question is not settled by either section alone.
 
-**What would settle it, cheapest first:** (a) join echo to the regime assignment
-so an echoing non-refusal stops being filed as (S) — the data is already on
-every cell, this is a rules change and a re-label, no run; (b) a negative
-control for the REFUSAL judge, which the battery does not have — `BehaviorControl.clears()`
+**What would settle it, cheapest first:** ~~(a) join echo to the regime
+assignment~~ — **DONE 2026-08-07, see below**; (b) a negative control for the
+REFUSAL judge, which the battery does not have — `BehaviorControl.clears()`
 reads arm 1 only, by explicit design, and `behavior.py`'s `REQUIRED_CONTROLS` is
 that one screen, so the axis deciding the paper's headline split is unscreened;
-(c) a graded read of a sample, which costs judge calls. **(a) is nearly free and
-should come first.**
+(c) a graded read of a sample, which costs judge calls.
+
+#### The re-label, and it moves the headline UP
+
+`refused` is now tri-state — `None` when the response echoed — and such a cell
+gets its own regime **(P)**, a declared hole exactly like (U). The rule has one
+home (`regimes.refusal_verdict`, both arguments keyword-only with no default)
+and all five `assign_regime` call sites route through it, pinned by a test that
+walks their ASTs.
+
+Re-labelling job `9008631`'s cached cells offline ($0):
+
+| rung | before | after | (B) rate |
+|---|---|---|---|
+| `zero_width` | B=6 S=94 | **B=3 P=73 S=24** | 0.060 → **0.111** |
+| `fullwidth` | B=9 S=87 R=4 | **B=7 P=67 S=25 R=1** | 0.090 → **0.212** |
+| `homoglyph` | B=1 S=90 R=1 X=8 | B=1 P=8 S=82 R=1 X=8 | 0.010 → 0.011 |
+| `tag_block` | R=34 X=66 | P=19 R=15 X=66 | — |
+
+**Both numerator and denominator shrink, the denominator far more, so the (B)
+rate roughly doubles.** This is not a weakening of the gating result — it is the
+same result measured on the cells that actually carry a behaviour reading, and
+the previous rate was diluted by ~70% of cells that carried none. `homoglyph`
+barely moves, which is the control: it is the echo-clean rung and it was never
+affected.
+
+⚠️ **The measured base is now small — 27 and 33 cells rather than 100** — so
+every interval around these rates is far wider than the pre-change numbers
+suggested, and no (B) rate here may be quoted without its denominator. That is a
+real cost of the fix and it is the honest state: the rung was never measuring
+100 cells' worth of behaviour.
 
 ---
 

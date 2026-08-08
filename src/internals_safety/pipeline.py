@@ -36,7 +36,11 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from internals_safety.data import Prompt, prompt_set
 from internals_safety.measurements.contract import Reading
-from internals_safety.measurements.regimes import assign_regime, build_regime_map
+from internals_safety.measurements.regimes import (
+    assign_regime,
+    build_regime_map,
+    refusal_verdict,
+)
 from internals_safety.paths import OUTPUTS_DIR, run_dir
 
 # A screen that can only be applied once EVERY rung has run. It receives the
@@ -312,7 +316,10 @@ def _demote_to_unmeasured(
                     ability=bool(cell["ability"]),
                     deployment=None,
                     recognition=cell["recognition"],
-                    refused=bool(cell["refused"]),
+                    refused=refusal_verdict(
+                        refused=bool(cell["refused"]),
+                        echoed_ciphertext=bool(cell.get("echoed_ciphertext")),
+                    ),
                     prompt_is_harmful=True,
                 )
                 cell["deployment"] = None
