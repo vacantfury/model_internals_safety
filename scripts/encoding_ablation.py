@@ -270,14 +270,20 @@ def main(argv: list[str] | None = None) -> int:
     # rung is being ablated, and re-measuring it per family would spend
     # generations to re-derive a constant.
     n_families = len(args.families)
-    n_generations = n_families * 3 * 2 * args.n_prompts + 2 * args.n_prompts
-    n_judge_calls = n_generations + n_families * 2 * args.n_prompts  # + ability arms
+    n_behavioural = n_families * 3 * 2 * args.n_prompts + 2 * args.n_prompts
+    # Ability runs on the baseline and ablated arms only, harmful side, and is
+    # scored by STRING SIMILARITY — `RecoveryScore` is config-free by design, so
+    # these generations cost GPU time and NO judge money. Counting them as judge
+    # calls (as the first version did) overstates the money line by 25%.
+    n_ability = n_families * 2 * args.n_prompts
+    n_generations = n_behavioural + n_ability
+    n_judge_calls = n_behavioural
     print(f"model                 {args.model}   families {args.families}   n {args.n_prompts}")
     print(f"candidate cells       {cells}")
     print(f"forward-only sweeps   {n_forward_sweeps * n_families}  (per family: {len(cells)} "
           f"real + {len(cells)} matched random, same search space)")
-    print(f"generations           {n_generations}  (3 encoded conditions x 2 arms x "
-          f"{n_families} families, + one model-level plaintext arm)")
+    print(f"generations           {n_generations}  ({n_behavioural} behavioural + "
+          f"{n_ability} ability; ability is string-scored, no judge)")
     print(f"judge calls           {n_judge_calls}")
     print("GPU                   one; no training, forward passes and generation only")
 
