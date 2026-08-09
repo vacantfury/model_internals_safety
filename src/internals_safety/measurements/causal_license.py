@@ -126,6 +126,49 @@ class CausalEvidence:
         return self.bypass_score / self.behaviour_before
 
 
+def discard_reason(
+    evidence: CausalEvidence, n_layers: int, config: CausalLicenseConfig
+) -> str | None:
+    """WHICH criterion rejects this candidate, or None if it survives.
+
+    ⚠️ **Added 2026-08-09, and it is a correction, not an ornament.** The filter
+    returned a bare bool for its whole life, so an empty eligible set was
+    reported as `n_eligible: 0` and nothing else. That number is not
+    interpretable: "ablation released nothing" and "ablation released three
+    quarters of the refusal but moved the harmless distribution too much" are
+    opposite findings and both printed as a zero.
+
+    They were not hypothetical. The gate returned `n_eligible: 0` on
+    Llama-3.1-8B-Instruct (runs 9007219 / 9008632) with a bypass margin of
+    **0.737** over the matched-norm null — refusal_before 0.949, so a bypass
+    fraction near 0.78 against a 0.5 bar. The bypass criterion passed
+    comfortably; something else rejected every candidate; and the run record
+    could not say which, so the reading sat unread for a day and the same empty
+    set was then produced against a content guard and nearly read as a result
+    about the guard.
+
+    Returning the criterion NAME is what makes the difference legible, and it is
+    one definition rather than two: `is_discarded` delegates here.
+    """
+    scores = (evidence.bypass_score, evidence.induce_score, evidence.kl)
+    if any(value != value for value in scores):  # NaN
+        return "nan"
+    if evidence.layer >= int(n_layers * (1.0 - config.prune_layer_percentage)):
+        return "pruned_layer"
+    if evidence.kl > config.kl_threshold:
+        return "kl"
+    if evidence.induce_score < config.induce_refusal_threshold:
+        return "induce"
+    # OURS, not theirs — see CausalLicenseConfig.min_bypass_fraction. Their
+    # filter passes the bypass score in and only NaN-checks it, because for
+    # them it is the sort key over a pool known to contain a real direction.
+    # Used as a GATE it has to bind, or a direction that releases nothing still
+    # licenses.
+    if evidence.bypass_fraction < config.min_bypass_fraction:
+        return "bypass"
+    return None
+
+
 def is_discarded(evidence: CausalEvidence, n_layers: int, config: CausalLicenseConfig) -> bool:
     """Their `filter_fn`, ported. True = this candidate is not eligible.
 
@@ -133,23 +176,7 @@ def is_discarded(evidence: CausalEvidence, n_layers: int, config: CausalLicenseC
     number is not evidence of anything, and letting it through would let a
     sort put it first.
     """
-    scores = (evidence.bypass_score, evidence.induce_score, evidence.kl)
-    if any(value != value for value in scores):  # NaN
-        return True
-    if evidence.layer >= int(n_layers * (1.0 - config.prune_layer_percentage)):
-        return True
-    if evidence.kl > config.kl_threshold:
-        return True
-    if evidence.induce_score < config.induce_refusal_threshold:
-        return True
-    # OURS, not theirs — see CausalLicenseConfig.min_bypass_fraction. Their
-    # filter passes the bypass score in and only NaN-checks it, because for
-    # them it is the sort key over a pool known to contain a real direction.
-    # Used as a GATE it has to bind, or a direction that releases nothing still
-    # licenses.
-    if evidence.bypass_fraction < config.min_bypass_fraction:
-        return True
-    return False
+    return discard_reason(evidence, n_layers, config) is not None
 
 
 def select_direction(

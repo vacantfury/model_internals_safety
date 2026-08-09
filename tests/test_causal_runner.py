@@ -98,6 +98,128 @@ def test_no_eligible_direction_is_a_MEASURED_zero_not_an_unmeasured_one():
     assert result.detail["n_eligible"] == 0
 
 
+class TestAnEmptyFilterIsDiagnosable:
+    """⚠️ Paid for by three runs that produced an uninterpretable reading.
+
+    The gate returned `n_eligible: 0` on Llama-3.1-8B-Instruct (runs 9007219 /
+    9008632) while its best candidate bypassed refusal by 0.737 over the
+    matched-norm null, on a `refusal_before` of 0.949 — a bypass fraction near
+    0.78 against a 0.5 bar. The bypass criterion passed comfortably, something
+    else rejected every candidate, and the record could not say which. The same
+    empty set was then produced against a content guard (run 9033528) and was
+    one reading away from being written up as a fact about the guard.
+    """
+
+    def llama_shaped(self, kl=9.9, induce=0.2):
+        """The real run's numbers: a direction that removes 78% of refusal."""
+        return CausalEvidence(
+            layer=16,
+            position="instruction_final",
+            behaviour="refusal_opening",
+            behaviour_before=0.9489,
+            behaviour_after_ablation=0.9489 - 0.7367,
+            harmless_behaviour_before=0.1480,
+            harmless_behaviour_after_addition=0.1480 + induce,
+            kl=kl,
+        )
+
+    def test_the_bypass_criterion_is_NOT_what_rejected_the_real_direction(self):
+        """Pinned because it is the fact that makes the zero a defect rather
+        than a result: the direction cleared the bar we set."""
+        assert self.llama_shaped().bypass_fraction > CONFIG.min_bypass_fraction
+
+    def test_a_filtered_out_WORKING_direction_is_unmeasured_not_a_measured_zero(self):
+        result = reading(run_of(self.llama_shaped()), CONFIG, n_layers=32)
+        assert result.detail["n_eligible"] == 0
+        assert result.licensed is None, (
+            "a direction that removed 78% of refusal was discarded on a secondary "
+            "criterion — reporting that as 'no direction is causally effective' is "
+            "the silent zero this repo has now fixed five times"
+        )
+        assert result.detail["filtered_out_a_working_direction"] is True
+
+    def test_nothing_acting_is_STILL_a_measured_zero(self):
+        """The boundary. Only the working-direction case flips to unmeasured;
+        a sweep where no intervention did anything remains a real negative, or
+        the fix would have thrown away the finding it was protecting."""
+        result = reading(run_of(evidence(bypass=0.0, induce=0.0, kl=9.9)), CONFIG, n_layers=32)
+        assert result.licensed is True
+        assert result.value == 0.0
+        assert result.detail["filtered_out_a_working_direction"] is False
+
+    def test_the_attrition_NAMES_the_criterion(self):
+        """`n_eligible: 0` is the same number for opposite findings. The
+        criterion is what tells them apart."""
+        by_kl = reading(run_of(self.llama_shaped(kl=9.9)), CONFIG, n_layers=32)
+        assert by_kl.detail["attrition"] == {"kl": 1}
+
+        by_induce = reading(run_of(self.llama_shaped(kl=0.01, induce=-0.5)), CONFIG, n_layers=32)
+        assert by_induce.detail["attrition"] == {"induce": 1}
+
+        by_bypass = reading(run_of(evidence(bypass=0.0, kl=0.01)), CONFIG, n_layers=32)
+        assert by_bypass.detail["attrition"] == {"bypass": 1}
+
+    def test_max_bypass_fraction_reports_over_ALL_candidates_not_the_eligible_ones(self):
+        """The eligible set is empty in every case this class covers, so a
+        maximum over it would be 0.0 and say nothing."""
+        result = reading(run_of(self.llama_shaped()), CONFIG, n_layers=32)
+        assert result.detail["max_bypass_fraction"] == pytest.approx(0.7764, abs=1e-3)
+
+    def test_every_candidate_is_recorded_so_a_null_is_rediagnosable_offline(self):
+        """The first three runs cost a queue cycle each to re-ask. 13 rows of
+        small floats is the whole fix."""
+        result = reading(
+            run_of(self.llama_shaped(), evidence(bypass=0.0)), CONFIG, n_layers=32
+        )
+        rows = result.detail["candidates"]
+        assert len(rows) == 2
+        assert {row["discarded_for"] for row in rows} == {"kl", "bypass"}
+        assert all("bypass_fraction" in row and "kl" in row for row in rows)
+
+
+class TestTheControlFieldsDoNotCrossTwoSelections:
+    """`control_reading` was `value - null_margin`, and those come from
+    different candidates whenever the filter empties: `value` from the eligible
+    set, the margin from the raw best the null was drawn on. On the real run it
+    printed -0.737 as "what the control read"."""
+
+    def test_the_control_reading_is_the_nulls_own_mean(self):
+        result = reading(
+            run_of(evidence(bypass=0.8)),
+            CONFIG,
+            n_layers=32,
+            null_margin=0.7,
+            null_p_value=0.05,
+            null_observed=0.8,
+        )
+        assert result.control_reading == pytest.approx(0.1)  # 0.8 observed - 0.7 margin
+
+    def test_omitting_the_observed_statistic_drops_the_control_rather_than_faking_it(self):
+        """Fails closed: a control field computed from a margin alone is the
+        incoherence being fixed, so it is withheld instead of guessed."""
+        result = reading(
+            run_of(evidence(bypass=0.8)), CONFIG, n_layers=32, null_margin=0.7, null_p_value=0.05
+        )
+        assert result.control_reading is None
+        assert not result.clears_controls
+
+
+class TestTheClaimDirectionFollowsTheEligibleSet:
+    def test_an_empty_filter_declares_a_NULL_claim(self):
+        """So the contract asks for SENSITIVITY — could this gate fire when a
+        direction does exist — rather than for a length null. The first three
+        runs were all withheld for 'no length null (P3)', which is the wrong
+        question to send a reader after."""
+        result = reading(run_of(evidence(bypass=0.0, kl=9.9)), CONFIG, n_layers=32)
+        assert result.claim == "null"
+        assert "sensitivity" in " ".join(result.why_not_reportable()).lower()
+
+    def test_a_surviving_direction_declares_a_POSITIVE_claim(self):
+        result = reading(run_of(evidence(bypass=0.8, induce=0.2, kl=0.01)), CONFIG, n_layers=32)
+        assert result.claim == "positive"
+        assert result.detail["n_eligible"] == 1
+
+
 def test_selection_is_only_inside_the_null_when_a_null_was_actually_drawn():
     """The sweep takes a maximum over candidates, so P7 is unmet until the
     random-direction null covers that selection."""

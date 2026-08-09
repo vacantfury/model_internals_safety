@@ -2045,6 +2045,82 @@ our licensing as state of the art: theirs is stronger and it is two years old.
 Both papers must cite them, and AS-5 must say plainly which criterion it used and
 why.
 
+#### 6.3.2 ⚠️ The causal gate RAN, on a guard and on a generating model — and its "nothing survives" is not yet a result
+
+*2026-08-09. Run `9033528` (Llama Guard 3 8B, the first causal intervention this
+project has run on a content guard) plus a re-read of AS-5 runs `9007219` /
+`9008632` (Llama-3.1-8B-Instruct), which had carried the same reading unread
+since 2026-08-08. Both papers inherit this; neither may quote a causal number
+yet.*
+
+**What all three runs returned: `n_eligible: 0`, `value: 0.0`, `licensed: true`.**
+Under the pre-fix `reading()` that was documented to mean *"no direction is
+causally effective"*. It does not mean that, and the generating-model run is what
+proves it:
+
+| Run | Model | `behaviour_before` | best bypass over null | implied bypass fraction | `n_eligible` |
+|---|---|---|---|---|---|
+| 9008632 | Llama-3.1-8B-Instruct | 0.949 | **+0.737** | ~0.78 | 0 |
+| 9033528 | Llama Guard 3 8B | 0.974 | +0.023 | ~0.02 | 0 |
+
+The generating-model row is a **positive control failing**. A direction whose
+ablation removes roughly three quarters of the model's refusal — beating all 20
+matched-norm random directions, p = 0.048 — was discarded, while our own bypass
+bar is 0.5. So the bypass criterion did not reject it; a *secondary* criterion
+did (KL > 0.1 or induce < 0), and **the run record could not say which**, because
+`is_discarded` returned a bare bool.
+
+**Why this matters more than the guard number it was run to produce.** The guard
+row is the reading AS-6 commissioned, and on its own it looked like the paper's
+second gate branch — content present, causally unused. It cannot be read that way
+while the same instrument returns the same empty set on a model where the
+intervention manifestly works. *An instrument that reports the same answer on its
+positive control has not measured the negative one.* The guard's +0.023 may still
+turn out to be the real finding; it is not established, and no causal sentence
+goes in either paper until the gate fires on a case where the answer is known.
+
+**Three defects in `reading()`, all fixed the same day, all the repo's oldest
+shape — a value that means two opposite things.**
+
+1. **The zero was silent.** "Nothing acted" and "everything acted and was
+   filtered on collateral damage" both printed `0.0`. `detail.attrition` now
+   names the rejecting criterion per candidate, `detail.max_bypass_fraction`
+   reports over ALL candidates rather than the empty eligible set, and
+   `detail.candidates` persists every row so a null is re-diagnosable offline
+   instead of costing another queue cycle — which is what the first three runs
+   each cost. Same shape as `deployment=False` meaning unmeasured (§1.5), one
+   instrument further on, and the fifth instance.
+2. **The control fields crossed two selections.** `control_reading` was
+   `value − null_margin`, but `value` comes from the eligible set while the null
+   is drawn on the raw best candidate. With an empty filter that subtraction
+   printed **−0.737 as "what the control read"**. `reading()` now takes
+   `null_observed` and reports the ensemble's own mean; omitting it drops the
+   control rather than faking one.
+3. **The claim was always `positive`.** So all three runs were withheld for
+   *"no length null was computed (P3)"* — a true statement pointing at the wrong
+   evidence. An empty filter asserts a negative, and the contract's null route
+   demands **sensitivity**: proof the gate can fire when a direction does exist.
+   We have no such control. The record now says so, which is the honest reason
+   and names the next experiment.
+
+**The tri-state landing:** when the filter empties *while a candidate cleared the
+bypass bar*, the reading is now `licensed=None` — unmeasured. The gate's
+operational answer is unchanged (no direction is licensed for downstream use),
+but the scientific question was not answered, because the filter removed the
+evidence rather than the evidence coming back empty. Where nothing acted, `0.0`
+remains a genuine measured negative — pinned from both sides in
+`tests/test_causal_runner.py::TestAnEmptyFilterIsDiagnosable`, so the fix cannot
+swallow the finding it was protecting.
+
+**Two hypotheses for the attrition, both cheap to settle and NOT settled here.**
+(a) *KL is binding* — a direction strong enough to remove 78% of refusal moves
+the harmless distribution past the 0.1 threshold. (b) *The sweep is too sparse* —
+`max_sweep_layers: 8` over a 32-layer model gives a stride of 4, so we test 7
+layers × 2 positions = 14 cells where Arditi et al. sweep every layer × 3
+positions (~96). We cover ~15% of their grid and keep their filter, so drawing
+zero survivors is unsurprising. The next run resolves it by reading `attrition`
+— no code change needed, and no GPU needed beyond the run itself.
+
 ### 6.4 The roster, the sequencing, and the literature map
 
 **Superseded and moved.** The ranked instrument roster that stood here — with each

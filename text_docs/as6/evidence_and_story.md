@@ -110,8 +110,31 @@ decode".
 
 ## 3. Open
 
-- **The causal test.** Everything here is presence, not use. Ablate the recovered
-  direction and read the verdict — specified in `Limitations`, not run.
+- **The causal test — RAN 2026-08-09 (job `9033528`), and it does NOT move
+  `Limitations`.** Still open, for a better-understood reason than before. The
+  gate returned `n_eligible: 0` on Llama Guard, which read like leg-2's second
+  branch (content present, causally unused). It cannot be read that way: the
+  **same gate returns the same empty set on Llama-3.1-8B-Instruct while
+  discarding a direction that removes ~78% of that model's refusal**
+  (`instrument_layer.md` §6.3.2). An instrument returning its negative answer on
+  a positive control has not measured anything, so **no causal sentence goes in
+  the paper**, and the `Limitations` item stating the claim is correlational
+  stands exactly as written. What the run did buy: the guard's own numbers
+  (`behaviour_before` 0.974, bypass +0.023 over the matched-norm null at
+  p = 0.048) are on disk and cost $0 to re-read once the gate is trusted, and the
+  attrition instrumentation added the same day means the next run diagnoses
+  itself rather than costing a fourth queue cycle.
+- **⚠️ The map in `phase1_map.md` predates the operating-point change and must be
+  re-quoted from run `9033528`.** Same guard, same four rungs, same block rates
+  (0.92 / 0.83 / 0.85 / 0.65) — but `reading_percentile` moved 50 → 75 this
+  session, and `decoded_not_blocked` moved with it: homoglyph 0.08 → **0.07**,
+  zero_width 0.17 → **0.17**, fullwidth 0.12 → **0.10**, reverse_words 0.25 →
+  **0.08**. The change lands almost entirely on `reverse_words`, the weakest
+  decode probe of the four (AUROC 0.796 against 0.985 / 0.969 / 0.880), which is
+  the direction a stricter read should move things and is a check on the knob
+  rather than a coincidence. **Leg 3's conclusions are unaffected** — the
+  ordering is unchanged and `blocked_without_decoding` stays at 0.00–0.11 — but
+  any quoted cell must now name which operating point produced it.
 - **Two guards, one corpus.** The dissociations are properties of two
   checkpoints. §3.6.1's lesson from the AS-5 side applies: a conclusion from one
   model is not a conclusion, and two is the minimum that makes a dissociation

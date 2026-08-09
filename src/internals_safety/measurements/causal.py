@@ -404,6 +404,10 @@ def reading(
     *,
     null_margin: float | None = None,
     null_p_value: float | None = None,
+    # The statistic the null was drawn ON — the RAW best candidate's bypass
+    # score, which is not `value` whenever the filter empties. Required for the
+    # control fields to mean anything; see the incoherence note below.
+    null_observed: float | None = None,
     length_null_margin: float | None = None,
     # plumbing(n_degenerate): count of dropped candidates; zero means none were
     n_degenerate: int = 0,
@@ -412,19 +416,61 @@ def reading(
 
     **`kind` is `"causal"`, and P5 exists so this never merges with a
     correlational number into one "it works".** The value is the best eligible
-    candidate's bypass score, or 0.0 when nothing survives the filter — which is
-    reported as a licensed measurement of "no direction is causally effective",
-    NOT as unmeasured. The two are different states and the tri-state discipline
-    is about not confusing them.
+    candidate's bypass score.
+
+    ⚠️ **Rewritten 2026-08-09 after this function produced an uninterpretable
+    reading on all three runs it had ever done.** It previously returned
+    `value=0.0` with `licensed=True` whenever the filter emptied, and its
+    docstring called that "a licensed measurement of 'no direction is causally
+    effective'". The data refuted that reading: on Llama-3.1-8B-Instruct (runs
+    9007219 / 9008632) the filter emptied while the best candidate bypassed
+    refusal by **0.737** over the matched-norm null, on a `refusal_before` of
+    0.949 — a bypass fraction near 0.78 against a 0.5 bar. A direction that
+    removes three quarters of a model's refusal is not "no direction is
+    causally effective"; it was discarded on a SECONDARY criterion, and the
+    record could not say which. Three defects, all fixed here:
+
+    1. **The zero was silent** — the same 0.0 meant "nothing acted" and
+       "everything acted and was filtered on KL". Now `detail.attrition` names
+       the criterion per candidate and `detail.max_bypass_fraction` says whether
+       anything acted at all. Same shape as `deployment=False` meaning
+       unmeasured, one instrument further on.
+    2. **The control fields crossed two candidates.** `control_reading` was
+       `value - null_margin`, but the null is drawn on the raw best candidate
+       while `value` comes from the eligible set. With an empty filter that
+       subtraction mixed a 0.0 from one selection with a margin from another and
+       printed `-0.737` as "what the control read". `null_observed` closes it:
+       the control reading is now the null's own mean.
+    3. **The claim was always `positive`.** So an empty filter was withheld for
+       lacking a length null (P3) when the honest reason is that a null claim
+       needs SENSITIVITY — proof this gate can fire when a direction does exist.
+       We have no such control, and now the record says so.
 
     The negative control is the matched-norm random direction
     (`causal_license.random_direction_null`): without it, "steering worked" and
     "perturbing anything worked" are the same observation.
     """
-    from internals_safety.measurements.causal_license import is_discarded
+    from collections import Counter
 
-    eligible = [c for c in run.evidence if not is_discarded(c, n_layers, config)]
+    from internals_safety.measurements.causal_license import discard_reason
+
+    verdicts = [(c, discard_reason(c, n_layers, config)) for c in run.evidence]
+    eligible = [c for c, why in verdicts if why is None]
+    attrition = Counter(why for _, why in verdicts if why is not None)
     best = max((c.bypass_score for c in eligible), default=0.0)
+    # Over ALL candidates, not just eligible ones: this is the number that says
+    # whether any intervention acted, independent of the auxiliary filter.
+    max_bypass_fraction = max((c.bypass_fraction for c in run.evidence), default=0.0)
+
+    # THE state the rewrite exists for: every candidate rejected, while at least
+    # one of them cleared the bypass bar. The gate's operational answer is
+    # unchanged (no direction is licensed for downstream use), but the SCIENTIFIC
+    # question — is this behaviour causally mediated by the direction — was not
+    # measured, because the filter removed the evidence rather than the evidence
+    # coming back empty. `licensed=None`, never 0.0.
+    filtered_out_a_working_direction = (
+        not eligible and max_bypass_fraction >= config.min_bypass_fraction
+    )
     return Reading(
         instrument="causal_license",
         kind=KIND,
@@ -437,10 +483,22 @@ def reading(
             f"fraction >= {config.min_bypass_fraction}); refusal read as PROBABILITY "
             "mass on the configured openings, not as their log-odds"
         ),
-        licensed=True,
-        control_reading=None if null_margin is None else best - null_margin,
+        licensed=None if filtered_out_a_working_direction else True,
+        # The null's OWN mean, not `value` minus a margin drawn on a different
+        # candidate. `null_observed - null_margin` is by construction the mean of
+        # the matched-norm ensemble.
+        control_reading=(
+            None
+            if null_margin is None or null_observed is None
+            else null_observed - null_margin
+        ),
         control_margin=null_margin,
         length_null_margin=length_null_margin,
+        # An empty filter asserts a negative, and the contract's null route is
+        # the one that demands sensitivity rather than a length null. Declared
+        # from the eligible set, never from the value — deriving direction from
+        # the number is the self-licensing dodge `contract.py` names.
+        claim="positive" if eligible else "null",
         # The candidate set is swept and filtered, then the maximum is taken —
         # a selection, and the null that covers it is the random-direction null
         # run over the SAME sweep. Honest only when that null was drawn.
@@ -452,11 +510,37 @@ def reading(
             # because a sweep that silently shrank is a sweep whose coverage the
             # reader cannot check.
             "n_degenerate": n_degenerate,
+            # WHICH criterion rejected each candidate. The single field that
+            # makes an empty filter diagnosable instead of a bare zero.
+            "attrition": dict(attrition),
+            # Did ANY intervention act, filter aside? Reported next to attrition
+            # because the pair is the whole diagnosis: `bypass` attrition with a
+            # low max means nothing acted; `kl` attrition with a high max means
+            # directions acted and were rejected for collateral damage.
+            "max_bypass_fraction": max_bypass_fraction,
+            "filtered_out_a_working_direction": filtered_out_a_working_direction,
+            # Every candidate, compactly. 13 rows of small floats, and it is what
+            # lets a null be re-diagnosed offline instead of costing a queue
+            # cycle — which is exactly what the first three runs cost.
+            "candidates": [
+                {
+                    "layer": c.layer,
+                    "position": c.position,
+                    "bypass_score": c.bypass_score,
+                    "bypass_fraction": c.bypass_fraction,
+                    "induce_score": c.induce_score,
+                    "kl": c.kl,
+                    "discarded_for": why,
+                }
+                for c, why in verdicts
+            ],
+            "behaviour": run.behaviour,
             "behaviour_before": run.behaviour_before,
             "harmless_behaviour_before": run.harmless_behaviour_before,
             "n_harmful": run.n_harmful,
             "n_harmless": run.n_harmless,
             "null_p_value": null_p_value,
+            "null_observed": null_observed,
         },
     )
 
@@ -589,5 +673,9 @@ def run_causal_gate(
         n_layers=len(plain_harmful_batch.layers),
         null_margin=None if null is None else null.margin,
         null_p_value=None if null is None else null.p_value,
+        # `null.observed` is the RAW best candidate's bypass score, which is the
+        # quantity the ensemble was compared against. Passing it is what keeps
+        # `control_reading` from crossing two different selections.
+        null_observed=None if null is None else null.observed,
         n_degenerate=n_degenerate,
     )
