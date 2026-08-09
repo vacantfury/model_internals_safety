@@ -73,7 +73,13 @@ class TestCensus:
         # ... PLUS the model-level plain baseline: 8 prompts (both arms) x 200,
         # charged ONCE rather than per family, since the plaintext denominator
         # does not depend on which rung ran (evidence_and_story.md 4c).
-        assert census.decode_tokens == 2 * (4 * 300 + 4 * 200) + (4 + 4) * 200
+        # ... PLUS the SCAFFOLD control (2026-08-09): both arms again, PER
+        # FAMILY, because each rung's wrapper names its own encoding. It is the
+        # first control that scales with the ladder, which is why it is written
+        # inside the `2 * (...)` term rather than beside the plain baseline.
+        assert census.decode_tokens == (
+            2 * (4 * 300 + 4 * 200 + (4 + 4) * 200) + (4 + 4) * 200
+        )
 
     def test_two_judges_per_attack_response(self, prompts):
         harmful, harmless = prompts
@@ -84,8 +90,14 @@ class TestCensus:
         # plain baseline's 2 judges x (4 harmful + 4 benign). The benign arm is
         # measurement #4's mandatory control; the plain baseline is the
         # plaintext denominator (evidence_and_story.md 4c), also mandatory, and
-        # also judged by the same two.
-        assert census.judge_calls == 2 * 2 * (4 + 4) + 2 * (4 + 4)
+        # also judged by the same two. PLUS the SCAFFOLD control (2026-08-09),
+        # per family like the encoded arm and unlike the plain baseline: 2
+        # judges x 2 families x (4 harmful + 4 benign).
+        assert census.judge_calls == (
+            2 * 2 * (4 + 4)  # encoded, both arms
+            + 2 * 2 * (4 + 4)  # scaffold, both arms
+            + 2 * (4 + 4)  # plain baseline, model-level
+        )
 
     def test_the_benign_control_arm_is_priced_at_all(self, prompts):
         """⚠️ Pinned as its own test because its absence was invisible for as
@@ -101,6 +113,32 @@ class TestCensus:
         )
         assert halved.judge_calls < full.judge_calls
         assert halved.decode_tokens < full.decode_tokens
+
+    def test_the_scaffold_control_is_priced_and_SCALES_WITH_THE_LADDER(self, prompts):
+        """⚠️ The sibling guard, and the stronger one, because this control is
+        the first whose cost grows with the sweep.
+
+        The benign arm is per-rung too, but the plain baseline is not, and the
+        estimate has already been wrong once in each direction. Adding a rung
+        must move the scaffold's share; if the per-rung delta does not include
+        two full arms of generation and judging, the control has gone unpriced
+        in the way that only shows up on a 15-rung sweep — where it is 3,000
+        generations, not 200.
+        """
+        harmful, harmless = prompts
+        ladder = load_ladder()
+        one = census_phase0(
+            count_chars, harmful, harmless, ladder, ["base64"], MEASUREMENTS, 500
+        )
+        two = census_phase0(
+            count_chars, harmful, harmless, ladder, ["base64", "rot13"], MEASUREMENTS, 500
+        )
+        # One extra rung buys: encoded (4 restate + 4 attack + 4 benign) AND
+        # scaffold (4 harmful + 4 benign). Without the scaffold the judge delta
+        # would be 2 * (4 + 4) = 16; with it, 32.
+        assert two.judge_calls - one.judge_calls == 32
+        # Same for decode: 4*300 + 4*200 encoded, plus 8*200 scaffold.
+        assert two.decode_tokens - one.decode_tokens == (4 * 300 + 4 * 200) + 8 * 200
 
     def test_inflation_reaches_the_estimate(self, prompts):
         """The load-bearing property: the ciphertext drives prompt length, so a

@@ -1,0 +1,61 @@
+# THE SCAFFOLD CONTROL — the factorial cell AS-5 never ran.
+#
+# Same corpus, same rung, same model as `plain_baseline_llama`, re-run so that
+# all four cells come from ONE job: plain, scaffold, encoded, on both arms. The
+# within-run pairing is deliberate and is the 2026-08-08 lesson from the
+# plaintext baseline — a control compared across runs carries every difference
+# between those runs with it.
+#
+# The scaffold arm is MANDATORY in the entrypoint, so no knob here turns it on.
+# That follows the plaintext baseline and TODO 61's benign arm: a control that
+# can be switched off is a control that was off when it mattered.
+entrypoint: phase0_regime_map
+description: >-
+  Plain / scaffold / encoded on llama3_1_8b_instruct, all three in one job, so the
+  gap loss AS-5 reports can be split into a wrapper part and a character part.
+
+gates: >-
+  WHETHER AS-5's HEADLINE SURVIVES ITS OWN CENTRAL CONFOUND. An external review
+  (2026-08-09) identified it and it is correct: the encoded condition changes
+  the characters of the request AND announces that the request is encoded, while
+  the plaintext arm does neither. So "the encoding destroys discrimination" and
+  "announcing an encoding destroys discrimination" have predicted identical
+  numbers in every run this repo has done. The paper's own justification for the
+  bare plaintext arm — the scaffold "is part of what the encoded condition is
+  being blamed for" — defines the condition honestly and is not a defence of the
+  causal claim.
+
+  This adds the third cell: plaintext content inside the same attack wrapper.
+  Read against the two we have, it decomposes the gap loss into a scaffold part
+  and a character part.
+
+  If the scaffold arm's harm gap stays near the PLAINTEXT gap, the wrapper is
+  inert and the loss belongs to the character substitution. Leg 1 stands as
+  written, the title stands, and §4e keeps its causal language.
+
+  If the scaffold arm's harm gap collapses to near the ENCODED gap, the wrapper
+  carries the effect and the paper is about encoded-prompt PROTOCOLS, not about
+  encoding. Leg 1 survives as a phenomenon and every causal sentence in §4e/§4g
+  is rewritten; the title still holds, because it names a state rather than a
+  mechanism — which is exactly why it was chosen.
+
+  If it lands between, the decomposition itself is the result and is more
+  interesting than either pure outcome: it puts a number on how much of a
+  measured encoding effect is the announcement.
+
+  It also re-scopes the I7 run (job 9033243), whose direction is fitted on
+  encoded-vs-plain with no scaffold arm — so what it currently ablates is an
+  encoded-PROTOCOL direction. This says how much of that is the wrapper.
+
+target: llama3_1_8b_instruct
+families: [homoglyph]
+n_prompts: 100
+instruments: [lexical]
+run_name: scaffold-control-llama
+
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "08:00:00"

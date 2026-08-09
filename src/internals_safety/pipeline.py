@@ -100,6 +100,62 @@ def plain_arm(prompts: Sequence[str]) -> list[EncodedPrompt]:
     ]
 
 
+# The scaffold control's family label carries the rung whose scaffold it wears,
+# because the scaffold is NOT shared: the registry bakes `{encoding_name}` into
+# each family's template, so "The following request is encoded with Base64" and
+# "... with homoglyph substitution" are different prompts.
+SCAFFOLD_FAMILY_PREFIX = "scaffold"
+
+
+def scaffold_family(family: str) -> str:
+    return f"{SCAFFOLD_FAMILY_PREFIX}:{family}"
+
+
+def scaffold_arm(prompts: Sequence[str], encoder) -> list[EncodedPrompt]:
+    """Plaintext content wearing a rung's attack scaffold. The factorial control.
+
+    **What it isolates.** The encoded condition changes TWO things at once: the
+    characters of the request, and the wrapper announcing that the request is
+    encoded. `plain_arm` holds neither, the encoded arm holds both, and this
+    holds only the second. Reading the three together separates "the model
+    reacts to the transformed characters" from "the model reacts to being told
+    it is looking at an encoding".
+
+    **Why it exists (2026-08-09).** An external review of AS-5 identified this
+    as the paper's central confound, and it was right: the paper's own words
+    were that the plaintext arm is bare "deliberately, since ... that scaffold
+    is part of what the encoded condition is being blamed for". That is a
+    defensible definition of the *condition* and it is not a defence of the
+    *causal claim* — with only the two arms, "the encoding destroys
+    discrimination" and "our encoded-prompt protocol destroys discrimination"
+    predict identical numbers. Same shape as every other confound this repo has
+    found: two explanations, one measurement, and the control is the only thing
+    that separates them.
+
+    **`canonicalize` is applied, deliberately.** The encoded arm canonicalises
+    before encoding (Morse round-trips uppercase only), so holding it here keeps
+    scaffold-vs-encoded a clean one-variable contrast — the character
+    substitution and nothing else. For every rung the paper reports it is the
+    identity, so plain-vs-scaffold is equally clean there.
+
+    ⚠️ `ciphertext` is the untransformed text, so `echoed_ciphertext` fires on
+    any response that quotes the request — exactly as it already does for
+    `plain_arm`. That flag is meaningless on an unencoded arm and must not be
+    used to withhold cells here; report it, never subtract it.
+    """
+    return [
+        EncodedPrompt(
+            plaintext=(canonical := encoder.canonicalize(text)),
+            ciphertext=canonical,
+            family=scaffold_family(encoder.family),
+            invertibility=Invertibility.EXACT,
+            attack_prompt=encoder.attack_template.format(ciphertext=canonical),
+            restate_prompt=encoder.restate_template.format(ciphertext=canonical),
+        )
+        for text in prompts
+    ]
+
+
 def add_common_arguments(parser: argparse.ArgumentParser, *, default_n_prompts: int) -> None:
     """The arguments every phase entrypoint must accept.
 

@@ -414,6 +414,15 @@ def main(argv: list[str] | None = None) -> int:
                 "unmeasured": str(error),
                 "degenerate_layers": degenerate,
                 "candidates": [asdict(e) for e, _ in real],
+                # ⚠️ The CONTROL arm's candidates too, and this branch omitted
+                # them until 2026-08-09. Job 9033243 came back UNMEASURED and
+                # the record could not say WHICH arm's filter had emptied —
+                # the real arm's eligibility had to be recomputed offline from
+                # the recorded numbers to find out. The success branch records
+                # both arms because a reader needs the search space; the
+                # failure branch needs it MORE, because the search space is the
+                # entire result.
+                "control_candidates": [asdict(e) for e, _ in control],
             }
             checkpoint()
             continue

@@ -301,6 +301,29 @@ def census_phase0(
         judge_calls += 2 * len(harmful)
         judge_calls += 2 * len(harmless)
 
+        # THE SCAFFOLD CONTROL, mandatory since 2026-08-09: both arms again,
+        # plaintext content inside THIS rung's attack wrapper. Inside the family
+        # loop, unlike the plain baseline below, because the wrapper names its
+        # encoding — so it scales with the ladder exactly as the encoded arm
+        # does and is the most expensive control on the roster.
+        #
+        # Written the same hour the control was, and that is deliberate: the two
+        # comments above are both post-hoc repairs of estimates that had already
+        # been used to approve runs. The rule earned by them applies whether or
+        # not anyone has been burned yet by THIS control.
+        scaffold_harmful = [
+            encoder.attack_template.format(ciphertext=encoder.canonicalize(prompt.text))
+            for prompt in harmful
+        ]
+        scaffold_harmless = [
+            encoder.attack_template.format(ciphertext=encoder.canonicalize(prompt.text))
+            for prompt in harmless
+        ]
+        prefill += sum(count_tokens(text) for text in scaffold_harmful)
+        prefill += sum(count_tokens(text) for text in scaffold_harmless)
+        decode += (len(harmful) + len(harmless)) * measurements.behavior.max_new_tokens
+        judge_calls += 2 * (len(harmful) + len(harmless))
+
         combined = harmful_tokens + harmless_tokens
         per_family_mean[family] = sum(combined) / len(combined) if combined else 0.0
         max_prompt_tokens = max(max_prompt_tokens, max(combined + restate_tokens, default=0))
@@ -327,9 +350,12 @@ def census_phase0(
     response_chars = measurements.behavior.max_new_tokens * 4
     # Both arms are judged, so both arms' plaintexts enter the judge prompts —
     # once per family, plus once more for the model-level plain baseline.
+    # `2 * len(families)` — the encoded arms once and the SCAFFOLD arms once,
+    # since the judge is asked about `item.plaintext` and the scaffold arm's
+    # plaintext is the same corpus text. Plus 1 for the model-level baseline.
     behaviour_chars = (
         sum(len(prompt.text) for prompt in harmful) + sum(len(prompt.text) for prompt in harmless)
-    ) * (len(families) + 1)
+    ) * (2 * len(families) + 1)
     judge_input_chars = judge_calls * (judge_template_chars + response_chars)
     judge_input_chars += 2 * behaviour_chars
 
