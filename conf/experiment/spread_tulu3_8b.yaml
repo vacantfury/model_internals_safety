@@ -1,0 +1,61 @@
+# LEG 1, FROM ONE ENCODING TO A CLASS.
+#
+# §4d established the paper's headline on FOUR models and ONE rung
+# (`homoglyph`). The title says "what encoded prompts do", so the central claim
+# currently rests on a single encoder wherever it is a claim about models. This
+# run puts the substrate set through the same paired design.
+#
+# It also resolves the sharpest tension in the data. Gap lost to encoding varies
+# ~9x ACROSS MODELS (-0.09 Mistral … -0.82 Llama, on homoglyph) and does not
+# move at all ACROSS TRAINING STAGES of one model (0.34-0.50, no trend, jobs
+# 9027721-9027723). Those two facts are in tension and only more encodings can
+# say which is the stable quantity.
+entrypoint: phase0_regime_map
+description: >-
+  tulu3_8b through five substrate rungs plus two can't-decode controls, with the
+  in-job plaintext arm — leg 1 generalised from one encoder to a class.
+
+gates: >-
+  Read as one experiment with its three siblings; a single model gates nothing.
+
+  WHETHER "THE ENCODING PENALTY" IS ONE QUANTITY PER MODEL OR ONE PER (MODEL,
+  ENCODING). Gap lost to encoding is currently a per-model number measured on a
+  single encoder.
+
+  If each model's gap lost is roughly constant across the five substrate rungs,
+  the penalty is a stable model property that a complete safety pipeline
+  provably does not touch (§4e leg 2), leg 1 generalises from homoglyph to a
+  class, and phase 1 has a model-internals target: what differs between a model
+  that loses 0.8 and one that loses 0.1.
+
+  If gap lost varies as much WITHIN a model across encodings as it does between
+  models, then "the encoding penalty" is not one quantity, the cross-model
+  spread in §4d is an artefact of picking one encoder, and the title must narrow
+  to the encodings actually measured.
+
+target: tulu3_8b
+
+# Five substrate rungs — the three sound ones plus the two the alphabet band
+# found by screening — and two can't-decode rungs. The controls are not filler:
+# they are the run's own ability-0 anchors, and the plaintext arm makes every
+# encoded rate readable as a delta rather than a level.
+families:
+  - fullwidth
+  - homoglyph
+  - zero_width
+  - math_bold
+  - fullwidth_letters
+  - base64
+  - tag_block
+
+n_prompts: 100
+
+instruments: [lexical]
+run_name: spread-tulu3_8b
+
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "04:00:00"
