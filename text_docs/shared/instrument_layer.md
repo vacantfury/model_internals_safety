@@ -2291,6 +2291,81 @@ instrument reads the same"* — the correct diagnosis, where the same run under 
 old code would have said "no length null was computed (P3)" and sent a reader
 after the wrong evidence for a fourth time.
 
+#### 6.3.4 ✅ THE WIDENED SWEEP DID NOT RESCUE IT — and the reason is POSITION, measured against the reference implementation
+
+*Job `9039928`, 2026-08-09, 24:59 on one H200. `max_sweep_layers` 8 → 32, so
+every eligible layer. This ANSWERS build plan §4.2's open item ("probe position
+may be wrong, and this is untested") — it is now tested.*
+
+**Full layer coverage does not license a direction.** 49 candidates (25 eligible
+layers × 2 positions, 1 degenerate), attrition `{kl: 35, bypass: 11, induce: 3}`,
+`n_eligible: 0`. So the §6.3.3 result was not an artefact of the stride-4 grid.
+
+**What full coverage buys is the SHAPE, which 13 cells could not show: bypass and
+KL move together.**
+
+| layer | position | bypass | fraction | induce | KL |
+|---|---|---|---|---|---|
+| 12 | `last` | 0.736 | 0.776 | +0.375 | 0.868 |
+| 10 | `last` | 0.523 | 0.551 | +0.376 | 0.861 |
+| 11 | `last` | 0.403 | 0.425 | +0.386 | **0.387** |
+| 13 | `last` | 0.114 | 0.120 | +0.125 | **0.178** |
+| any of 25 | `instruction_final` | ≤ 0.010 | ~0 | — | low |
+
+Directions that bypass do collateral damage; directions that do no damage do not
+bypass. Nothing on the swept grid achieves both, and the trade-off is monotone
+enough that no threshold choice splits it — which is why relaxing `kl_threshold`
+would not have produced a licensed direction, only a licensed *non-selective*
+one.
+
+**⚠️ THE EXPLANATION, and it is a capture-spine defect rather than a fact about
+the model.** Every bypass-capable direction sits at `last`; all 25 layers of
+`instruction_final` yield essentially zero. Checked against the cloned reference
+(`other_repos/refusal_direction`, NOT from memory):
+
+    generate_directions.py:54
+    positions=list(range(-len(model_base.eoi_toks), 0))
+    llama3_model.py:121
+    eoi_toks = encode("<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n")
+
+They sweep **every end-of-instruction token**. Tokenised against the real
+Llama-3.1-8B-Instruct tokenizer that span is **5 tokens**, positions −5…−1:
+`<|eot_id|>` · `<|start_header_id|>` · `assistant` · `<|end_header_id|>` · `\n\n`.
+
+Our spine captures **two** positions, and `loader.py`'s own docstring names the
+first as sitting *"before the template's end-of-turn and assistant-header
+tokens"*:
+
+| | our position | index | inside their span? |
+|---|---|---|---|
+| `instruction_final` | last token of the user message | **−6** | **no — one token before it starts** |
+| `last` | final token | **−1** | yes, the last of five |
+
+**So we sample one position outside their span and one at its end, and never
+capture −5, −4, −3, −2 — four of the five positions they sweep, and the interior
+where their selected direction typically lives.** That single fact explains all
+three observations at once: `instruction_final` bypasses nothing because it is
+outside the span and is the *harmfulness* site (§3.1), not the refusal-behaviour
+site; `last` bypasses but with high KL because it is generation onset, where
+ablating broadly changes what the model says on harmless prompts too; and no
+selective direction appears because the positions that could carry one were
+never captured.
+
+**What may and may not be said.** NOT "Llama-3.1-8B has no selective refusal
+direction" — we have not looked where the reference implementation looks, and
+the claim would contradict a NeurIPS 2024 result on a near-identical checkpoint
+using an instrument we have now shown is differently positioned. What IS
+supported: *at the two positions this spine captures, across every eligible
+layer, no difference-in-means direction both removes ≥50% of refusal and leaves
+harmless behaviour within KL 0.1.* The reading remains `licensed=None`,
+`claim=null`, withheld for the correct reason — no sensitivity arm.
+
+**Next move, and it is now specific rather than exploratory:** add the
+end-of-instruction span to the capture spine (−5…−2, joining the two we have)
+and re-run the gate. Both papers inherit it — AS-6's guard renders through a
+different template whose own eoi span must be derived the same way, never
+assumed to be five tokens.
+
 ### 6.4 The roster, the sequencing, and the literature map
 
 **Superseded and moved.** The ranked instrument roster that stood here — with each
