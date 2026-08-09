@@ -1,0 +1,69 @@
+# I7's first run — does ablating the ENCODING direction restore harm discrimination?
+#
+# Llama-3.1-8B is the extreme case and therefore the right first target: its harm
+# gap goes +0.82 in plaintext to exactly 0.00 under `homoglyph` (§4d), benign and
+# harmful prompts refused at an identical 0.99. If discrimination is recoverable
+# anywhere it is recoverable here, and if it is NOT recoverable here the negative
+# result is at its most informative.
+entrypoint: encoding_ablation
+description: >-
+  Fit the encoded-vs-plaintext direction on Llama-3.1-8B, project it out of the
+  residual stream, and re-measure the harm gap against a matched-norm random
+  direction and the model's own plaintext arm.
+
+gates: >-
+  WHICH OF TWO HYPOTHESES EXPLAINS AS-5's HEADLINE, and they carry opposite
+  safety implications while predicting identical refusal rates. Legs 1 and 2 of
+  §4e are refusal rates on paired arms, so no amount of further behavioural
+  measurement separates them.
+
+  (i) RECOGNITION DESTROYED — the encoding leaves the model unable to tell a
+  harmful request from a benign one. (ii) RECOGNITION SUPPRESSED — the model
+  still represents the harm and an encoding-triggered refusal saturates the
+  output before harm can move it.
+
+  If the gap returns toward its plaintext value while the matched-norm random
+  direction does not move it, that is (ii): the harm information was present and
+  a surface-form feature was suppressing differentiation. Phase 1 then builds its
+  intervention on that direction — a named target — and the paper gains a
+  mechanism leg plus a reply to the standing "blanket refusal is correct
+  behaviour" objection, which against (i) has no answer.
+
+  If the gap does not return, that is (i): the encoding genuinely destroys harm
+  representation rather than overriding its expression. Phase 1 then cannot
+  target a direction at all and must work at the representation level; the paper
+  keeps three legs and states the negative result, which is the cleaner answer to
+  the same objection because a blind model is not a cautious one.
+
+  ⚠️ THE CONFOUND IS A FIRST-CLASS OUTCOME, not a caveat. If ablation also
+  raises comprehension, the intervention did decoding work and a restored gap is
+  trivial — of course a model discriminates once it can read the request.
+  `ability_shift` measures it directly and the reading returns "confounded"
+  rather than a hypothesis. That branch means the direction was not what we
+  thought and the fit has to be reconsidered before any rerun.
+
+target: llama3_1_8b_instruct
+
+# ONE rung, deliberately. `homoglyph` is the only rung passing every screen on
+# all four models (§4e leg 1) and it is where the gap collapse is total. Adding
+# rungs multiplies the generation cost linearly and answers a different question
+# — whether the effect generalises — which is worth asking only after there is
+# an effect to generalise.
+families:
+  - homoglyph
+
+n_prompts: 100
+
+run_name: encoding-ablation-llama
+
+# 03:00:00. The census is 800 generations plus 16 forward-only sweeps; at the
+# re-tuned 216-306 tok/s that is roughly 40-60 minutes of generation. The margin
+# is for the wall kill that cost a Qwen run at 8:00:26, not for an expected
+# increase — and this entrypoint checkpoints per family, so a kill loses at most
+# the rung in flight.
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "03:00:00"

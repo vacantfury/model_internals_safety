@@ -363,6 +363,7 @@ class TestEveryShippedPresetCanBeCosted:
     cost_model = _script("cost_model")
     _PHASE0_SHAPED = cost_model._PHASE0_SHAPED
     _COST_ELSEWHERE = cost_model._COST_ELSEWHERE
+    _JUDGES = cost_model._JUDGES
     report_declared_cost = staticmethod(cost_model.report_declared_cost)
 
     @pytest.mark.parametrize("name", PRESETS)
@@ -397,7 +398,17 @@ class TestEveryShippedPresetCanBeCosted:
             pytest.skip("phase-0 shaped; its census needs a tokenizer")
         assert self.report_declared_cost(name, preset, "/outputs") == 0
         out = capsys.readouterr().out
-        assert "judge API spend     $0.00" in out
+        # ⚠️ The judge line is per-entrypoint, not a constant. It asserted
+        # `$0.00` unconditionally until 2026-08-09, when `encoding_ablation`
+        # became the first delegated-route entrypoint that DOES judge — and an
+        # approval request carrying a false zero is worse than one carrying no
+        # number at all. What must hold is that the line is TRUE, not that it is
+        # always free.
+        if preset.entrypoint in self._JUDGES:
+            assert "judge API spend     NOT ZERO" in out
+            assert "$0.00" not in out
+        else:
+            assert "judge API spend     $0.00" in out
         assert preset.entrypoint in out
 
     def test_the_phase0_census_is_not_claimed_for_the_guard_entrypoint(self):

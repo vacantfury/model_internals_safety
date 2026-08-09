@@ -53,6 +53,7 @@ wrote one is not.
 | I4 SAE — pre-gate | variance explained + KL recovered | — | bar derived from the Base arm, not chosen (§2.7) | **bespoke, justified** |
 | I5 reply inversion | ablate/add/KL, Arditi et al. | **(A)** NeurIPS 2024 | position convention differs from CAA (§2.5) | **grounded, delta open** |
 | I6 patching attribution | activation patching, Zhang & Nanda | **(A)** ICLR 2023 | logit difference over probability, as they argue (§2.8) | **grounded** |
+| I7 encoding-direction ablation | directional ablation + matched-norm random control + KL filter, Arditi et al. | **(A)** NeurIPS 2024 | the **contrast set** is ours: encoded-vs-plaintext on identical content, not harmful-vs-harmless (§2.9) | **grounded, method imported wholesale** |
 
 ---
 
@@ -369,6 +370,50 @@ reports LD(refuse, comply) rather than P(refuse) — which is why `ModelConfig`
 carries `compliance_openings` at all, and not merely `refusal_openings`. A
 single-answer metric would have been the exact thing they argue against, and the
 field exists because we read them first.
+
+### 2.9 I7 — the method is imported wholesale; the CONTRAST SET is the delta
+
+**Founded 2026-08-09.** I7 asks the one question AS-5's behavioural result
+cannot: whether the encoding DESTROYS harm recognition or merely SUPPRESSES its
+expression. Both hypotheses predict the identical refusal rates — Llama-3.1-8B
+refuses benign and harmful `homoglyph` at 0.99 either way — so no paired-arm
+measurement separates them and an intervention is the only route.
+
+**Nothing about the machinery is ours.** Directional ablation as the necessity
+test, the matched-norm random direction as its control, the KL-preservation
+filter and the late-layer prune are Arditi et al. (NeurIPS 2024) verbatim,
+already ported for I5/I6 and re-pointed here. Tier **(A)**, same source, same
+`other_repos/refusal_direction` copy.
+
+**The delta is one line and it is load-bearing: what the direction is fitted
+BETWEEN.** Theirs is harmful-vs-harmless, which yields a refusal direction.
+Ours is **encoded-vs-plaintext over identical content, with the harmful and
+benign arms POOLED on both sides** — harm balanced across the contrast, so its
+component cancels and what survives is the response to surface form. Fitting on
+the harmful arm alone would produce a direction confounded with harm, and
+ablating that would destroy discrimination *by construction*: a guaranteed
+"recognition destroyed" verdict that is an artefact of the fit. The pooling is
+therefore not a refinement, it is the condition under which the reading means
+anything.
+
+**Two design points that are ours and are argued rather than inherited.**
+*(a) Selection is on the outcome, as theirs is, and the protection is a MATCHED
+control* — `select_cell` runs over the random directions across the same
+candidate cells by the same criterion, so best-of-N is compared against
+best-of-N. A best-of-N real direction against one fixed random direction would
+report the maximum of a sample as an effect; the reverse (20 randoms per cell
+against 1 real) would bias as hard the other way. *(b) The decoding confound is
+a first-class outcome, not a caveat* — if ablation also raises comprehension the
+intervention did decode work and a restored gap is trivial, so `ability_shift`
+is measured directly and the reading returns `confounded` rather than a
+hypothesis.
+
+**Ungrounded parts, stated:** three verdict thresholds
+(`min_restored_fraction`, `max_null_restored_fraction`, `max_ability_shift`) are
+PLACEHOLDERS whose tuning path is the run's own random arm. The reading is built
+so nothing reportable depends on them — `margin`, `restored_fraction` and
+`ability_shift` are continuous and are what a paper would state; only the
+convenience `verdict()` thresholds them, and a test pins that invariant.
 
 ---
 

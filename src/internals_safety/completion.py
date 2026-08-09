@@ -105,6 +105,24 @@ ROSTER: tuple[Item, ...] = (
             "measurements.attribution",
         ),
     ),
+    # Added 2026-08-09. A roster ITEM rather than an I6 module, by I5's precedent:
+    # I6 is the causal machinery, I5 and this are specific causal TESTS built on
+    # it. Its question is one no other instrument answers — whether encoding
+    # DESTROYS harm recognition or merely SUPPRESSES its expression, which no
+    # paired-arm refusal rate can separate because both predict the same rates.
+    Item(
+        "I7",
+        "encoding-direction ablation",
+        ("measurements.encoding_direction",),
+        incomplete="scoring layer, runner (scripts/encoding_ablation.py) and preset "
+        "(encoding_ablation_llama) all exist; 38 hermetic tests cover the reading and "
+        "the entrypoint's call sites bind statically. What is MISSING is end-to-end "
+        "coverage of main(): phase0_regime_map is exercised against the real corpus "
+        "with a tiny in-process model and stub judges, and this is not, so the GPU "
+        "path has never executed. --dry-run returns before the model loads, and this "
+        "repo has already paid once for treating a green dry-run as evidence a run "
+        "will start (job 8995805, dead in 20s). First launch should expect to debug",
+    ),
 )
 
 # Measurement modules that are deliberately NOT roster instruments, each with the

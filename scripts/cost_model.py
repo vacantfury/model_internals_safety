@@ -89,7 +89,18 @@ _COST_ELSEWHERE: dict[str, str | None] = {
     "--n-prompts {n_prompts} --sae-layer {first_layer} --dry-run",
     "as6_guard_probe": "./run python scripts/as6_guard_probe.py --guard {target} --dry-run",
     "relicense_probes": None,
+    # I7. Generates AND judges, unlike the three above, so it is the reason
+    # `_JUDGES` below exists — the "$0.00, calls no judge" line was unconditional
+    # and would have printed a false zero into an approval request. Its census
+    # is its own dry-run, which prints generations and judge calls per task.
+    "encoding_ablation": "./run python scripts/encoding_ablation.py --model {target} "
+    "--families {families} --n-prompts {n_prompts} --dry-run",
 }
+
+# Entrypoints on the delegated route that DO spend judge money. The gate line
+# below is driven by this rather than asserting zero for everything that is not
+# phase-0 shaped: a false $0.00 in an approval request is worse than no number.
+_JUDGES = frozenset({"encoding_ablation"})
 
 # `PresetConfig.tasks` needs an outputs root to build paths with, but this
 # script only ever counts the rows. Any root gives the same count; the real one
@@ -120,7 +131,11 @@ def report_declared_cost(name: str, preset, outputs_dir: str) -> int:
     else:
         print(f"  hardware            none — {resources.cpus} CPU / {resources.mem} on partition '{resources.partition}'")
     print(f"  wall-clock          {resources.time} per task (a CEILING the scheduler enforces)")
-    print(f"  judge API spend     $0.00 — this entrypoint calls no judge")
+    if preset.entrypoint in _JUDGES:
+        print("  judge API spend     NOT ZERO — this entrypoint judges every generation;")
+        print("                      the per-task call count is in its dry-run below")
+    else:
+        print(f"  judge API spend     $0.00 — this entrypoint calls no judge")
     print()
 
     census = _COST_ELSEWHERE[preset.entrypoint]
@@ -133,6 +148,7 @@ def report_declared_cost(name: str, preset, outputs_dir: str) -> int:
             target=target,
             n_prompts=preset.n_prompts or 100,
             first_layer=preset.sae_layers[0] if preset.sae_layers else 15,
+            families=" ".join(preset.families) if isinstance(preset.families, list) else "all",
         )
         print("The phase-0 census does not describe this run. For the forward-pass")
         print(f"count, ask the entrypoint that owns it (PER TASK — there are {n_tasks}):")
