@@ -473,11 +473,19 @@ map is unaffected by the paragraph above.
   on benign encoded content has the same defect with none of the visibility: a
   perfect block rate and no benign arm reads as a perfect guard.
 
-## 4e. ✅ THE STORY AND TITLE ARE SETTLED (owner go, 2026-08-08) — and §4d gained its mechanism
+## 4e. ✅ THE STORY OF RECORD — title settled, three legs, restructured (owner go, 2026-08-08)
 
 **This section is the story of record. §4a–§4d are kept as the derivation, not as
-live proposals.** The change §4e makes over §4d is not the phenomenon — §4d had
-that right — but the addition of a *mechanism* and the retirement of the title.
+live proposals.** §4d had the phenomenon right; §4e retires the title and states
+the three legs.
+
+⚠️ **RESTRUCTURED 2026-08-08 (owner go), and the restructure is the second one in
+a day.** The version settled that morning had a *mechanism* as leg 2 — the Tülu
+ladder read as post-training restoring the discrimination encoding destroys — and
+the re-run with a plaintext arm refuted it hours later (§4f). Leg 2 below is the
+replacement, and §4g then generalised leg 1 from one encoder to a class. The
+withdrawn mechanism is **not** restated here; §4f is its home. What survives the
+churn untouched is the title, for the reason given directly below.
 
 ### The title, and why the old one had to go
 
@@ -504,114 +512,130 @@ against a 0.10 noise ceiling) while discrimination spans 0.00–0.61. The title
 never asserted a direction, which is why it survived a correction to its own
 rationale.
 
+### The thesis, in one sentence
+
+> Safety evaluation reports refusal. Encoded prompts pull refusal apart from
+> discrimination — and once separated, the reported metric cannot tell four very
+> different models apart, and points the wrong way along a published safety
+> pipeline.
+
+Three clauses, three legs.
+
 ### The three legs, in order
 
-1. **The phenomenon (§4d).** Encoding does not defeat refusal; it defeats
-   discrimination. Benign refusal rises 2–10× over plaintext on four models, and
-   on Llama-3.1-8B the harm gap goes **+0.82 → 0.00** — benign and harmful
-   `homoglyph` prompts refused at an identical 0.99. No probe required.
+**1. The phenomenon — encoding defeats discrimination, not refusal (§4d, §4g).**
 
-   **State it as the measurement claim, not the utility claim.** "Encoding causes
-   false positives" invites the reviewer answer *refusing homoglyph text is
-   correct behaviour, no legitimate user sends it*, and there is no good reply.
-   The defensible form: **the harmful arm has no discriminative power, and it is
-   the only arm the field reports.** Llama and Qwen are indistinguishable on
-   encoded harmful prompts (0.99 vs 0.91, CIs overlapping; cross-model spread
-   0.08 against a 0.10 noise ceiling) while discriminating at 0.00 and +0.61
-   respectively. Whether refusing encoded input is *desirable* has no bearing on
-   whether the measurement can tell two very different models apart. It cannot.
-2. ⛔ **WITHDRAWN 2026-08-08 by jobs `9027721`–`9027723` — read §4f before
-   using anything in this leg.** The ladder re-ran with its plaintext arm and
-   plaintext benign refusal falls in lockstep (0.45 → 0.17 → 0.16), so the
-   monotone encoded fall below is largely general de-refusal. In leg 1's own
-   currency — gap lost relative to plaintext — there is **no trend on any
-   rung** (`homoglyph` +0.35 → +0.50 → +0.34). What replaces it is a null and
-   is stronger: **the complete published pipeline moves plaintext harm
-   discrimination +0.55 → +0.80 and leaves the encoding-induced loss unchanged
-   at 0.34–0.50.** The text below is kept as the reasoning the re-run tested.
+Benign refusal rises 2–10× over plaintext on four models, and on Llama-3.1-8B
+the harm gap goes **+0.82 → 0.00**: benign and harmful `homoglyph` prompts
+refused at an identical 0.99. No probe required.
 
-   2. **The mechanism — NEW, and it is what §4e adds.** §4d could only say the
-   effect "varies ~5× across post-training pipelines", which is a correlation
-   across four unrelated models with everything else varying too. The Tülu
-   ladder (`instrument_layer.md` §3.6.2, jobs `9011347`/`9011348`/`9011349`)
-   makes it a controlled series on **identical base weights** along a
-   **published** recipe: benign refusal falls monotonically at every stage and
-   every rung (`fullwidth` 0.80→0.45→0.30, `homoglyph` 0.79→0.63→0.48,
-   `zero_width` 0.91→0.43→0.37). The harm gap grows **from the bottom, not the
-   top** — post-training buys back benign utility under encoding rather than
-   adding refusal. That is the difference between observing a spread and
-   locating it.
+**State it as the measurement claim, not the utility claim.** "Encoding causes
+false positives" invites the reviewer answer *refusing homoglyph text is correct
+behaviour, no legitimate user sends it*, and there is no good reply. The
+defensible form: **the harmful arm has no discriminative power, and it is the
+only arm the field reports.** Llama and Qwen are indistinguishable on encoded
+harmful prompts (0.99 vs 0.91, CIs overlapping; cross-model spread 0.08 against
+a 0.10 noise ceiling) while discriminating at 0.00 and +0.61 respectively.
+Whether refusing encoded input is *desirable* has no bearing on whether the
+measurement can tell two very different models apart. It cannot.
 
-   ⚠️ **"Harmful refusal stays roughly flat" is corrected, and the correction
-   makes leg 2 stronger.** It falls: `fullwidth` 0.96 → 0.73, `zero_width`
-   1.00 → 0.81, `homoglyph` 0.99 → 0.93. So a benchmark reading
-   refusal-under-attack sees **0.96 → 0.73 and reports that two-thirds of
-   Tülu-3's published safety pipeline made the model less safe**, while the harm
-   gap says it got substantially better (+0.16 → +0.43). **The two metrics
-   disagree in SIGN, on all three rungs.** That is the sharpest statement of leg
-   1 the evidence supports, and it comes from a controlled series rather than a
-   cross-family comparison — call it flat and the result is lost.
+⚠️ **Report the FRACTION of discrimination destroyed, never the absolute
+difference** (§4g). Absolute gap-lost compares models on a scale they do not
+share, and using it already produced one wrong model ordering in this repo —
+§4d called Mistral the most robust model when it is merely the least
+discriminating one, with a plaintext gap of 0.32 against 0.80–0.83:
 
-   ⛔ **The claim that followed here — "SFT behaves like Llama-3.1-8B-Instruct and
-   DPO like Qwen2.5-7B" — is FALSIFIED (§4f).** With the plaintext arm: Llama's
-   benign refusal is 0.10 plain / 0.99 encoded, an encoding-induced excess of
-   **+0.89**; SFT's is 0.45 plain / 0.79 encoded, excess **+0.34**. Llama's blanket
-   refusal is encoding-induced, SFT's is mostly general over-refusal. They resemble
-   each other **only on the encoded arm**, which is leg 1's entire point — the claim
-   was made from the encoded arm alone.
-3. **The instrument.** None of the above is measurable without controls the field
-   does not run — the benign arm, the echo screen, the length null, the control
-   floor. Every defect found on the behaviour axis inflated apparent safety,
-   which is structural rather than coincidental: "no attack succeeded" is what a
-   broken safety evaluation returns by default.
+| model | fraction of plaintext discrimination destroyed |
+|---|---|
+| Qwen2.5-7B | **4–26%** |
+| Mistral-7B-v0.3 | 22–53% |
+| Tülu-3-8B | 41–53% |
+| Llama-3.1-8B | **67–100%** |
 
-**Demotion recorded:** `CLAUDE.md` has recommended leading with the measurement
-contribution (leg 3) since 2026-08-07. That was correct when the ladder had
-collapsed and nothing positive had replaced it. It is now the third leg — still
+**The claim is about a class of encoders, not one** (§4g). Five substrate rungs
+through the same paired design give a within-model spread of 0.10–0.27 against a
+between-model range of 0.56 — the model term dominates the encoding term by 2–5×,
+so *gap lost* is primarily a model property. It is not a per-model constant, and
+a paper claiming one would be overstating it.
+
+**2. The controlled series — the remedy does not work, and the metric reports
+its progress backwards (§4f).**
+
+Tülu 3's SFT → DPO → RLVR on **identical base weights** along a **published**
+recipe with public data. It says two things, and they belong together because
+they come from one series:
+
+*(a) You cannot post-train your way out of it.* The complete pipeline moves
+plaintext harm discrimination **+0.55 → +0.80** and leaves the encoding-induced
+loss unchanged at **0.34–0.50** at every stage and on every rung — non-monotone,
+every endpoint within 0.11 of its start. General over-refusal genuinely improves
+(plaintext benign refusal 0.45 → 0.16). The encoding penalty does not move. A
+dose-response *null* along a recipe whose every stage is documented.
+
+*(b) The field's metric has the wrong sign on that pipeline.* SFT → RLVR, all
+three rungs — no rung is selected, and it holds on every one:
+
+| rung | plaintext harmful | **encoded harmful — the reported metric** | encoded harm discrimination |
+|---|---|---|---|
+| `fullwidth` | 1.00 → 0.96 | **0.94 → 0.73** (−0.21) | +0.12 → +0.42 (**+0.30**) |
+| `zero_width` | 1.00 → 0.96 | **1.00 → 0.83** (−0.17) | +0.10 → +0.46 (**+0.36**) |
+| `homoglyph` | 1.00 → 0.96 | **0.99 → 0.94** (−0.05) | +0.20 → +0.46 (**+0.26**) |
+
+Plaintext harmful refusal is flat across the whole pipeline. Encoded harmful
+refusal *falls* on all three rungs. Encoded discrimination *rises* on all three.
+**Three quantities, and the one the field reports is the only one pointing the
+wrong way.** A reviewer can dismiss "your metric is noisy"; they cannot dismiss
+"your metric inverts on a published safety pipeline." This is the sharpest
+sentence the evidence supports and it belongs in the abstract.
+
+**3. The instrument.** None of the above is measurable without controls the field
+does not run — the benign arm, the echo screen, the length null, the control
+floor, the plaintext baseline. Every defect found on the behaviour axis inflated
+apparent safety, which is structural rather than coincidental: "no attack
+succeeded" is what a broken safety evaluation returns by default.
+
+**Demotion recorded:** `CLAUDE.md` recommended leading with the measurement
+contribution (leg 3) from 2026-08-07. That was correct when the ladder had
+collapsed and nothing positive had replaced it. It is the third leg now — still
 in the paper, no longer the lead.
 
-### ⚠️ LEG 2 IS WITHDRAWN AS WRITTEN — the gate fired against it (2026-08-08, jobs `9027721`–`9027723`)
+### Why the legs were reordered rather than the title rewritten
 
-**The re-run below ran within hours of this section being written, and it
-refuted the mechanism claim §4e was founded on.** Recorded here rather than by
-editing leg 2 silently, because the derivation is the point.
+The title names a *state* of the model. Legs 1 and 2 name a phenomenon and a
+mechanism, and mechanisms are what got refuted — twice in two days. A title
+pinned to a mechanism would have had to be retired with it; this one did not,
+and that is the argument for leaving it alone through the next revision too.
 
-**The gate:** leg 2 said post-training *restores the discrimination encoding
-destroys*. That reading requires plaintext benign refusal to be roughly flat
-across stages — otherwise the encoded fall is just general de-refusal showing
-through. **It is not flat: 0.45 → 0.17 → 0.16**, a 0.29 drop at the SFT→DPO
-step, the same step where the encoded series falls hardest.
+### ⚠️ The open question this story does not answer: where the internals enter
 
-**The decisive quantity, gap lost to encoding (encoded gap − plaintext gap):**
+**As framed, every number in legs 1 and 2 is a refusal rate on a paired arm. AS-5
+could be written without a single activation capture.** That is not a weakness in
+the result — a phenomenon that needs no probe is harder to attack, and leg 1 says
+so explicitly. But this repo's defining property against its siblings is that it
+goes *inside* the model, and the story of record currently does not.
 
-| rung | SFT | DPO | RLVR |
-|---|---|---|---|
-| `fullwidth` | −0.43 | −0.50 | −0.38 |
-| `homoglyph` | −0.35 | −0.50 | −0.34 |
-| `zero_width` | −0.45 | −0.36 | −0.34 |
+Named here rather than settled, because it is a **phase-1 design question** and
+§4d already routed phase 1 onto the false-positive axis — what makes a model
+refuse benign encoded content. That is where a probe earns its place: the
+behavioural result establishes *that* discrimination is destroyed and says
+nothing about *where* in the forward pass it is lost. Decide it when phase 1's
+shape is decided, not at writing time.
 
-Flat within ~0.16 and **non-monotone** — DPO is *worse* than SFT on two of three
-rungs. There is no trend to attribute to post-training. Leg 2's monotone series
-was real but was measuring the model's general over-refusal improving, which the
-plaintext arm now shows directly (plaintext harm gap 0.55 → 0.79 → 0.80).
+### The withdrawn leg 2, and where its derivation lives
 
-### The replacement, and it is a better leg 2 than the one it replaces
+**Not restated here.** The morning version of leg 2 read the Tülu ladder as
+post-training *restoring* the discrimination encoding destroys; the re-run with a
+plaintext arm showed plaintext benign refusal falling in lockstep (0.45 → 0.17 →
+0.16), so the monotone encoded fall was largely general de-refusal showing
+through. In leg 1's own currency there is no trend on any rung. **§4f is that
+derivation's home** — the gate, the tables, and the falsified "SFT behaves like
+Llama-3.1-8B-Instruct" corollary — and duplicating it here is what the one-home
+rule exists to prevent.
 
-**The encoding penalty is INVARIANT to post-training.** Three stages of a
-published safety pipeline — SFT, DPO, and RLVR, the last being Tülu 3's own novel
-contribution — and the discrimination lost to encoding does not move: 0.34–0.50
-on every rung at every stage. Safety training measurably improves general
-over-refusal (plaintext benign refusal 0.45 → 0.16) and does **nothing** about
-the encoding penalty.
-
-That is a negative result with teeth, and it is more useful to the field than the
-claim it replaces: **you cannot post-train your way out of this.** It also gives
-leg 1 a mechanism-shaped companion without overclaiming — leg 1 says encoding
-destroys discrimination, leg 2 now says the obvious remedy demonstrably does not
-restore it.
-
-**Leg 1 is untouched.** The phenomenon was measured on four models with paired
-plaintext arms and is not affected by anything above.
+What matters for the story of record is only this: the replacement above is a
+*null* rather than a graded recovery, and a null on a fully published recipe is
+the stronger claim. Leg 1 was measured with in-job plaintext arms from the start
+and nothing in the withdrawal reaches it.
 
 **Method note worth keeping.** This is the second time in one day that a
 preset's `gates:` block did the work the schema requires it to do — it named the
@@ -627,18 +651,21 @@ attack exists by construction, so this is pure judge error — §4d's finding
 replicated on three further checkpoints, and the contract withheld
 `behavior_plain` on all three for exactly that reason. **No ASR number, still.**
 
-### ⚠️ The gap this story HAD, and how it was closed
+### ✅ The gap this story had is CLOSED — and closing it is what refuted leg 2
 
-**The ladder has no plaintext arm.** Jobs `9011347`–`9011349` ran before
-`run_plain_behavior_baseline` landed (peer commit `5a8d2a9`), so leg 2's series
-is in *encoded* benign refusal while leg 1's headline quantity is *gap lost
-relative to plaintext*. The two legs are currently in different currencies, and
-the mechanism claim is weaker for it — "benign refusal falls across stages" is
-not yet "the discrimination the encoding destroys is restored across stages".
+**The ladder had no plaintext arm.** Jobs `9011347`–`9011349` ran before
+`run_plain_behavior_baseline` landed (peer commit `5a8d2a9`), so the original leg
+2's series was in *encoded* benign refusal while leg 1's headline quantity is
+*gap lost relative to plaintext*. The two legs sat in different currencies, and
+this section said re-running the three stages would close it.
 
-Re-running the three stages on current code closes it: the plain baseline is
-model-level and MANDATORY, so no preset change is needed, and the re-run also
-picks up per-cell benign persistence (`188644d`) that the graded regrade needs.
+**It ran (jobs `9027721`–`9027723`) and it closed the gap by refuting the leg.**
+Both legs are now in the same currency, and in that currency the ladder shows no
+trend. Worth stating plainly as a method result: **the two legs being in
+different currencies was not a presentational weakness, it was the defect** —
+a numerator without its denominator, the same class §4d was written to correct,
+recurring one level up in the mechanism leg. Putting them on one scale was
+sufficient to kill the claim.
 
 ### What AS-6 contributes to this story
 
@@ -758,7 +785,11 @@ That is the same numerator-without-denominator defect §4d was written to correc
 recurring one level up in the mechanism leg — the third instance of this class,
 and the reason the re-run was worth 3 GPU-hours.
 
-## 4f. ✅ LEG 1 GENERALISES FROM ONE ENCODER TO A CLASS — and the model ordering was an artefact of not normalising (2026-08-08)
+## 4g. ✅ LEG 1 GENERALISES FROM ONE ENCODER TO A CLASS — and the model ordering was an artefact of not normalising (2026-08-08)
+
+*(Numbered 4g on 2026-08-08: it was written as a second §4f while §4f above was
+being written in the same hours. The three existing `§4f` cross-references all
+point at the ladder section and are correct as they stand.)*
 
 **Jobs `9029608`, `9029610`–`9029612`: four models × 7 rungs × 100 prompts per
 arm, in-job plaintext baseline, 1:12–1:22 each.** §4d's headline was measured on
