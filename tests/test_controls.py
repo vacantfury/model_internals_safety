@@ -51,10 +51,11 @@ def evidence(bypass: float, layer: int = 4) -> CausalEvidence:
     return CausalEvidence(
         layer=layer,
         position="instruction_final",
-        refusal_before=1.0,
-        refusal_after_ablation=1.0 - bypass,
-        harmless_refusal_before=0.0,
-        harmless_refusal_after_addition=0.5,
+        behaviour="refusal_opening",
+        behaviour_before=1.0,
+        behaviour_after_ablation=1.0 - bypass,
+        harmless_behaviour_before=0.0,
+        harmless_behaviour_after_addition=0.5,
         kl=0.01,
     )
 

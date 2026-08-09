@@ -23,10 +23,11 @@ def evidence(**overrides) -> CausalEvidence:
     defaults = dict(
         layer=18,
         position="instruction_final",
-        refusal_before=0.90,
-        refusal_after_ablation=0.10,
-        harmless_refusal_before=0.02,
-        harmless_refusal_after_addition=0.70,
+        behaviour="refusal_opening",
+        behaviour_before=0.90,
+        behaviour_after_ablation=0.10,
+        harmless_behaviour_before=0.02,
+        harmless_behaviour_after_addition=0.70,
         kl=0.01,
     )
     return CausalEvidence(**{**defaults, **overrides})
@@ -71,13 +72,13 @@ def test_bypass_and_induce_scores_are_signed_differences():
 def test_bypass_fraction_is_scale_free():
     """The cipher band refuses at ~100% and the comprehension band does not, so
     an absolute drop would be strict on one and vacuous on the other."""
-    assert evidence(refusal_before=1.00, refusal_after_ablation=0.50).bypass_fraction == pytest.approx(0.5)
-    assert evidence(refusal_before=0.40, refusal_after_ablation=0.20).bypass_fraction == pytest.approx(0.5)
+    assert evidence(behaviour_before=1.00, behaviour_after_ablation=0.50).bypass_fraction == pytest.approx(0.5)
+    assert evidence(behaviour_before=0.40, behaviour_after_ablation=0.20).bypass_fraction == pytest.approx(0.5)
 
 
 def test_bypass_fraction_is_zero_when_nothing_was_refused():
     """Nothing was released because nothing was held — not a division by zero."""
-    assert evidence(refusal_before=0.0, refusal_after_ablation=0.0).bypass_fraction == 0.0
+    assert evidence(behaviour_before=0.0, behaviour_after_ablation=0.0).bypass_fraction == 0.0
 
 
 def test_a_direction_that_releases_nothing_is_discarded():
@@ -86,7 +87,7 @@ def test_a_direction_that_releases_nothing_is_discarded():
     an upstream GATE it has to bind."""
     config = CausalLicenseConfig()
     assert is_discarded(
-        evidence(refusal_before=0.90, refusal_after_ablation=0.88), N_LAYERS, config
+        evidence(behaviour_before=0.90, behaviour_after_ablation=0.88), N_LAYERS, config
     )
 
 
@@ -102,7 +103,7 @@ def test_a_high_kl_candidate_is_discarded():
 
 
 def test_a_candidate_that_does_not_induce_refusal_is_discarded():
-    assert is_discarded(evidence(harmless_refusal_after_addition=0.0), N_LAYERS, CausalLicenseConfig())
+    assert is_discarded(evidence(harmless_behaviour_after_addition=0.0), N_LAYERS, CausalLicenseConfig())
 
 
 def test_late_layer_candidates_are_pruned():
@@ -121,9 +122,9 @@ def test_nan_evidence_is_discarded_not_propagated():
 
 
 def test_selection_takes_the_best_bypass_among_eligible_candidates():
-    weak = evidence(layer=10, refusal_after_ablation=0.60)
-    strong = evidence(layer=12, refusal_after_ablation=0.05)
-    ineligible = evidence(layer=14, refusal_after_ablation=0.00, kl=5.0)
+    weak = evidence(layer=10, behaviour_after_ablation=0.60)
+    strong = evidence(layer=12, behaviour_after_ablation=0.05)
+    ineligible = evidence(layer=14, behaviour_after_ablation=0.00, kl=5.0)
     chosen = select_direction([weak, strong, ineligible], N_LAYERS, CausalLicenseConfig())
     assert chosen is strong
 
@@ -155,10 +156,10 @@ def test_the_length_confound_scenario_is_rejected():
     correlational licensing has no way to see this.
     """
     length_like = evidence(
-        refusal_before=0.90,
-        refusal_after_ablation=0.88,     # ablation released nothing
-        harmless_refusal_after_addition=0.02,  # adding it induced nothing
-        harmless_refusal_before=0.02,
+        behaviour_before=0.90,
+        behaviour_after_ablation=0.88,     # ablation released nothing
+        harmless_behaviour_after_addition=0.02,  # adding it induced nothing
+        harmless_behaviour_before=0.02,
         kl=0.005,                        # and it was harmless to remove
     )
     config = CausalLicenseConfig()

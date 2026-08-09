@@ -69,30 +69,110 @@ def refusal_probability(logits: torch.Tensor, refusal_token_ids: Sequence[int]) 
     return float(probabilities.index_select(1, index).sum(dim=-1).mean())
 
 
+def verdict_probability(
+    logits: torch.Tensor, unsafe_token_ids: Sequence[int], safe_token_ids: Sequence[int]
+) -> float:
+    """A guard's P(unsafe), RENORMALISED over the two labels. The guard analogue
+    of `refusal_probability`, and deliberately not the same function.
+
+    **Why renormalised rather than raw softmax mass.** A guard's verdict is a
+    two-way choice at a position where the template has already committed it to
+    answering, so the quantity of interest is P(unsafe | it answers), not the
+    share of the whole vocabulary. Raw mass would let an intervention that
+    diffuses probability across unrelated tokens read as "less unsafe" when the
+    guard's actual preference between its two labels never moved — and ablation
+    diffusing the distribution is exactly what an over-strong intervention does.
+    The denominator makes the score insensitive to that.
+
+    **It also gives the KL check something to do.** Because this score cannot
+    see distributional damage, the KL-on-benign term is the only thing standing
+    between a genuine direction and one that simply breaks the model. Anyone
+    tempted to drop the KL gate for guards should read this paragraph first.
+
+    ⚠️ The caller is responsible for the logits being read at the guard's own
+    verdict position — for both guards in this repo that means the rendered
+    prompt PLUS the verdict prefix, since one emits two newlines before its
+    label and reading token zero scored it where 2.5e-09 of the mass sat
+    (`phase1_map.md` §5). This function cannot detect that mistake; the health
+    check for it is `mean_label_mass`, which is why the probe reports it.
+    """
+    if not unsafe_token_ids or not safe_token_ids:
+        raise ValueError("both label token sets are required — a one-sided verdict is not a verdict")
+    probabilities = torch.softmax(logits[:, -1, :].float(), dim=-1)
+    device = probabilities.device
+    unsafe = probabilities.index_select(
+        1, torch.tensor(sorted(set(unsafe_token_ids)), device=device)
+    ).sum(dim=-1)
+    safe = probabilities.index_select(
+        1, torch.tensor(sorted(set(safe_token_ids)), device=device)
+    ).sum(dim=-1)
+    total = unsafe + safe
+    # Fail loud rather than dividing by ~0: an all-but-zero denominator means the
+    # logits were read at the wrong position, which is a bug and not a verdict.
+    if float(total.min()) <= 0.0:
+        raise ValueError("no probability mass on either label — logits read at the wrong position")
+    return float((unsafe / total).mean())
+
+
+def label_mass(
+    logits: torch.Tensor, unsafe_token_ids: Sequence[int], safe_token_ids: Sequence[int]
+) -> float:
+    """Mean total mass on the two label tokens — the read-position health check.
+
+    Near 1.0 means the guard is about to emit a verdict and the read is at the
+    right place. Near 0 means it is not, and every verdict number from that run
+    is noise. This is the standing check `phase1_map.md` §5 says belongs in every
+    run record, expressed so the causal path reports it too rather than
+    inheriting a correctness property it never verified.
+    """
+    probabilities = torch.softmax(logits[:, -1, :].float(), dim=-1)
+    device = probabilities.device
+    index = torch.tensor(sorted(set(unsafe_token_ids) | set(safe_token_ids)), device=device)
+    return float(probabilities.index_select(1, index).sum(dim=-1).mean())
+
+
 @dataclass(frozen=True)
 class CausalEvidence:
-    """What intervening on one candidate direction did."""
+    """What intervening on one candidate direction did.
+
+    ⚠️ **The fields were named `refusal_*` until 2026-08-09 and are now
+    `behaviour_*`, with `behaviour` naming the readout.** The measurement is not
+    specific to refusal: for a generating model the behaviour is P(refusal
+    opening), and for a content guard it is P(unsafe verdict) — the same
+    ablate-and-add structure over a different scalar. Reusing the refusal name
+    would have written `refusal_before` into guard run records for a quantity
+    that is a classifier verdict, which is this repo's most-repeated defect
+    (`deployment=false` meaning unmeasured; `is_format_detector` inverted on the
+    cipher band). A record that must be reinterpreted by whoever reads it is a
+    record that will eventually be read wrong.
+    """
 
     layer: int
     position: str
-    # Refusal probability on HARMFUL prompts, before and after ablation.
-    refusal_before: float
-    refusal_after_ablation: float
-    # Refusal probability on HARMLESS prompts, before and after addition.
-    harmless_refusal_before: float
-    harmless_refusal_after_addition: float
+    # WHAT was read, required and with no default ON PURPOSE. A default would
+    # let a guard run inherit the generating-model label silently, which is the
+    # optional-flag shape that has failed repeatedly here. Values are supplied
+    # by the probe (`causal.BehaviourProbe.name`), e.g. "refusal_opening" or
+    # "guard_unsafe_verdict".
+    behaviour: str
+    # The behaviour score on HARMFUL prompts, before and after ablation.
+    behaviour_before: float
+    behaviour_after_ablation: float
+    # The behaviour score on HARMLESS prompts, before and after addition.
+    harmless_behaviour_before: float
+    harmless_behaviour_after_addition: float
     # KL(baseline || ablated) on HARMLESS prompts.
     kl: float
 
     @property
     def bypass_score(self) -> float:
         """How much ablation reduced refusal. Higher is a better direction."""
-        return self.refusal_before - self.refusal_after_ablation
+        return self.behaviour_before - self.behaviour_after_ablation
 
     @property
     def induce_score(self) -> float:
         """How much addition increased refusal on harmless prompts."""
-        return self.harmless_refusal_after_addition - self.harmless_refusal_before
+        return self.harmless_behaviour_after_addition - self.harmless_behaviour_before
 
     @property
     def bypass_fraction(self) -> float:
@@ -103,9 +183,9 @@ class CausalEvidence:
         on one and a vacuous one on the other. Returns 0.0 when there was no
         refusal to begin with — nothing was released because nothing was held.
         """
-        if self.refusal_before <= 0.0:
+        if self.behaviour_before <= 0.0:
             return 0.0
-        return self.bypass_score / self.refusal_before
+        return self.bypass_score / self.behaviour_before
 
 
 def is_discarded(evidence: CausalEvidence, n_layers: int, config: CausalLicenseConfig) -> bool:

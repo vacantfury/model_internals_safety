@@ -110,6 +110,7 @@ from internals_safety.measurements.recognition import (
 from internals_safety.measurements.causal import (
     forward_passes as causal_forward_passes,
     measure_causal_evidence,
+    refusal_probe,
     reading as causal_reading,
     resolve_refusal_tokens,
     unmeasured_reading,
@@ -651,13 +652,16 @@ def run_causal_gate(
             "to intervene on",
         )
     refusal_ids = resolve_refusal_tokens(loaded, model_config.refusal_openings)
+    # The generating-model probe. Built ONCE and shared with the null below, so
+    # the control cannot silently score a different quantity than the candidates.
+    probe = refusal_probe(loaded, refusal_ids, model_config.capture_batch_size)
 
     run = measure_causal_evidence(
         loaded,
         candidates,
         harmful_prompts,
         harmless_prompts,
-        refusal_ids,
+        probe=probe,
         coefficient=config.addition_coefficient,
         batch_size=model_config.capture_batch_size,
     )
@@ -689,7 +693,7 @@ def run_causal_gate(
             ],
             harmful_prompts,
             harmless_prompts,
-            refusal_ids,
+            probe=probe,
             coefficient=config.addition_coefficient,
             batch_size=model_config.capture_batch_size,
         )

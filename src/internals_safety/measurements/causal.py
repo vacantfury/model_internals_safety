@@ -152,14 +152,60 @@ def _final_logits(
 
 
 @dataclass(frozen=True)
+class BehaviourProbe:
+    """How one model KIND is rendered and scored. The seam that makes this
+    measurement work on a content guard as well as on a generating model.
+
+    Both halves have to be injected, and the rendering half is the one that is
+    easy to miss. `_final_logits` renders through the model's own chat template,
+    which is correct for a generating model and WRONG for a guard: a guard's
+    verdict lives after its verdict prefix, so the same function reading the
+    same final position answers a different question depending on what was
+    rendered. Injecting only the scoring function would have produced a guard
+    measurement that ran, returned plausible numbers, and read the logits one
+    position too early — the defect this repo already paid for once
+    (`phase1_map.md` §5: a guard that blocks 98% reported at 0.00).
+
+    `name` is not decoration: it is written into `CausalEvidence.behaviour` and
+    therefore into the run record, so a reader never has to infer which quantity
+    a number is.
+    """
+
+    name: str
+    render_and_read: Callable[[Sequence[str]], torch.Tensor]
+    score: Callable[[torch.Tensor], float]
+    # Optional per-kind sanity number recorded alongside the result (guards use
+    # label mass at the verdict position). None when the kind has no such check.
+    health: Callable[[torch.Tensor], float] | None = None
+
+
+def refusal_probe(
+    loaded: LoadedModel,
+    refusal_token_ids: Sequence[int],
+    # plumbing(batch_size): throughput only — the logits read are per-prompt
+    batch_size: int = 8,
+) -> BehaviourProbe:
+    """The generating-model probe: chat-template rendering, P(refusal opening)."""
+    return BehaviourProbe(
+        name="refusal_opening",
+        render_and_read=lambda prompts: _final_logits(loaded, prompts, batch_size),
+        score=lambda logits: refusal_probability(logits, refusal_token_ids),
+    )
+
+
+@dataclass(frozen=True)
 class CausalRun:
     """Every candidate's evidence, plus the baselines they all share."""
 
     evidence: tuple[CausalEvidence, ...]
-    refusal_before: float
-    harmless_refusal_before: float
+    behaviour: str
+    behaviour_before: float
+    harmless_behaviour_before: float
     n_harmful: int
     n_harmless: int
+    # The probe's health number on the harmful baseline, or None if the probe
+    # has none. Recorded rather than asserted: the threshold is the caller's.
+    health: float | None = None
 
 
 def forward_passes(n_candidates: int) -> int:
@@ -178,7 +224,8 @@ def measure_causal_evidence(
     candidates: Sequence[Direction],
     harmful_prompts: Sequence[str],
     harmless_prompts: Sequence[str],
-    refusal_token_ids: Sequence[int],
+    *,
+    probe: BehaviourProbe,
     coefficient: float,
     # plumbing(batch_size): throughput only — the logits read are per-prompt
     batch_size: int = 8,
@@ -199,10 +246,10 @@ def measure_causal_evidence(
     if not candidates:
         raise ValueError("no candidate directions supplied")
 
-    harmful_baseline = _final_logits(loaded, harmful_prompts, batch_size)
-    harmless_baseline = _final_logits(loaded, harmless_prompts, batch_size)
-    refusal_before = refusal_probability(harmful_baseline, refusal_token_ids)
-    harmless_refusal_before = refusal_probability(harmless_baseline, refusal_token_ids)
+    harmful_baseline = probe.render_and_read(harmful_prompts)
+    harmless_baseline = probe.render_and_read(harmless_prompts)
+    behaviour_before = probe.score(harmful_baseline)
+    harmless_behaviour_before = probe.score(harmless_baseline)
 
     evidence: list[CausalEvidence] = []
     for candidate in candidates:
@@ -211,24 +258,23 @@ def measure_causal_evidence(
         # information is present at many sites, so a single-site ablation would
         # test a much weaker claim.
         with ablate_direction(loaded, candidate.vector):
-            ablated_harmful = _final_logits(loaded, harmful_prompts, batch_size)
-            ablated_harmless = _final_logits(loaded, harmless_prompts, batch_size)
+            ablated_harmful = probe.render_and_read(harmful_prompts)
+            ablated_harmless = probe.render_and_read(harmless_prompts)
 
-        # Sufficiency: write the direction in at ONE layer and ask whether
-        # refusal appears on HARMLESS prompts.
+        # Sufficiency: write the direction in at ONE layer and ask whether the
+        # behaviour appears on HARMLESS prompts.
         with add_direction(loaded, candidate.vector, candidate.layer, coefficient):
-            added_harmless = _final_logits(loaded, harmless_prompts, batch_size)
+            added_harmless = probe.render_and_read(harmless_prompts)
 
         evidence.append(
             CausalEvidence(
                 layer=candidate.layer,
                 position=candidate.position,
-                refusal_before=refusal_before,
-                refusal_after_ablation=refusal_probability(ablated_harmful, refusal_token_ids),
-                harmless_refusal_before=harmless_refusal_before,
-                harmless_refusal_after_addition=refusal_probability(
-                    added_harmless, refusal_token_ids
-                ),
+                behaviour=probe.name,
+                behaviour_before=behaviour_before,
+                behaviour_after_ablation=probe.score(ablated_harmful),
+                harmless_behaviour_before=harmless_behaviour_before,
+                harmless_behaviour_after_addition=probe.score(added_harmless),
                 # KL on HARMLESS prompts: the criterion asks whether removing the
                 # direction damaged ordinary behaviour, which is a question about
                 # the benign distribution, never the harmful one.
@@ -238,10 +284,12 @@ def measure_causal_evidence(
 
     return CausalRun(
         evidence=tuple(evidence),
-        refusal_before=refusal_before,
-        harmless_refusal_before=harmless_refusal_before,
+        behaviour=probe.name,
+        behaviour_before=behaviour_before,
+        harmless_behaviour_before=harmless_behaviour_before,
         n_harmful=len(harmful_prompts),
         n_harmless=len(harmless_prompts),
+        health=probe.health(harmful_baseline) if probe.health else None,
     )
 
 
@@ -321,8 +369,8 @@ def reading(
             # because a sweep that silently shrank is a sweep whose coverage the
             # reader cannot check.
             "n_degenerate": n_degenerate,
-            "refusal_before": run.refusal_before,
-            "harmless_refusal_before": run.harmless_refusal_before,
+            "behaviour_before": run.behaviour_before,
+            "harmless_behaviour_before": run.harmless_behaviour_before,
             "n_harmful": run.n_harmful,
             "n_harmless": run.n_harmless,
             "null_p_value": null_p_value,
