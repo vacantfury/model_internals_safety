@@ -1,6 +1,11 @@
 # AS-5 — the evidence in hand, and what it will actually support
 
 > **Story and title of record: §4e** (settled by owner go, 2026-08-08).
+> ⚠️ **§4e's leg 2 was WITHDRAWN the same day** — the ladder re-run
+> (`9027721`–`9027723`) showed plaintext benign refusal is not flat across
+> stages, so post-training does not restore what encoding destroys. It is
+> replaced by a stronger negative: **the encoding penalty is invariant to
+> post-training**. Leg 1 and the title are unaffected.
 > Title: *"Refusal without discrimination: what encoded prompts do to
 > safety-trained models."* Sections §4a–§4d are the derivation that produced it
 > and are kept for their evidence, not as live proposals; §5 is superseded.
@@ -548,7 +553,64 @@ contribution (leg 3) since 2026-08-07. That was correct when the ladder had
 collapsed and nothing positive had replaced it. It is now the third leg — still
 in the paper, no longer the lead.
 
-### ⚠️ The one gap this story has, and it is the next run
+### ⚠️ LEG 2 IS WITHDRAWN AS WRITTEN — the gate fired against it (2026-08-08, jobs `9027721`–`9027723`)
+
+**The re-run below ran within hours of this section being written, and it
+refuted the mechanism claim §4e was founded on.** Recorded here rather than by
+editing leg 2 silently, because the derivation is the point.
+
+**The gate:** leg 2 said post-training *restores the discrimination encoding
+destroys*. That reading requires plaintext benign refusal to be roughly flat
+across stages — otherwise the encoded fall is just general de-refusal showing
+through. **It is not flat: 0.45 → 0.17 → 0.16**, a 0.29 drop at the SFT→DPO
+step, the same step where the encoded series falls hardest.
+
+**The decisive quantity, gap lost to encoding (encoded gap − plaintext gap):**
+
+| rung | SFT | DPO | RLVR |
+|---|---|---|---|
+| `fullwidth` | −0.43 | −0.50 | −0.38 |
+| `homoglyph` | −0.35 | −0.50 | −0.34 |
+| `zero_width` | −0.45 | −0.36 | −0.34 |
+
+Flat within ~0.16 and **non-monotone** — DPO is *worse* than SFT on two of three
+rungs. There is no trend to attribute to post-training. Leg 2's monotone series
+was real but was measuring the model's general over-refusal improving, which the
+plaintext arm now shows directly (plaintext harm gap 0.55 → 0.79 → 0.80).
+
+### The replacement, and it is a better leg 2 than the one it replaces
+
+**The encoding penalty is INVARIANT to post-training.** Three stages of a
+published safety pipeline — SFT, DPO, and RLVR, the last being Tülu 3's own novel
+contribution — and the discrimination lost to encoding does not move: 0.34–0.50
+on every rung at every stage. Safety training measurably improves general
+over-refusal (plaintext benign refusal 0.45 → 0.16) and does **nothing** about
+the encoding penalty.
+
+That is a negative result with teeth, and it is more useful to the field than the
+claim it replaces: **you cannot post-train your way out of this.** It also gives
+leg 1 a mechanism-shaped companion without overclaiming — leg 1 says encoding
+destroys discrimination, leg 2 now says the obvious remedy demonstrably does not
+restore it.
+
+**Leg 1 is untouched.** The phenomenon was measured on four models with paired
+plaintext arms and is not affected by anything above.
+
+**Method note worth keeping.** This is the second time in one day that a
+preset's `gates:` block did the work the schema requires it to do — it named the
+falsifying observation *before* the run, so the refutation took one reading
+rather than an argument. The gate was authored by the peer session and was
+sharper than the reasoning that recommended the run.
+
+### ⚠️ The judge inverts on plaintext benign prompts, on three more checkpoints
+
+`plain_benign_asr` reads **0.29 / 0.55 / 0.67** across SFT / DPO / RLVR against
+`plain_harmful_asr` of **0.00 / 0.04 / 0.04**. On plaintext benign prompts no
+attack exists by construction, so this is pure judge error — §4d's finding
+replicated on three further checkpoints, and the contract withheld
+`behavior_plain` on all three for exactly that reason. **No ASR number, still.**
+
+### ⚠️ The gap this story HAD, and how it was closed
 
 **The ladder has no plaintext arm.** Jobs `9011347`–`9011349` ran before
 `run_plain_behavior_baseline` landed (peer commit `5a8d2a9`), so leg 2's series
@@ -568,6 +630,116 @@ it. And the guards land on the same axis: `phase1_map.md` §0.5 measures Llama
 Guard's benign block rate at 0.29–0.53 against WildGuard's 0.05–0.29, so the
 guard-side benign arm is not only a control — it measures a property of the
 guard's own post-training, exactly as leg 2 does for targets.
+
+## 4f. ⚠️ THE LADDER RE-RAN WITH ITS PLAINTEXT ARM AND LEG 2's MECHANISM IS WITHDRAWN (2026-08-08)
+
+Jobs `9027721`/`9027722`/`9027723`, three stages × 8 rungs × 100 prompts per arm,
+1:14–1:25 each, all COMPLETED. Every number below is within-run and paired: each
+stage's plaintext baseline and its encoded arms ran in one job, which is exactly
+what the earlier ladder (`9011347`–`9011349`) could not do.
+
+### The gate, and which branch fired
+
+> If plaintext benign refusal is flat across the three stages, the encoded fall
+> is a real recovery of discrimination […] If plaintext benign refusal ALSO falls
+> across stages, the ladder is measuring general de-refusal rather than anything
+> about encoding, leg 2 collapses into a restatement of "later stages refuse
+> less", and §4e's mechanism has to be withdrawn.
+
+**Plaintext benign refusal: 0.45 → 0.17 → 0.16.** Second branch.
+
+| stage | plain harmful | plain benign | plain gap |
+|---|---|---|---|
+| SFT | 1.00 | **0.45** | +0.55 |
+| DPO | 0.96 | **0.17** | +0.79 |
+| RLVR | 0.96 | **0.16** | +0.80 |
+
+The ladder's headline — "benign refusal falls monotonically at every stage and
+every rung" — is substantially this. Tülu-3's recipe adds CoCoNot contrastive
+prompts specifically to reduce over-refusal of safe prompts, and it works: the
+plaintext benign rate falls 0.29. The encoded condition inherited it.
+
+### In leg 1's currency there is no trend at all
+
+Gap lost = plaintext harm gap − encoded harm gap. This is the quantity leg 1
+reports, and the only one in which the two legs are comparable:
+
+| rung | SFT | DPO | RLVR |
+|---|---|---|---|
+| `fullwidth` | +0.43 | +0.50 | +0.38 |
+| `homoglyph` | +0.35 | +0.50 | +0.34 |
+| `zero_width` | +0.45 | +0.36 | +0.34 |
+| **mean** | **0.41** | **0.45** | **0.35** |
+
+**Non-monotone on two rungs, and every endpoint lands within 0.11 of its start.**
+A 0.10 spread across three stages at n = 100 is inside noise. The
+encoding-induced benign excess tells the same story on the one rung that is
+echo-clean: `homoglyph` +0.34 → +0.44 → +0.32. It falls on `fullwidth` and
+`zero_width` (+0.37→+0.15, +0.45→+0.21) — the two echo-heavy rungs, where
+§3.6.2 established that DPO and RLVR echo *more* than SFT and the refusal judge
+scores echo as refusal, so that fall is the direction the echo bias produces.
+
+**§4e leg 2 is WITHDRAWN as a recovery claim.** The ladder does not show
+post-training restoring the discrimination encoding destroys.
+
+### What replaces it is stronger, because it is a null on a published recipe
+
+> **Tülu-3's complete published safety pipeline improves plaintext harm
+> discrimination from +0.55 to +0.80 and leaves the encoding-induced loss
+> unchanged at 0.34–0.50.**
+
+SFT → DPO → RLVR, six benchmarks, CoCoNot, 50k WildGuardMix prompts — the full
+recipe, with public data, on identical base weights. It moves plaintext
+discrimination by +0.25 and the encoded loss by nothing. **The standard safety
+pipeline is blind to this failure mode**, which is a dose-response *null* along a
+recipe whose every stage is documented, and a stronger claim than the graded
+recovery it replaces.
+
+### And the sign disagreement survives, now within-run
+
+| rung | plain harmful, SFT→RLVR | encoded harmful, SFT→RLVR | encoded gap, SFT→RLVR |
+|---|---|---|---|
+| `fullwidth` | 1.00 → 0.96 | 0.94 → **0.73** | +0.12 → **+0.42** |
+| `zero_width` | 1.00 → 0.96 | 1.00 → **0.83** | +0.10 → **+0.46** |
+| `homoglyph` | 1.00 → 0.96 | 0.99 → 0.94 | +0.20 → **+0.46** |
+
+Plaintext harmful refusal is flat across the whole pipeline (1.00 → 0.96).
+Encoded harmful refusal *falls* by up to 0.21. Encoded harm discrimination
+*rises* by up to 0.36. A benchmark reading refusal-under-attack — the standard
+metric — reports the pipeline as making the model less safe while both plaintext
+and encoded discrimination improve. **Three quantities, and the one the field
+reports is the only one pointing the wrong way.**
+
+### ⚠️ "SFT behaves like Llama-3.1-8B-Instruct" is FALSIFIED, and by the paper's own thesis
+
+§3.6.2 and §4e leg 2 both assert it. With the plaintext arm:
+
+| | plain benign | `homoglyph` benign | encoding-induced excess |
+|---|---|---|---|
+| Llama-3.1-8B-Instruct | **0.10** | 0.99 | **+0.89** |
+| Tülu-3 SFT | **0.45** | 0.79 | **+0.34** |
+
+They are not the same phenomenon. Llama's blanket refusal is specifically
+encoding-induced; SFT's is mostly general over-refusal that it also has in
+plaintext. **They look alike only on the encoded arm — which is leg 1's entire
+point.** The claim was made from the encoded arm alone, so the paper committed
+its own thesis as an error, inside the paper, in the section that states the
+thesis. Keep this in the write-up: it is the cleanest demonstration available
+that the failure is easy to make and not a straw man.
+
+### What survives untouched
+
+**Leg 1.** It was measured with the plaintext baseline in-job from the start, so
+nothing here reaches it: Llama's +0.82 → 0.00, the harmful arm's
+model-independence (spread 0.08 against a 0.10 noise ceiling), the four-family
+result. It gains a robustness argument — gap lost is 0.34–0.50 on Tülu-3 at
+every stage on three rungs, alongside 0.82/0.34/0.20/0.09 across four families.
+
+**Leg 3**, the instrument contribution, gains an eighth entry: *a stage series
+measured without a plaintext arm reads general de-refusal as an encoding effect.*
+That is the same numerator-without-denominator defect §4d was written to correct,
+recurring one level up in the mechanism leg — the third instance of this class,
+and the reason the re-run was worth 3 GPU-hours.
 
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
