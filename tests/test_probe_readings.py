@@ -190,13 +190,22 @@ class TestDeploymentReading:
         assert shifted.harmful_rate == pytest.approx(base.harmful_rate, abs=0.05)
 
     def test_the_benign_rate_pins_the_operating_point(self, generator):
-        """At the 50th percentile the benign control reads positive half the
-        time by construction; the informative quantity is the gap."""
+        """The benign control reads positive at `1 - percentile/100` BY
+        CONSTRUCTION; the informative quantity is the gap.
+
+        Derived from the configured percentile rather than hardcoded: this
+        asserted a literal 0.5 and so failed the moment the knob was tuned
+        50 -> 75 on evidence (`instrument_layer.md` §2.8), which is the knob
+        working, not the instrument breaking. The invariant is what has content
+        here; the knob's VALUE is pinned once, in
+        `test_config.py::test_the_operating_point_is_the_tuned_one`.
+        """
+        percentile = CONFIG.reading_percentile
         _, reading = self.read(
             cluster(4.0, generator), cluster(-4.0, generator),
             cluster(4.0, generator), cluster(-4.0, generator),
         )
-        assert reading.harmless_rate == pytest.approx(0.5, abs=0.02)
+        assert reading.harmless_rate == pytest.approx(1.0 - percentile / 100.0, abs=0.02)
         assert reading.gap == reading.harmful_rate - reading.harmless_rate
 
     def test_the_reading_cell_is_one_that_reads_a_signal(self, generator):

@@ -159,7 +159,10 @@ def main() -> int:
         print(f"  {'pct':>5} {'harmful':>8} {'benign':>7} {'gap':>6} {'genuine':>8} {'D&~B':>6} {'B&D':>5} {'~D':>5}")
         for row in rows:
             print(
-                f"  {row['percentile']:>5.0f} {row['harmful_rate']:>8.2f} {row['benign_rate']:>7.2f}"
+                # `:g`, not `:.0f`: the configured grid ends at 99.5 and `.0f`
+                # rounded it to a printed "100", i.e. a table claiming a
+                # zero-false-positive operating point that was never swept.
+                f"  {row['percentile']:>5g} {row['harmful_rate']:>8.2f} {row['benign_rate']:>7.2f}"
                 f" {row['gap']:>6.2f} {row['genuine_fraction']:>8.2f}"
                 f" {row['decoded_not_blocked']:>6} {row['blocked_on_content']:>5} {row['never_decoded']:>5}"
             )

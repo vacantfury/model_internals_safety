@@ -293,12 +293,19 @@ def test_the_benign_side_is_recoverable_for_offline_rethresholding(one_rung):
 
 def test_the_operating_point_is_recorded_not_left_implicit(one_rung):
     """`harmless_rate` is 1 - percentile/100 by construction, so a reader who
-    cannot see the percentile cannot tell a threshold from a finding."""
-    decode = one_rung["summary"]["decode"]
+    cannot see the percentile cannot tell a threshold from a finding.
 
-    assert decode["reading_percentile"] == 50.0
+    The docstring stated that invariant while the body asserted a literal 0.5,
+    so tuning the knob 50 -> 75 on evidence (`instrument_layer.md` §2.8) failed a
+    test whose stated subject was unaffected. Assert the relationship; the
+    knob's VALUE is pinned once, in `test_config.py`.
+    """
+    decode = one_rung["summary"]["decode"]
+    percentile = decode["reading_percentile"]
+
+    assert percentile is not None, "a run that hides its operating point is unreadable"
     if decode["licensed"]:
-        assert decode["harmless_rate"] == pytest.approx(0.5, abs=0.15)
+        assert decode["harmless_rate"] == pytest.approx(1.0 - percentile / 100.0, abs=0.15)
 
 
 def test_dry_run_plan_reports_zero_money_and_zero_judge_calls(sweep, tiny_guard_model):

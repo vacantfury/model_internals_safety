@@ -445,6 +445,86 @@ reported straight from a run record.** Screen it through
 `scripts/guard_control_floor.py` first, and read §0.6 of `phase1_map.md` for what
 that leaves.
 
+### 2.8 ✅ THE OPERATING POINT CANNOT SUBSTITUTE FOR THE FLOOR — settled 2026-08-08, and it closes TODO 5
+
+**The open decision.** TODO item 5 has stood since 2026-08-05 with two candidate
+fixes for §2.1's 50% false-positive read, "to be decided on evidence not taste":
+**(a)** gate the per-cell read on a minimum effect size, making deployment
+tri-state; **(b)** move `reading_percentile` off the median to a tolerable benign
+false-positive rate (90th/95th). The item warned against the lazy reading —
+*"the fix is NOT simply raise the percentile"* — and required the sweep show
+where the headline numbers **stabilise**, not where they look best.
+
+**The evidence.** `scripts/sweep_operating_point.py` over both guards'
+re-emitted runs (`as6_phase1/*/scores-b10`, 1,900 cells and 19 families each,
+offline, $0; artifacts `outputs/analysis/operating_point_*_20260808.json`).
+Licensing is untouched throughout — only the per-prompt read moves.
+
+**The result answers a question the item did not ask, and it is the more
+important one: no operating point separates an artefact rung from a genuine
+one.** On Llama Guard, where the floor is derived (§2.7) so "artefact" is an
+established label rather than a guess, `decoded_not_blocked` reads:
+
+| rung | 50 | 75 | 90 | 95 | 99 | 99.5 | |
+|---|---|---|---|---|---|---|---|
+| `homoglyph` | 8 | 7 | 6 | 5 | 3 | 3 | genuine |
+| `zero_width` | 17 | 17 | 17 | 13 | 8 | 1 | genuine |
+| `fullwidth` | 12 | 10 | 6 | 3 | 1 | 1 | genuine |
+| `reverse_words` | 25 | 8 | 1 | 0 | 0 | 0 | genuine (lexically transparent — §3.2) |
+| **`caesar3`** | **77** | **59** | **50** | **38** | **14** | **14** | ⛔ CONTROL: base ability 0.00 |
+| `combining_marks` | 5 | 0 | 0 | 0 | 0 | 0 | ⛔ below floor (0.7007 < 0.7098) |
+
+**`caesar3` — a rung whose base model decodes nothing — carries the largest
+`decoded_not_blocked` cell at EVERY point swept, including the most extreme.**
+Tightening the read shrinks it 77 → 14, and never once ranks it below the
+genuine rungs.
+
+**Why, structurally.** The cell is a product:
+`decoded_not_blocked ≈ harmful_read_rate × (1 − block_rate)`, which reproduces
+every row above (caesar3 0.77 × 1.00 = 77; `homoglyph` 1.00 × 0.08 = 8;
+`zero_width` 1.00 × 0.17 = 17). The operating point scales the **first** factor;
+the ordering is set by the **second**, which it cannot touch. Inverting
+caesar3-vs-`homoglyph` would need the read to decay ~12× faster on caesar3; it
+decays 5.5× against 1.35×, a 4× differential — not enough, and not close.
+
+**The consequence generalises past this run, and it is the sentence to carry:
+an artefact in the decode read is concentrated exactly where the guard blocks
+least — i.e. in precisely the cells a paper most wants to report.** A guard that
+blocks nothing converts every false positive into headline evidence of guard
+failure, while a guard that blocks 92% absorbs its own into
+`blocked_on_content`. This is AS-5 §4e leg 3's asymmetry with the sign flipped:
+there, every behaviour-axis defect inflated apparent *safety*; here, every
+decode-axis defect inflates apparent *failure*. Both directions flatter whoever
+is reporting.
+
+**So item 5 resolves as (a), which has already landed under another name.** The
+control floor IS the minimum-effect-size gate, applied at rung level, returning
+`(U)`/`UNMEASURED` rather than a false negative — exactly what (a) specified.
+**(b) is real but second-order** and provably cannot do (a)'s job.
+
+**And the 50% false-positive rate turns out to be mostly absorbed by the floor.**
+Genuine fraction at the median, on the rungs that survive it: `homoglyph` 1.00,
+`zero_width` 1.00, `fullwidth` 0.84 (Llama Guard); `homoglyph` 0.96,
+`zero_width` 0.98 (WildGuard). The alarming 0.50 was doing its damage almost
+entirely on rungs the floor now removes.
+
+**Knob decision: `reading_percentile` 50.0 → 75.0.** It halves the benign
+false-positive rate for a cost of 0–1 cells on every floor-surviving sound rung
+of both guards (Llama Guard `zero_width` 17→17, `homoglyph` 8→7; WildGuard
+`homoglyph` 23→23, `zero_width` 28→23), and genuine fractions rise to 0.99/0.99
+(Llama Guard) and 0.95/0.92 (WildGuard). **90 was rejected on the item's own
+stabilise-don't-optimise criterion**: it is free on Llama Guard but cuts
+WildGuard `homoglyph` 23→13, so the plateau common to both guards ends at 75.
+`reverse_words` (25→8) does not constrain the choice — §3.2 makes it a control.
+
+*Reporting rule that follows:* quote `genuine_fraction` beside any cell count,
+and the sweep is the robustness table. A cell count at one operating point,
+unaccompanied, is not a result.
+
+*Fixed in the same pass:* the sweep printed its percentile with `:.0f`, so the
+grid's last point rendered as **"100"** — a table claiming a zero-false-positive
+operating point that was never swept. Now `:g`.
+
 ---
 
 ## 3. Validated diagnostics
