@@ -16,7 +16,9 @@ from internals_safety.guards.prompts import (
 from internals_safety.guards.verdict import (
     VerdictReading,
     read_verdicts,
+    label_mass_from_logits,
     verdict_format_health,
+    verdict_probability,
 )
 
 __all__ = [
@@ -27,5 +29,7 @@ __all__ = [
     "render_guard_prompt",
     "resolve_verdict_tokens",
     "verdict_context",
+    "label_mass_from_logits",
     "verdict_format_health",
+    "verdict_probability",
 ]

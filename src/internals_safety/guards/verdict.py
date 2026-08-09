@@ -80,6 +80,54 @@ class VerdictReading:
         return self.p_unsafe + self.p_safe
 
 
+def verdict_probability(logits: torch.Tensor, tokens: VerdictTokens) -> float:
+    """Mean P(unsafe), RENORMALISED over the two labels, from final-position logits.
+
+    The logits-shaped sibling of `VerdictReading.unsafe`, and it lives HERE rather
+    than in the causal layer because what a verdict means is this module's
+    business. The causal path needs a scalar computed from the same logits it
+    hands to `kl_divergence`, which `read_verdicts` cannot supply — it returns
+    per-prompt readings, not the tensor. Two call shapes, one definition; their
+    agreement is pinned by test rather than assumed.
+
+    **Renormalised, not raw mass.** The template has already committed the guard
+    to answering, so the quantity of interest is P(unsafe | it answers). Raw
+    softmax mass would let an intervention that merely diffuses probability
+    across unrelated tokens read as "less unsafe" while the guard's preference
+    between its own two labels never moved — and diffusing the distribution is
+    exactly what an over-strong ablation does. The denominator removes that.
+
+    **Consequence, stated because it is load-bearing:** this score cannot see
+    distributional damage, so in the causal criteria the KL-on-benign term is the
+    only thing separating a real direction from one that simply breaks the model.
+    Do not drop the KL gate for guards.
+    """
+    probabilities = torch.softmax(logits[:, -1, :].float(), dim=-1)
+    unsafe = probabilities[:, tokens.unsafe_id]
+    safe = probabilities[:, tokens.safe_id]
+    total = unsafe + safe
+    # Fail loud rather than dividing by ~0. An empty denominator means the logits
+    # were read where the guard was not about to answer, which is the defect that
+    # once reported a guard blocking 98% as blocking 0.00 — a bug, not a verdict.
+    if float(total.min()) <= 0.0:
+        raise ValueError(
+            "no probability mass on either label — logits read at the wrong position; "
+            "check verdict_prefix and see verdict_format_health"
+        )
+    return float((unsafe / total).mean())
+
+
+def label_mass_from_logits(logits: torch.Tensor, tokens: VerdictTokens) -> float:
+    """Mean total mass on the two labels — the read-position health check.
+
+    `VerdictReading.label_mass` one call shape over, for the same reason as
+    above. Near 1.0 means the read is at the right place; near 0 means every
+    verdict number from that pass is noise.
+    """
+    probabilities = torch.softmax(logits[:, -1, :].float(), dim=-1)
+    return float((probabilities[:, tokens.unsafe_id] + probabilities[:, tokens.safe_id]).mean())
+
+
 @torch.inference_mode()
 def read_verdicts(
     loaded: LoadedModel,

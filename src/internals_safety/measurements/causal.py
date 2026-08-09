@@ -151,6 +151,17 @@ def _final_logits(
     return torch.cat(rows, dim=0)
 
 
+from internals_safety.config import GuardConfig
+from internals_safety.guards import (
+    VerdictTokens,
+    label_mass_from_logits,
+    render_guard_prompt,
+    resolve_verdict_tokens,
+    verdict_context,
+    verdict_probability,
+)
+
+
 @dataclass(frozen=True)
 class BehaviourProbe:
     """How one model KIND is rendered and scored. The seam that makes this
@@ -190,6 +201,75 @@ def refusal_probe(
         name="refusal_opening",
         render_and_read=lambda prompts: _final_logits(loaded, prompts, batch_size),
         score=lambda logits: refusal_probability(logits, refusal_token_ids),
+    )
+
+
+def guard_verdict_probe(loaded: LoadedModel, batch_size: int | None = None) -> BehaviourProbe:
+    """The content-guard probe: guard rendering PLUS verdict prefix, P(unsafe).
+
+    The rendering is the whole reason this exists as a separate probe. It goes
+    through `render_guard_prompt` and then `verdict_context`, which appends the
+    guard's own verdict prefix — so the final position the causal machinery reads
+    is the position where the guard is about to emit its label. Reusing the
+    generating-model renderer would put that read one position early on a guard
+    that emits two newlines first, and the resulting numbers would look ordinary
+    (`phase1_map.md` §5).
+
+    The token pair is resolved ONCE, against the first rendered context, and then
+    held fixed for every intervention. That is required for the comparison to
+    mean anything: P(unsafe) before and after ablation is only a difference if it
+    is the same token both times, which is the property `_check_id_stability`
+    exists to defend on the read path.
+    """
+    config = loaded.config
+    if not isinstance(config, GuardConfig):
+        raise TypeError(
+            f"guard_verdict_probe needs a GuardConfig, got {type(config).__name__}; "
+            "load the guard via config.load_guard_config"
+        )
+    size = batch_size or config.capture_batch_size
+
+    # Resolved from the FIRST REAL payload on first use, not from a dummy string
+    # and not per call. `resolve_verdict_tokens` takes the rendered prompt as
+    # context because a label's first token can depend on what precedes it, so a
+    # placeholder could resolve a different pair than the run actually reads. And
+    # resolving once matters more than it looks: P(unsafe) before and after
+    # ablation is a difference only if it is the same token both times.
+    resolved: dict[str, VerdictTokens] = {}
+
+    def render_and_read(payloads: Sequence[str]) -> torch.Tensor:
+        rendered = [render_guard_prompt(loaded.tokenizer, config, payload) for payload in payloads]
+        contexts = [verdict_context(config, text) for text in rendered]
+        if "tokens" not in resolved and rendered:
+            resolved["tokens"] = resolve_verdict_tokens(loaded.tokenizer, config, rendered[0])
+        rows: list[torch.Tensor] = []
+        for start in range(0, len(contexts), size):
+            chunk = contexts[start : start + size]
+            encoded = loaded.tokenizer(
+                chunk, return_tensors="pt", padding=True, add_special_tokens=False
+            )
+            inputs = {key: value.to(loaded.device) for key, value in encoded.items()}
+            with torch.inference_mode():
+                logits = loaded.model(**inputs).logits
+            rows.append(logits[:, -1:, :].float().cpu())
+        if not rows:
+            raise ValueError("no payloads supplied")
+        return torch.cat(rows, dim=0)
+
+    def _tokens() -> VerdictTokens:
+        if "tokens" not in resolved:
+            raise RuntimeError(
+                "verdict tokens are resolved on the first render_and_read call; "
+                "score() was reached without one, which means the probe was used "
+                "out of order"
+            )
+        return resolved["tokens"]
+
+    return BehaviourProbe(
+        name="guard_unsafe_verdict",
+        render_and_read=render_and_read,
+        score=lambda logits: verdict_probability(logits, _tokens()),
+        health=lambda logits: label_mass_from_logits(logits, _tokens()),
     )
 
 
