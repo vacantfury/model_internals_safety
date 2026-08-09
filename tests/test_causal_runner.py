@@ -111,7 +111,14 @@ class TestAnEmptyFilterIsDiagnosable:
     """
 
     def llama_shaped(self, kl=9.9, induce=0.2):
-        """The real run's numbers: a direction that removes 78% of refusal."""
+        """The real run's SHAPE — a direction that clears the bypass bar easily.
+
+        `behaviour_before` and the margin are the run's recorded values; the
+        bypass is set to the margin, which assumes the random ensemble's mean
+        bypass is ~0. That assumption is exactly what the old record could not
+        confirm (it persisted no observed statistic), so this is a fixture
+        modelling the case, not a replay of measured values.
+        """
         return CausalEvidence(
             layer=16,
             position="instruction_final",

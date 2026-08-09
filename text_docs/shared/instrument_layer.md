@@ -2058,17 +2058,26 @@ Under the pre-fix `reading()` that was documented to mean *"no direction is
 causally effective"*. It does not mean that, and the generating-model run is what
 proves it:
 
-| Run | Model | `behaviour_before` | best bypass over null | implied bypass fraction | `n_eligible` |
-|---|---|---|---|---|---|
-| 9008632 | Llama-3.1-8B-Instruct | 0.949 | **+0.737** | ~0.78 | 0 |
-| 9033528 | Llama Guard 3 8B | 0.974 | +0.023 | ~0.02 | 0 |
+| Run | Model | `behaviour_before` | best bypass over the null mean | `n_eligible` |
+|---|---|---|---|---|
+| 9008632 | Llama-3.1-8B-Instruct | 0.949 | **+0.737** | 0 |
+| 9033528 | Llama Guard 3 8B | 0.974 | +0.023 | 0 |
 
-The generating-model row is a **positive control failing**. A direction whose
-ablation removes roughly three quarters of the model's refusal — beating all 20
-matched-norm random directions, p = 0.048 — was discarded, while our own bypass
-bar is 0.5. So the bypass criterion did not reject it; a *secondary* criterion
-did (KL > 0.1 or induce < 0), and **the run record could not say which**, because
-`is_discarded` returned a bare bool.
+The generating-model row is a **positive control failing**. Its direction beat
+all 20 matched-norm random directions (p = 0.048) and exceeded their mean bypass
+by 0.737, on a refusal baseline of 0.949.
+
+⚠️ **The absolute bypass fraction is INFERRED, not recorded** — the old record
+persisted the margin and not the observed statistic, which is defect 2 below.
+What the margin does establish, without assuming anything: for the bypass
+criterion to have been the rejecting one, the observed bypass would have to be
+under 0.474 (half of 0.949), which requires the random ensemble's mean bypass to
+be **≤ −0.263** — i.e. ablating an arbitrary matched-norm direction would have to
+*raise* refusal by a quarter. That is not a property any matched-norm null is
+expected to have, and it would be a striking finding in its own right. So the
+rejecting criterion is almost certainly *secondary* — KL > 0.1 or induce < 0 —
+and **the run record could not say which**, because `is_discarded` returned a
+bare bool. The next run measures it instead of inferring it.
 
 **Why this matters more than the guard number it was run to produce.** The guard
 row is the reading AS-6 commissioned, and on its own it looked like the paper's
