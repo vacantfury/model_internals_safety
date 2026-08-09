@@ -1,0 +1,76 @@
+# The causal gate's POSITIVE CONTROL, re-run to read its attrition.
+#
+# Runs 9007219 / 9008632 (this model) and 9033528 (Llama Guard) all returned
+# `n_eligible: 0`. On THIS model that empty set is a positive control failing:
+# the best candidate beat all 20 matched-norm random directions (p = 0.048) and
+# exceeded their mean bypass by 0.737 on a refusal baseline of 0.949. For the
+# bypass criterion to have been the one rejecting it, random matched-norm
+# ablation would have to RAISE refusal by 0.263 — so a secondary criterion
+# (KL > 0.1, or induce < 0) rejected every candidate, and the record could not
+# say which, because `is_discarded` returned a bare bool.
+#
+# `discard_reason` now names the criterion and the reading persists per-candidate
+# rows (`instrument_layer.md` §6.3.2). This run reads them.
+#
+# ⚠️ DELIBERATELY IDENTICAL to 9008632 in every knob that touches the gate —
+# same target, same n_prompts, same instruments, and the preset schema is CLOSED
+# so `max_sweep_layers` cannot be varied from here even if it were tempting. The
+# sparse-sweep hypothesis is a SEPARATE test; changing the grid and the
+# instrumentation in one run would confound the two explanations it exists to
+# tell apart.
+entrypoint: phase0_regime_map
+description: >-
+  Re-run the causal gate on Llama-3.1-8B-Instruct with attrition recording, to
+  read WHICH criterion rejected every candidate on a model where the
+  intervention demonstrably works.
+
+gates: >-
+  Whether the causal gate can be trusted at all, and therefore whether any
+  causal sentence may appear in either paper. It currently returns the same
+  "nothing survives" on a positive control as on the AS-6 guard, so the guard
+  reading is uninterpretable and AS-6's Limitations item stands.
+
+  If attrition is dominated by KL, the 0.1 threshold is rejecting directions for
+  collateral damage on harmless prompts, and the build question is whether a
+  low-KL direction exists anywhere in a wider sweep — we test 14 cells where
+  Arditi et al. sweep ~96, so the next move is raising `max_sweep_layers` in
+  `conf/measurements.yaml` and re-running. That is a config change plus one job.
+
+  If attrition is dominated by INDUCE, activation addition is not raising
+  refusal on harmless prompts, which points at the addition coefficient or at a
+  sign convention rather than at the sweep, and the fix is in the intervention
+  code rather than the grid.
+
+  If attrition is dominated by BYPASS, the inference above is wrong, the random
+  ensemble behaves in a way no matched-norm null should, and the null itself is
+  the thing to debug before anything else.
+
+  Each answer names a different next build, which is why this runs before any
+  wider sweep rather than after one.
+
+target: llama3_1_8b_instruct
+
+# ONE rung, and which one does not matter: the causal gate is MODEL-level — it
+# is fit on the plain contrast sets and runs once between the plain captures and
+# the family loop, so the rungs cost per-rung passes only and exist because the
+# entrypoint requires a family loop. `homoglyph` is the echo-clean rung on all
+# four models, so the incidental map it produces is at least sound.
+families: [homoglyph]
+
+n_prompts: 100
+
+# `lexical` is MANDATORY (`deployment.REQUIRED_CONTROLS`) or every decode
+# reading is withheld. `causal_license` is the point of the run.
+instruments: [causal_license, lexical]
+run_name: causal-attrition-diagnostic
+
+# One rung instead of three, so it is well under the four hours 9008632 was
+# given. The wall stays generous rather than tight: this run gates whether two
+# papers may make any causal claim, and a wall kill would cost a queue cycle to
+# learn nothing.
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "02:00:00"
