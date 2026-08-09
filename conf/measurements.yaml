@@ -248,7 +248,37 @@ causal_license:
   # embedding (measured 2026-08-06 — the whole sweep came back degenerate). Each
   # candidate is three passes over both prompt sets, so raising this raises the
   # price linearly and --dry-run shows it.
-  max_sweep_layers: 8
+  #
+  # ⚠️ RAISED 8 → 32 on 2026-08-09, by measurement (`instrument_layer.md` §6.3.3),
+  # after the value cost three runs a usable causal reading. At 8 the derived
+  # stride on a 32-layer model is 4, so the gate saw 7 of 25 eligible layers × 2
+  # positions = 13 cells — ~15% of the ~96 Arditi et al. sweep — while keeping
+  # their filter. Every one of those cells was rejected on all three runs, and
+  # job 9034250's attrition showed why: the only directions that bypass at all
+  # sit at position `last` (the BEHAVIOUR position, §3.1), whose broad effect
+  # blows the KL criterion at 0.868 against 0.1. A selective direction, if one
+  # exists, is at a layer the stride-4 grid never visited.
+  #
+  # 32 makes the stride 1 on any model up to 40 layers, i.e. every eligible
+  # layer. This is the move that is STRICTLY PRIOR to touching `kl_threshold`:
+  # relaxing a criterion to make a result appear is the operating-point failure
+  # this repo has recorded twice, and it has no empirical basis until a full
+  # sweep has been tried and also come back empty.
+  #
+  # Cost consequence, stated because it is global: every preset carrying
+  # `causal_license` pays more in its causal stage — `causal_sweep`,
+  # `guard_causal_llama_guard` and `causal_attrition_diagnostic` today.
+  # MEASURED at n=100, not guessed: 11,200 -> 21,400 forward passes, i.e. 1.9x,
+  # NOT the ~4x the candidate count alone suggests. The 20-direction random null
+  # (6,000 passes) and the two baselines are fixed cost and do not scale with
+  # the sweep, so candidate count over-predicts. --dry-run prices it per preset.
+  #
+  # ⚠️ `cost_model.py` UNDER-prices this stage and will keep doing so: the causal
+  # sweep is pure prefill, and `prefill_tokens_per_s` is the one knob
+  # `conf/cost.yaml` still flags as assumed rather than measured — it reads
+  # 0.00-0.01 GPU-h for 21,400 passes. Estimate this stage from a comparable
+  # RUN instead (job 9034250: 11,200 passes, ~12 min of a 27:33 job).
+  max_sweep_layers: 32
 
 # ---------------------------------------------------------------------------
 # The negative-control battery's knobs.

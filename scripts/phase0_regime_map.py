@@ -212,7 +212,7 @@ MANDATORY_JUDGE_CONTROL = "behavior_control"
 # FAIL-SAFE DEFAULT — the live value is `causal_license.max_sweep_layers` in
 # conf/measurements.yaml, and every real call passes it. Kept so `Plan` is
 # constructible in a test without a config in hand.
-MAX_CAUSAL_LAYERS = 8  # config: measurements.causal_license.max_sweep_layers
+MAX_CAUSAL_LAYERS = 32  # config: measurements.causal_license.max_sweep_layers
 
 # `PLAIN_FAMILY` and `plain_arm` are imported from the spine, not defined here.
 # They moved on 2026-08-09 after `encoding_ablation.py` hand-rolled a second

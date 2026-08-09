@@ -546,7 +546,7 @@ def reading(
 
 
 # FAIL-SAFE DEFAULT — the live value is `causal_license.max_sweep_layers`.
-MAX_CAUSAL_LAYERS = 8  # config: measurements.causal_license.max_sweep_layers
+MAX_CAUSAL_LAYERS = 32  # config: measurements.causal_license.max_sweep_layers
 
 
 def causal_candidate_cells(
