@@ -837,27 +837,50 @@ stage's arms paired inside its own job.
 
 **Benign refusal falls monotonically across all three stages on all three rungs,
 and the harm gap rises monotonically, while harmful refusal stays roughly flat.**
-So each post-training stage buys back benign utility under encoding rather than
-adding refusal — the gap grows from the bottom, not the top. That is a
-dose-response along a *published* recipe whose data is public, which is the thing
-no cross-family comparison can offer.
+
+⚠️ **AND THAT IS NOT A RESULT ABOUT ENCODING — the re-run with a plaintext arm
+(jobs `9027721`–`9027723`) showed the same fall happens in PLAINTEXT.** Plaintext
+benign refusal goes 0.45 → 0.17 → 0.16 across the same stages, which is Tülu 3's
+CoCoNot contrastive data doing what its paper says it does; the encoded condition
+inherited it. In the paper's own currency — gap lost relative to plaintext —
+there is no trend on any rung (`fullwidth` −0.43/−0.50/−0.38, `homoglyph`
+−0.35/−0.50/−0.34, `zero_width` −0.45/−0.36/−0.34), non-monotone on two.
+
+**What survives is a null on a published recipe, and it is stronger than the
+trend it replaces:** the complete SFT→DPO→RLVR pipeline moves plaintext harm
+discrimination +0.55 → +0.80 and leaves the encoding-induced loss unchanged at
+0.34–0.50. **The standard safety pipeline is blind to this failure mode.** Full
+record: `../as5/evidence_and_story.md` §4e.
+
+**The reading rule this cost.** Every number in the table above is an ENCODED
+number, and an encoded series alone cannot distinguish "the encoding penalty
+changed" from "the model changed". That is the paper's own thesis — an encoded
+rate is uninterpretable without its plaintext denominator — and this section
+committed it as an error the same morning the thesis was settled.
 
 **Cross-job replication of the endpoint.** `homoglyph` benign refusal at RLVR
 reads **0.48** here and **0.48** in the independent `plain_baseline_tulu3` job
 (`9012070`, different preset, different session) — the same checkpoint measured
 twice at n=100 landing on the same value.
 
-**The SFT checkpoint behaves like Llama-3.1-8B-Instruct and the DPO checkpoint
-like Qwen2.5-7B.** SFT refuses benign encoded content at 0.79–0.91 — near-blanket,
-the saturation §3.6 found on Llama — and DPO drops that to 0.43–0.63 while
-harmful refusal falls much less, so the gap roughly doubles. The Llama/Qwen
-difference was never about the families; it is about what DPO does that SFT does
-not.
+⚠️ ~~**The SFT checkpoint behaves like Llama-3.1-8B-Instruct and the DPO
+checkpoint like Qwen2.5-7B.**~~ **FALSIFIED at both sites by the same re-run,
+and kept struck-through because it is the cleanest example of the error the
+paper is about.** The claim was: SFT refuses benign encoded content at 0.79–0.91,
+matching the saturation §3.6 found on Llama, so the Llama/Qwen difference is
+really about what DPO does. **The two match only on the ENCODED arm.** Llama's
+encoding-induced benign excess is **+0.89**; SFT's is **+0.34**, and SFT already
+refuses **0.45** of benign *plaintext* where Llama refuses 0.10. They are not the
+same model behaviour — one over-refuses everything, the other over-refuses
+encodings — and the resemblance was an artefact of comparing encoded rates with
+no plaintext denominator.
 
-**Ability does not explain it, and one rung settles that internally.** On
-`fullwidth` ability is flat at 0.99 across both stages while refusal moves
-0.96 → 0.73 and benign refusal 0.80 → 0.45. Comprehension is constant; only what
-the model does with it changed.
+**Ability does not explain the encoded movement either, though this one is
+narrower than it looked.** On `fullwidth` ability is flat at 0.99 across stages
+while encoded refusal moves 0.96 → 0.73 and encoded benign refusal 0.80 → 0.45,
+so comprehension is constant while behaviour changes. What that rules out is an
+*ability* explanation; it does not make the change encoding-specific, which is
+what the plaintext arm settled above.
 
 **The ability threshold from §3.8 reproduces on a third and fourth model**: every
 rung with ability ≤ 0.03 blanket-refuses both arms at 0.97–1.00 with a gap inside
