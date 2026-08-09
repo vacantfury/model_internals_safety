@@ -35,6 +35,7 @@ import pytest
 
 from internals_safety import pipeline, provenance
 from internals_safety.measurements import (
+    causal,
     control_floor,
     deployment,
     length_null,
@@ -72,6 +73,22 @@ WATCHED = {
     # Keyed by the LOCAL alias — all four scripts import it as this name.
     "derive_control_floor": control_floor.derive,
     "sigma_bounds": control_floor.sigma_bounds,
+    # Added 2026-08-09, sixth application of the trigger. `refusal_token_ids`
+    # positional became `probe: BehaviourProbe` keyword-only with no default,
+    # because the causal test now serves two model KINDS that render and score
+    # differently. A stale positional call would pass a token-id list where a
+    # probe belongs; more dangerously, a DEFAULT would have let the guard
+    # entrypoint silently score a generating model's refusal opening at a
+    # position a guard never answers at. `run_causal_gate` moved out of
+    # phase0_regime_map.py into the library in the same change, so BOTH
+    # entrypoints call it and both are checked here.
+    # `measure_causal_evidence` is deliberately NOT here, and the watchlist's own
+    # vacuity guard is what said so: after the move, no script calls it directly
+    # — both entrypoints reach it through `run_causal_gate`. Same reasoning as
+    # `scored_positions` above. Watching it would have passed vacuously.
+    "run_causal_gate": causal.run_causal_gate,
+    "guard_verdict_probe": causal.guard_verdict_probe,
+    "refusal_probe": causal.refusal_probe,
 }
 
 

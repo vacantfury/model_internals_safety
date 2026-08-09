@@ -65,13 +65,16 @@ import torch
 from internals_safety.config import CausalLicenseConfig
 from internals_safety.measurements.causal_license import (
     CausalEvidence,
+    RandomDirectionNull,
     kl_divergence,
+    matched_norm_random_direction,
+    random_direction_null,
     refusal_probability,
 )
 from internals_safety.measurements.contract import Kind, Reading
 from internals_safety.models.interventions import ablate_direction, add_direction
 from internals_safety.models.loader import LoadedModel, prepare_prompts
-from internals_safety.probes.directions import Direction
+from internals_safety.probes.directions import Direction, difference_in_means
 
 # P1 — checked across the roster by `assert_distinct_questions`.
 QUESTION = "does intervening on this direction change the model's refusal behaviour"
@@ -455,4 +458,136 @@ def reading(
             "n_harmless": run.n_harmless,
             "null_p_value": null_p_value,
         },
+    )
+
+
+# FAIL-SAFE DEFAULT — the live value is `causal_license.max_sweep_layers`.
+MAX_CAUSAL_LAYERS = 8  # config: measurements.causal_license.max_sweep_layers
+
+
+def causal_candidate_cells(
+    batch, prune_layer_percentage: float, max_layers: int = MAX_CAUSAL_LAYERS
+) -> list[tuple[int, str]]:
+    """(layer, position) cells the gate sweeps, capped and pruned up front.
+
+    The filter discards the last `prune_layer_percentage` of layers anyway, so
+    sweeping them buys candidates that cannot survive. Pruning HERE as well as in
+    the filter is deliberate — the filter is the correctness boundary and this is
+    the cost boundary, and a caller reading only one of them still gets a correct
+    answer.
+
+    The stride is DERIVED from the depth so that at most `max_layers` are swept,
+    rather than fixed. A fixed stride is the same cost knob only when the model
+    has the depth it was chosen for; at 3 layers it selected layer 0 alone, whose
+    `resid_pre` is the raw embedding before any computation.
+    """
+    eligible = list(batch.layers[: int(len(batch.layers) * (1.0 - prune_layer_percentage))])
+    if not eligible:
+        return []
+    stride = max(1, -(-len(eligible) // max_layers))
+    return [(layer, position) for layer in eligible[::stride] for position in batch.positions]
+
+
+def run_causal_gate(
+    loaded: LoadedModel,
+    plain_harmful_batch,
+    plain_harmless_batch,
+    harmful_prompts: Sequence[str],
+    harmless_prompts: Sequence[str],
+    *,
+    probe: BehaviourProbe,
+    measurements,
+    batch_size: int,
+) -> Reading:
+    """The upstream causal gate — which direction may be used at all.
+
+    ⚠️ **Moved out of `scripts/phase0_regime_map.py` on 2026-08-09, and the move
+    IS the point.** It lived in the AS-5 entrypoint, so the guard entrypoint
+    could not reach it, and the only alternatives were to copy ~100 lines or to
+    ship a guard paper whose central quantity has no causal test. Both are the
+    failures this repo already documents — dual truth, and an instrument built
+    but unreachable. `pipeline_architecture.md` §3.5's selection rule decides it:
+    the spine holds anything whose absence in ONE script would be a defect.
+
+    TODO 28, from Arditi et al. (NeurIPS 2024): probe licensing is correlational,
+    and a permutation test structurally cannot distinguish a real separation from
+    the RIGHT separation. A direction separating harmful from benign by character
+    length passes it — and one did, on 12 of 15 rungs. It fails this: removing
+    "how long is this prompt" from the residual stream does not make a model
+    comply, and does not make a guard stop flagging.
+
+    `probe` is keyword-only with no default so the gate cannot silently score a
+    generating model's refusal on a content guard: the two read different tokens
+    at positions produced by different renderers.
+    """
+    config = measurements.causal_license
+    cells = causal_candidate_cells(
+        plain_harmful_batch, config.prune_layer_percentage, config.max_sweep_layers
+    )
+    swept = [
+        difference_in_means(plain_harmful_batch, plain_harmless_batch, layer, position)
+        for layer, position in cells
+    ]
+    # A cell where the two classes coincide yields a ZERO vector, which cannot be
+    # ablated. Dropping those here keeps the failure a coverage number rather
+    # than an exception raised inside a forward hook.
+    candidates = viable_directions(swept)
+    n_degenerate = len(swept) - len(candidates)
+    if not candidates:
+        return unmeasured_reading(
+            config,
+            f"all {len(swept)} candidate cells were degenerate — the contrast sets "
+            "do not separate anywhere in the swept range, so no direction exists "
+            "to intervene on",
+        )
+
+    run = measure_causal_evidence(
+        loaded,
+        candidates,
+        harmful_prompts,
+        harmless_prompts,
+        probe=probe,
+        coefficient=config.addition_coefficient,
+        batch_size=batch_size,
+    )
+
+    # The negative control: the SAME intervention on matched-norm random
+    # directions at the best candidate's own cell, so the comparison holds the
+    # site fixed and moves only the direction.
+    null: RandomDirectionNull | None = None
+    if config.n_random_directions > 0 and run.evidence:
+        best = max(run.evidence, key=lambda evidence: evidence.bypass_score)
+        anchor = next(c for c in candidates if (c.layer, c.position) == (best.layer, best.position))
+        generator = torch.Generator(device="cpu").manual_seed(measurements.probes.seed)
+        # ONE call with every random direction, not one call each: they all sit
+        # at the anchor's cell, so a single call shares the two baselines instead
+        # of recomputing them N times.
+        random_run = measure_causal_evidence(
+            loaded,
+            [
+                Direction(
+                    vector=matched_norm_random_direction(anchor.vector, generator),
+                    layer=anchor.layer,
+                    position=anchor.position,
+                    n_positive=anchor.n_positive,
+                    n_negative=anchor.n_negative,
+                    raw_norm=anchor.raw_norm,
+                )
+                for _ in range(config.n_random_directions)
+            ],
+            harmful_prompts,
+            harmless_prompts,
+            probe=probe,
+            coefficient=config.addition_coefficient,
+            batch_size=batch_size,
+        )
+        null = random_direction_null(best, random_run.evidence, alpha=measurements.probes.alpha)
+
+    return reading(
+        run,
+        config,
+        n_layers=len(plain_harmful_batch.layers),
+        null_margin=None if null is None else null.margin,
+        null_p_value=None if null is None else null.p_value,
+        n_degenerate=n_degenerate,
     )

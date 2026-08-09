@@ -108,6 +108,8 @@ from internals_safety.measurements.recognition import (
     read_recognition_per_prompt,
 )
 from internals_safety.measurements.causal import (
+    causal_candidate_cells,
+    run_causal_gate,
     forward_passes as causal_forward_passes,
     measure_causal_evidence,
     refusal_probe,
@@ -164,6 +166,7 @@ from internals_safety.pipeline import (
     load_contrast_sets,
     plain_arm,
     resolve_run_paths,
+    scaffold_arm,
     run_families,
     run_lexical_control,
     select_known,
@@ -427,6 +430,28 @@ class Plan:
         return behavior_control_judge_calls(self.n_prompts, len(self.families))
 
     @property
+    def scaffold_control_generations(self) -> int:
+        """Generations THE SCAFFOLD CONTROL adds — both arms, PER RUNG.
+
+        ⚠️ Per-rung, and that is the expensive property: the scaffold is not
+        shared across the ladder because the registry bakes each family's
+        `encoding_name` into its template, so this scales with the sweep exactly
+        as the encoded arm does. On a 15-rung ladder it is 3,000 generations at
+        n=100, which is why the estimate says it out loud rather than letting it
+        appear as a wall-clock surprise.
+
+        Priced unconditionally, like measurement #4's benign arm and for the
+        same reason: a control the estimate cannot see is a cost nobody
+        approved.
+        """
+        return 2 * len(self.families) * self.n_prompts
+
+    @property
+    def scaffold_control_judge_calls(self) -> int:
+        """Two judges over both scaffold arms."""
+        return 2 * self.scaffold_control_generations
+
+    @property
     def lexical_capture_passes(self) -> int:
         """Passes the XSTest control adds — the corpus once, MODEL-level.
 
@@ -482,6 +507,11 @@ class Plan:
                 f"  lexical passes      {self.lexical_capture_passes} "
                 "(XSTest control, corpus captured ONCE per model — the deployment "
                 "probe is plain-fitted, so it is the same probe for every rung)",
+                f"  scaffold control    {self.scaffold_control_generations} generations + "
+                f"{self.scaffold_control_judge_calls} judge calls (MANDATORY, PER RUNG — "
+                "plaintext content inside each rung's attack wrapper; without it an "
+                "encoded refusal rate cannot be attributed to the encoding rather than "
+                "to announcing one. Scales with the ladder, unlike the plain baseline)",
                 f"  plain baseline      {self.plain_baseline_generations} generations + "
                 f"{self.plain_baseline_judge_calls} judge calls (MANDATORY, model-level — "
                 "the plaintext denominator every encoded refusal rate is read against; "
@@ -492,35 +522,6 @@ class Plan:
                 f"    uv run python scripts/cost_model.py --model {self.model}",
             ]
         )
-
-
-def causal_candidate_cells(
-    batch, prune_layer_percentage: float, max_layers: int = MAX_CAUSAL_LAYERS
-) -> list[tuple[int, str]]:
-    """(layer, position) cells the gate sweeps, capped and pruned up front.
-
-    The filter discards the last `prune_layer_percentage` of layers anyway, so
-    sweeping them buys candidates that cannot survive. Pruning HERE as well as in
-    the filter is deliberate — the filter is the correctness boundary and this is
-    the cost boundary, and a caller reading only one of them still gets a correct
-    answer.
-
-    The stride is DERIVED from the depth so that at most `max_layers` are swept,
-    rather than fixed. A fixed stride is the same cost knob only when the
-    model has the depth it was chosen for; at 3 layers it selected layer 0 alone,
-    whose `resid_pre` is the raw embedding before any computation.
-    """
-    eligible = list(batch.layers[: int(len(batch.layers) * (1.0 - prune_layer_percentage))])
-    if not eligible:
-        return []
-    stride = max(1, -(-len(eligible) // max_layers))
-    return [
-        (layer, position)
-        for layer in eligible[::stride]
-        for position in batch.positions
-    ]
-
-
 
 
 def run_plain_behavior_baseline(
@@ -606,108 +607,6 @@ def run_plain_behavior_baseline(
             detail={"family": PLAIN_FAMILY, "n": harmful_summary.n, **detail},
         ),
         detail,
-    )
-
-
-def run_causal_gate(
-    loaded,
-    plain_harmful_batch,
-    plain_harmless_batch,
-    harmful_prompts: Sequence[str],
-    harmless_prompts: Sequence[str],
-    model_config: ModelConfig,
-    measurements: MeasurementsConfig,
-) -> Reading:
-    """The upstream causal gate — which direction may be used at all.
-
-    TODO 28, from reading Arditi et al. (NeurIPS 2024): our probe licensing is
-    correlational, and a permutation test structurally cannot distinguish a real
-    separation from the RIGHT separation. A direction separating harmful from
-    benign by character length passes it — and one did, on 12 of 15 rungs. It
-    fails this: removing "how long is this prompt" from the residual stream does
-    not make a model comply.
-
-    The random-direction null runs the identical intervention on matched-norm
-    random directions, because without it "steering worked" and "perturbing
-    anything by this much worked" are the same observation.
-    """
-    config = measurements.causal_license
-    cells = causal_candidate_cells(
-        plain_harmful_batch, config.prune_layer_percentage, config.max_sweep_layers
-    )
-    swept = [
-        difference_in_means(plain_harmful_batch, plain_harmless_batch, layer, position)
-        for layer, position in cells
-    ]
-    # A cell where the two classes coincide yields a ZERO vector, which cannot be
-    # ablated. Dropping those here keeps the failure a coverage number rather
-    # than an exception raised inside a forward hook.
-    candidates = viable_directions(swept)
-    n_degenerate = len(swept) - len(candidates)
-    if not candidates:
-        return unmeasured_reading(
-            config,
-            f"all {len(swept)} candidate cells were degenerate — the contrast sets "
-            "do not separate anywhere in the swept range, so no direction exists "
-            "to intervene on",
-        )
-    refusal_ids = resolve_refusal_tokens(loaded, model_config.refusal_openings)
-    # The generating-model probe. Built ONCE and shared with the null below, so
-    # the control cannot silently score a different quantity than the candidates.
-    probe = refusal_probe(loaded, refusal_ids, model_config.capture_batch_size)
-
-    run = measure_causal_evidence(
-        loaded,
-        candidates,
-        harmful_prompts,
-        harmless_prompts,
-        probe=probe,
-        coefficient=config.addition_coefficient,
-        batch_size=model_config.capture_batch_size,
-    )
-
-    # The negative control: the SAME intervention on matched-norm random
-    # directions at the best candidate's own cell, so the comparison holds the
-    # site fixed and moves only the direction.
-    null: RandomDirectionNull | None = None
-    if config.n_random_directions > 0 and run.evidence:
-        best = max(run.evidence, key=lambda evidence: evidence.bypass_score)
-        anchor = next(c for c in candidates if (c.layer, c.position) == (best.layer, best.position))
-        generator = torch.Generator(device="cpu").manual_seed(measurements.probes.seed)
-        # ONE call with every random direction, not one call each: they all sit
-        # at the anchor's cell, so a single call shares the two baselines instead
-        # of recomputing them 20 times — 40 redundant passes over both prompt
-        # sets, which the dry-run would then have to price for no information.
-        random_run = measure_causal_evidence(
-            loaded,
-            [
-                Direction(
-                    vector=matched_norm_random_direction(anchor.vector, generator),
-                    layer=anchor.layer,
-                    position=anchor.position,
-                    n_positive=anchor.n_positive,
-                    n_negative=anchor.n_negative,
-                    raw_norm=anchor.raw_norm,
-                )
-                for _ in range(config.n_random_directions)
-            ],
-            harmful_prompts,
-            harmless_prompts,
-            probe=probe,
-            coefficient=config.addition_coefficient,
-            batch_size=model_config.capture_batch_size,
-        )
-        null = random_direction_null(
-            best, random_run.evidence, alpha=measurements.probes.alpha
-        )
-
-    return causal_reading(
-        run,
-        config,
-        n_layers=len(plain_harmful_batch.layers),
-        null_margin=None if null is None else null.margin,
-        null_p_value=None if null is None else null.p_value,
-        n_degenerate=n_degenerate,
     )
 
 
@@ -949,6 +848,26 @@ def run_family(
     # run, so no ASR this repo has published was ever screened against it.
     benign_behavior_records = measure_behavior(
         loaded, encoded_harmless, refusal_judge, harm_judge, measurements.behavior
+    )
+
+    # THE SCAFFOLD CONTROL — both arms, plaintext content inside THIS rung's
+    # attack wrapper. MANDATORY, no flag, for the same reason the plaintext
+    # baseline is: without it an encoded refusal rate cannot be attributed to
+    # the encoding at all. The encoded condition moves two things at once, and
+    # until this runs, "the encoding destroys discrimination" and "announcing an
+    # encoding destroys discrimination" are the same measurement.
+    #
+    # Deliberately NOT behind `--instruments`. That is the TODO 61 lesson,
+    # stated once and now applied pre-emptively rather than after a year of
+    # unscreened numbers: a control that can be switched off is a control that
+    # was off when it mattered.
+    scaffold_harmful = scaffold_arm([item.plaintext for item in encoded_harmful], encoder)
+    scaffold_harmless = scaffold_arm([item.plaintext for item in encoded_harmless], encoder)
+    scaffold_behavior_records = measure_behavior(
+        loaded, scaffold_harmful, refusal_judge, harm_judge, measurements.behavior
+    )
+    scaffold_benign_behavior_records = measure_behavior(
+        loaded, scaffold_harmless, refusal_judge, harm_judge, measurements.behavior
     )
 
     # The length-MATCHED permutation null, from the exact ciphertexts this rung
@@ -1259,6 +1178,39 @@ def run_family(
             "benign_arm_n": behavior_control.n,
         }
 
+    # THE SCAFFOLD CONTROL's numbers. Reported as rates on both arms plus the
+    # harm gap they imply, so the three-way comparison the review asked for —
+    # plain, scaffold, encoded — is readable off one record without a join.
+    #
+    # No verdict is computed here on purpose. Whether the scaffold or the
+    # characters carry the effect is a claim about a MODEL, argued across the
+    # three conditions and against the plaintext baseline that lives at model
+    # level; a per-rung boolean would have to guess a threshold to say it, and
+    # this repo has paid four times for a threshold invented at the point of
+    # reporting. The numbers go in; the reading is made where all three are.
+    scaffold_detail: dict = {}
+    if scaffold_behavior_records and scaffold_benign_behavior_records:
+        scaffold_harmful_rate = sum(
+            r.refused for r in scaffold_behavior_records
+        ) / len(scaffold_behavior_records)
+        scaffold_benign_rate = sum(
+            r.refused for r in scaffold_benign_behavior_records
+        ) / len(scaffold_benign_behavior_records)
+        scaffold_detail = {
+            "scaffold_harmful_refusal_rate": scaffold_harmful_rate,
+            "scaffold_benign_refusal_rate": scaffold_benign_rate,
+            "scaffold_harm_gap": scaffold_harmful_rate - scaffold_benign_rate,
+            "scaffold_n_harmful": len(scaffold_behavior_records),
+            "scaffold_n_benign": len(scaffold_benign_behavior_records),
+            # Reported, never subtracted: on an unencoded arm `echoed_ciphertext`
+            # fires whenever the reply quotes the request, which is ordinary
+            # helpful behaviour rather than the parroting it detects on a real
+            # ciphertext. Same caveat as the plaintext baseline's echo rate.
+            "scaffold_echo_rate_uninterpretable": sum(
+                r.echoed_ciphertext for r in scaffold_behavior_records
+            ) / len(scaffold_behavior_records),
+        }
+
     # The XSTest lexical control, read at the cell this rung's deployment claim
     # is read at. Costs no forward pass here — the corpus was captured once at
     # model level and this is a logistic fit over activations already in hand.
@@ -1346,7 +1298,7 @@ def run_family(
             behavior_summary,
             length_null_margin=length_null.margin(behavior_summary.attack_success_rate),
             controls=behavior_screens,
-            detail=behavior_control_detail,
+            detail={**behavior_control_detail, **scaffold_detail},
         ),
         deployment_module.reading(
             curve,
@@ -1675,8 +1627,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 plain_harmless_batch,
                 [prompt.text for prompt in harmful],
                 [prompt.text for prompt in harmless],
-                model_config,
-                measurements,
+                # The generating-model probe: chat-template rendering, P(refusal
+                # opening). The guard entrypoint passes `guard_verdict_probe`
+                # here instead, which is the whole reason the gate moved into
+                # the library rather than being copied.
+                probe=refusal_probe(
+                    loaded,
+                    resolve_refusal_tokens(loaded, model_config.refusal_openings),
+                    model_config.capture_batch_size,
+                ),
+                measurements=measurements,
+                batch_size=model_config.capture_batch_size,
             )
         )
 

@@ -78,6 +78,11 @@ from internals_safety.encodings.base import Encoder
 from internals_safety.encodings.registry import load_ladder
 from internals_safety.guards.prompts import prepare_guard_prompts
 from internals_safety.guards.verdict import read_verdicts, verdict_format_health
+from internals_safety.measurements.causal import (
+    forward_passes as causal_forward_passes,
+    guard_verdict_probe,
+    run_causal_gate,
+)
 from internals_safety.measurements.deployment import (
     measure_deployment,
     read_deployment_per_prompt,
@@ -120,7 +125,7 @@ PHASE = "as6_phase1"
 # which means every AS-6 decode number before that date was non-reportable — not
 # wrong, unusable, and nothing said so because the entrypoint could not express
 # the control at all.
-OPTIONAL_INSTRUMENTS = ("lexical",)
+OPTIONAL_INSTRUMENTS = ("lexical", "causal_license")
 
 
 def capture_guard(
@@ -424,7 +429,41 @@ def run_family(
     return {"summary": summary, "cells": records}
 
 
-def describe_plan(config: GuardConfig, families: Sequence[str], n: int, device: str) -> str:
+def causal_passes(n_layers: int, positions: int, measurements, enabled: bool) -> tuple[int, int]:
+    """(candidate directions, forward passes) the causal gate adds. 0 when off.
+
+    Priced from `causal.forward_passes` and `causal.causal_candidate_cells`
+    rather than restated, so the number the approval gate is shown comes from
+    the same code that will run. The negative control is INCLUDED: the
+    random-direction null is a second sweep, it is not optional in the code, and
+    a cost estimate that omitted it under-reported the run — a mistake this repo
+    made once already on the AS-5 side.
+    """
+    if not enabled:
+        return 0, 0
+    config = measurements.causal_license
+    eligible = int(n_layers * (1.0 - config.prune_layer_percentage))
+    if eligible <= 0:
+        return 0, 0
+    stride = max(1, -(-eligible // config.max_sweep_layers))
+    candidates = len(range(0, eligible, stride)) * positions
+    passes = causal_forward_passes(candidates)
+    if config.n_random_directions:
+        passes += causal_forward_passes(config.n_random_directions)
+    return candidates, passes
+
+
+def describe_plan(
+    config: GuardConfig,
+    families: Sequence[str],
+    n: int,
+    device: str,
+    *,
+    # plumbing(causal): (candidates, pass-units) from `causal_passes`, which
+    # derives both from conf/measurements.yaml. (0, 0) means the gate is off —
+    # a disabled-stage sentinel, not a tunable.
+    causal: tuple[int, int] = (0, 0),
+) -> str:
     """The approval-gate estimate, printed before anything loads.
 
     Forward passes only: 2 capture passes per rung plus TWO verdict passes —
@@ -442,7 +481,12 @@ def describe_plan(config: GuardConfig, families: Sequence[str], n: int, device: 
     is the same count stated where the control lives.
     """
     per_rung = 4 * n
-    total = per_rung * len(families) + 2 * n
+    n_candidates, causal_pass_units = causal
+    # Each causal "pass" in `causal.forward_passes` is one sweep over a prompt
+    # SET, so it costs n prompts. Converting here rather than in the counter
+    # keeps that function comparable across entrypoints.
+    causal_total = causal_pass_units * n
+    total = per_rung * len(families) + 2 * n + causal_total
     return "\n".join(
         [
             f"guard          {config.name} ({config.hf_id})",
@@ -453,7 +497,18 @@ def describe_plan(config: GuardConfig, families: Sequence[str], n: int, device: 
             f"rungs          {len(families)}: {', '.join(families)}",
             f"prompts        {n} harmful + {n} benign",
             "",
-            f"forward passes {total} ({per_rung} per rung + {2 * n} plain, captured once)",
+            f"forward passes {total} ({per_rung} per rung + {2 * n} plain, captured once"
+            + (f" + {causal_total} causal)" if causal_total else ")"),
+        ]
+        + (
+            [
+                f"causal gate    {n_candidates} candidate directions x 3 passes + 2 baselines,"
+                f" plus the random-direction null",
+            ]
+            if causal_total
+            else []
+        )
+        + [
             "generations    0",
             "judge calls    0",
             "money          $0.00",
@@ -506,7 +561,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     device = resolve_device(config.device, allow_cpu_in_job=args.allow_cpu)
-    print(describe_plan(config, families, args.n_prompts, str(device)))
+    print(
+        describe_plan(
+            config,
+            families,
+            args.n_prompts,
+            str(device),
+            causal=causal_passes(
+                config.n_layers or 0,
+                len(config.capture.positions),
+                measurements,
+                enabled="causal_license" in instruments,
+            ),
+        )
+    )
     if args.dry_run:
         return 0
 
@@ -564,6 +632,34 @@ def main(argv: Sequence[str] | None = None) -> int:
             safe_cache=safe_cache,
             unsafe_cache=unsafe_cache,
         )
+
+    # ---- the causal gate, MODEL-level ---------------------------------------
+    # Runs ONCE, between the plain captures and the family loop, for the reason
+    # `causal.run_causal_gate` states: the direction is fit on plain harmful vs
+    # plain harmless, is identical for every rung, and gates which direction the
+    # downstream reads may use at all. Behind a flag rather than mandatory
+    # because it is the only stage here that costs real GPU time.
+    #
+    # The probe is the GUARD one — guard rendering plus verdict prefix, P(unsafe)
+    # renormalised over the two labels. Passing the generating-model probe would
+    # read a refusal opening at a position the guard never answers at.
+    causal_readings: list = []
+    if "causal_license" in instruments:
+        print("\nrunning the causal gate (ablate + add + random-direction null) ...", flush=True)
+        causal_readings.append(
+            run_causal_gate(
+                loaded,
+                plain_harmful_batch,
+                plain_harmless_batch,
+                [prompt.text for prompt in harmful],
+                [prompt.text for prompt in harmless],
+                probe=guard_verdict_probe(loaded),
+                measurements=measurements,
+                batch_size=config.capture_batch_size,
+            )
+        )
+        gate = causal_readings[0]
+        print(f"causal gate: licensed={gate.licensed} {gate.detail}", flush=True)
 
     plain_verdicts, _ = read_verdicts(loaded, [prompt.text for prompt in harmful])
     plain_block_rate = sum(v.unsafe for v in plain_verdicts) / len(plain_verdicts)
@@ -641,7 +737,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         },
         tree=tree,
     )
-    path = write_run_record(directory, record, readings)
+    path = write_run_record(directory, record, causal_readings + readings)
     print(f"\nwrote {path}")
     return 0
 
