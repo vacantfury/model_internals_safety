@@ -2121,14 +2121,76 @@ remains a genuine measured negative — pinned from both sides in
 `tests/test_causal_runner.py::TestAnEmptyFilterIsDiagnosable`, so the fix cannot
 swallow the finding it was protecting.
 
-**Two hypotheses for the attrition, both cheap to settle and NOT settled here.**
-(a) *KL is binding* — a direction strong enough to remove 78% of refusal moves
-the harmless distribution past the 0.1 threshold. (b) *The sweep is too sparse* —
+**Two hypotheses for the attrition, both cheap to settle.** (a) *KL is binding* —
+a direction strong enough to remove 78% of refusal moves the harmless
+distribution past the 0.1 threshold. (b) *The sweep is too sparse* —
 `max_sweep_layers: 8` over a 32-layer model gives a stride of 4, so we test 7
 layers × 2 positions = 14 cells where Arditi et al. sweep every layer × 3
-positions (~96). We cover ~15% of their grid and keep their filter, so drawing
-zero survivors is unsurprising. The next run resolves it by reading `attrition`
-— no code change needed, and no GPU needed beyond the run itself.
+positions (~96).
+
+#### 6.3.3 ✅ RESOLVED — the criterion is KL, and the direction that fails it is the BEHAVIOUR direction
+
+*Job `9034250`, 2026-08-09, 27:33 on one H200. The positive control re-run under
+the attrition instrumentation added the same day. Hypothesis (a) confirmed; (b)
+untested and still live.*
+
+**Attrition: `{kl: 9, bypass: 3, induce: 1}` of 13.** The single working
+candidate and its neighbours:
+
+| layer | position | bypass | fraction | induce | KL | rejected for |
+|---|---|---|---|---|---|---|
+| 12 | `last` | **0.7360** | **0.776** | **+0.375** | **0.868** | **kl** |
+| 8 | `last` | 0.3801 | 0.401 | +0.261 | 0.867 | kl |
+| 0 | `instruction_final` | 0.0089 | 0.009 | −0.001 | 0.017 | induce |
+| 24 | `instruction_final` | 0.0013 | 0.001 | +0.000 | 0.028 | bypass |
+
+The layer-12 direction **clears bypass (0.776 against 0.5) and clears induce
+(+0.375)** and dies on KL alone, 0.868 against 0.1 — 8.7× over. Nothing about it
+is marginal on the two criteria the gate exists to test.
+
+**The inference in §6.3.2 is now MEASURED, and it was right.** `null_observed`
+0.7360 with `control_reading` **−0.0007** — the matched-norm ensemble's mean
+bypass is essentially zero, as a matched-norm null should be. So the bypass
+fraction really is 0.7756 against the ~0.78 that was inferred from the margin.
+Recorded because the inference was explicitly flagged as unmeasured before the
+run, and a flagged inference that later lands is worth the same note as one that
+does not.
+
+**⚠️ The finding under the finding: only `last` bypasses, and `instruction_final`
+does not — at any swept layer.** Every positive bypass in the table sits at
+`last` (layers 12 and 8); the largest at `instruction_final` is 0.0089, i.e.
+nothing. That is §3.1's position split showing up causally rather than
+correlationally: `instruction_final` clusters by *harmfulness*, `last` clusters
+by *behaviour*. So the direction our gate finds is the **behaviour** direction —
+which is exactly why its KL is high. Ablating it broadly changes what the model
+says on harmless prompts too, and KL is the criterion designed to catch that. The
+gate is not malfunctioning; it is correctly reporting that our swept grid
+contains a *non-selective* direction and no selective one.
+
+**What this does NOT license.** It does not license relaxing `kl_threshold`.
+`select_direction`'s docstring already names that temptation — "report this
+rather than relaxing them" — and a threshold moved to make a result appear is the
+operating-point failure this repo has documented twice. It also does not license
+the reverse conclusion that Llama-3.1-8B has no selective refusal direction: we
+tested **13 of ~75+ cells (7 of 25 eligible layers × 2 of 3 positions)**, and
+Arditi et al.'s selective directions are reported at layers and a position our
+stride-4 grid never visits.
+
+**Next move, in order.** Widen the sweep (`max_sweep_layers` in
+`conf/measurements.yaml`, 8 → every eligible layer) and re-run this same preset.
+That is a one-line config change plus one job, and it is strictly prior to any
+threshold question: if a low-KL high-bypass direction exists, the gate starts
+working with its criteria untouched; if a full sweep still yields none, THEN the
+KL threshold has an empirical basis for being revisited, with the full attrition
+table as the argument. Only after one of those does any causal sentence become
+available to either paper.
+
+**The instrument change paid for itself inside one run.** `licensed` is now
+`None`, `claim` is `null`, and the withheld reason reads *"no sensitivity arm was
+run: an absence needs evidence the instrument COULD have fired, or a broken
+instrument reads the same"* — the correct diagnosis, where the same run under the
+old code would have said "no length null was computed (P3)" and sent a reader
+after the wrong evidence for a fourth time.
 
 ### 6.4 The roster, the sequencing, and the literature map
 
