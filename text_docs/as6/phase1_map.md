@@ -280,12 +280,46 @@ silently dropped, per the rule the config comment names.
 
 ## 1.5 ⚠️ Read every `decoded_not_blocked` count below through the operating point
 
-**The per-prompt decode read is taken at the MEDIAN of the benign score
-distribution** (`probes.reading_percentile: 50`), so the benign false-positive
-rate is **0.50 by construction** — measured `harmless_rate` is exactly 0.50 on
-all ten measurable rungs, which confirms the threshold is applied rather than
-being a finding. A harmful prompt carrying no decoded content still reads
-"decoded" half the time.
+> **⚠️ SUPERSEDED IN TWO PLACES, 2026-08-08 — corrected 2026-08-09. Read this
+> box before using anything in §1.5.** The section was written when
+> `probes.reading_percentile` was 50 and it states a reporting rule that no
+> longer holds. Canonical is `instrument_layer.md` §2.8; on conflict the
+> canonical wins.
+>
+> 1. **The knob is 75, not 50.** Tuned 2026-08-08 from the swept evidence
+>    (artifacts `outputs/analysis/operating_point_*_20260808.json`). The benign
+>    false-positive rate is 0.25 by construction, not 0.50.
+> 2. **"Quote counts at the 90th percentile" is RETIRED. The reporting point is
+>    75.** 90 was considered and rejected on the stabilise-don't-optimise
+>    criterion §1.5 itself argues for: it is free on Llama Guard but cuts
+>    WildGuard `homoglyph` 23 → 13, so the plateau common to BOTH guards ends at
+>    75. Choosing 90 would have optimised one guard's stability at the other's
+>    expense — the failure this section was written to prevent, one guard over.
+> 3. **The sample-size argument below is still correct and no longer decisive.**
+>    It rules out 95 and 99, which it should; it never distinguished 75 from 90,
+>    and the two-guard plateau does.
+>
+> **What SURVIVES unchanged**, because it rests on the sweep rather than on the
+> chosen point: the three-class sorting (invariant / robust / evaporating) and
+> every conclusion drawn from it — `L zero_width` is operating-point invariant
+> and is still the cell to lead with, and `reverse_words` is still not a
+> `decoded_not_blocked` finding on either guard (independently, from lexical
+> transparency, §3.2).
+>
+> **And the result that outranks this whole section:** *no* operating point
+> separates an artefact rung from a genuine one — `caesar3`, whose base model
+> decodes nothing, holds the largest cell at every point from 50 to 99.5,
+> because the cell is `read_rate × (1 − block_rate)` and the operating point
+> scales only the first factor. The control floor removes artefact rungs; this
+> knob is second-order (`instrument_layer.md` §2.8).
+
+**The per-prompt decode read was taken at the MEDIAN of the benign score
+distribution** when this section was written (`probes.reading_percentile: 50`),
+so the benign false-positive rate was **0.50 by construction** — measured
+`harmless_rate` is exactly 0.50 on all ten measurable rungs, which confirms the
+threshold is applied rather than being a finding. A harmful prompt carrying no
+decoded content still read "decoded" half the time. That is the defect the
+tuning above fixed.
 
 ### The sweep (runs `8958861`/`8958862`, `scripts/sweep_operating_point.py`, $0)
 
@@ -320,11 +354,16 @@ the class is the finding:
 3. **Evaporating** — `reverse_words` on BOTH guards (25→1 and 16→2) and
    `L combining_marks` (5→0). These were the operating point, not a finding.
 
-**Reporting rule of record: quote counts at the 90th percentile (10% benign
-false-positive rate), and print the 50/75/90 curve beside every claimed cell.**
-Stability across the curve is the evidence, exactly as 5/10/20-bin stability is
-the evidence for licensing (§1). Both knobs are now settled the same way — by
-requiring stability across a range rather than by choosing a value.
+~~**Reporting rule of record: quote counts at the 90th percentile (10% benign
+false-positive rate)**~~ — **RETIRED 2026-08-08, see the box at the top of
+§1.5. The reporting point is 75**, the end of the plateau common to both guards.
+
+What stands from this paragraph, and it is the durable half: **print the
+50/75/90 curve beside every claimed cell.** Stability across the curve is the
+evidence, exactly as 5/10/20-bin stability is the evidence for licensing (§1).
+Both knobs are settled the same way — by requiring stability across a range
+rather than by choosing a value. The retirement changed WHICH point is quoted,
+never that the curve must be shown with it.
 
 Why 90 rather than 95 or 99: at n=100 benign examples, the 99th percentile is
 estimated from a single example and the 95th from five, so the threshold itself
@@ -336,14 +375,20 @@ not a preference.
 ### What this costs the paper
 
 - **`reverse_words` is lost as a `decoded_not_blocked` finding on both guards.**
-  It read 25 and 16 at the median and is 1 and 2 at the 90th. It remains a
-  licensed rung with a real decode signal — the guard represents it and blocks
-  it (65% and 73%) — but the *failure* cell was threshold noise. This is a
-  genuine subtraction from §4's "8–28% across the surface band".
-- **The headline halves but holds.** WildGuard/`combining_marks` goes 69 → **32**.
-  With block rate 0.25, that is 32 of the 75 unblocked prompts confidently
-  carrying represented harm. Still AS-6's largest cell and still the cleanest
-  instance of its target regime — but **69% must not be quoted**.
+  It read 25 and 16 at the median, **8 and 9 at the reporting point of 75**, and
+  1 and 2 at 90. It remains a licensed rung with a real decode signal — the
+  guard represents it and blocks it (65% and 73%) — but the *failure* cell is
+  threshold-dependent, collapsing by ~3× between 50 and 75 and to nothing by 90.
+  A genuine subtraction from §4's "8–28% across the surface band".
+  **The trajectory is why it is not a finding, not the value at any one point** —
+  and it is corroborated independently by lexical transparency (§3.2), which is
+  the ground the paper reports it as a control on.
+- **The headline shrinks but holds.** WildGuard/`combining_marks` goes 69 at the
+  median → **56 at the reporting point** → 32 at 90. With block rate 0.25, the
+  reported 56 is 56 of the 75 unblocked prompts carrying represented harm. Still
+  AS-6's largest cell and the cleanest instance of its target regime — but
+  **69 must not be quoted**, and any claim resting on it should state that it
+  more than halves by the 90th percentile.
 - **`zero_width` on Llama Guard is the cell to lead with**, not
   `combining_marks`. It is smaller (17) and completely operating-point
   invariant, which is worth more than a large fragile number.
