@@ -114,14 +114,15 @@ ROSTER: tuple[Item, ...] = (
         "I7",
         "encoding-direction ablation",
         ("measurements.encoding_direction",),
-        incomplete="scoring layer, runner (scripts/encoding_ablation.py) and preset "
-        "(encoding_ablation_llama) all exist; 38 hermetic tests cover the reading and "
-        "the entrypoint's call sites bind statically. What is MISSING is end-to-end "
-        "coverage of main(): phase0_regime_map is exercised against the real corpus "
-        "with a tiny in-process model and stub judges, and this is not, so the GPU "
-        "path has never executed. --dry-run returns before the model loads, and this "
-        "repo has already paid once for treating a green dry-run as evidence a run "
-        "will start (job 8995805, dead in 20s). First launch should expect to debug",
+        # Complete as of 2026-08-09. The end-to-end gap declared here is closed by
+        # tests/test_encoding_ablation_entrypoint.py, written after job 9032777
+        # died on an H200 in 76 seconds — exactly the outcome this entry had
+        # predicted in writing and shipped anyway. Worth keeping as a record of
+        # what the declaration was FOR: it named the risk correctly and naming it
+        # is not mitigating it. Writing the test then found two more defects the
+        # crash had been hiding behind it (a None harm judge that would have
+        # crashed one line later, and a degenerate direction that took the whole
+        # run down instead of marking one cell unmeasured).
     ),
 )
 

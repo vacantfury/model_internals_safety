@@ -124,6 +124,41 @@ def test_the_watchlist_actually_matches_something():
     assert not missing, f"watched but never called in scripts/: {missing}"
 
 
+def test_no_script_constructs_an_EncodedPrompt_by_hand():
+    """Scripts build prompts through an encoder or `pipeline.plain_arm`. Never raw.
+
+    **Paid for by job 9032777 (2026-08-09), which died on an H200 in 76 seconds
+    after a queue wait.** `encoding_ablation.py` hand-wrote its own six-line
+    `plain_arm`, omitting `invertibility` and `restate_prompt`, while a correct
+    copy had been sitting in `phase0_regime_map.py` since the plaintext baseline
+    landed the day before. Two scripts, one function, one of them wrong.
+
+    Note what could NOT have caught it. `EncodedPrompt` is a frozen dataclass,
+    so `WATCHED` above would have bound its signature and rejected the call —
+    but only if someone had thought to watch it, and the watchlist's trigger is
+    *a signature change breaking a caller*, which never happened here. The
+    signature was right from the start; the caller was wrong from the start.
+    So the guard is the stronger one: the raw constructor is not a thing a
+    script may reach for, which makes the whole class unrepresentable rather
+    than making one instance of it detectable.
+
+    `plain_arm` now lives in the spine by the selection rule in `pipeline`'s
+    docstring — absence in ONE script would be a defect — and this test is what
+    stops the next script from re-growing it.
+    """
+    offenders = []
+    for path in script_paths():
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                if node.func.id == "EncodedPrompt":
+                    offenders.append(f"{path.name}:{node.lineno}")
+    assert not offenders, (
+        f"{offenders} construct EncodedPrompt directly. Use an encoder from the "
+        "registry, or `pipeline.plain_arm` for the plaintext arm — a second "
+        "hand-rolled copy is what killed job 9032777."
+    )
+
+
 def second_device() -> str | None:
     """A real device that is not CPU, or None.
 

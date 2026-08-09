@@ -156,10 +156,12 @@ from internals_safety.paths import ACTIVATIONS_DIR
 from internals_safety.measurements.control_floor import AbilitySource
 from internals_safety.measurements.control_floor import derive as derive_control_floor
 from internals_safety.pipeline import (
+    PLAIN_FAMILY,
     CrossRungScreen,
     XStestCapture,
     add_common_arguments,
     load_contrast_sets,
+    plain_arm,
     resolve_run_paths,
     run_families,
     run_lexical_control,
@@ -208,10 +210,15 @@ MANDATORY_JUDGE_CONTROL = "behavior_control"
 # constructible in a test without a config in hand.
 MAX_CAUSAL_LAYERS = 8  # config: measurements.causal_license.max_sweep_layers
 
-# The plain baseline's family label. Not a ladder rung and deliberately not
-# registered as one: it has no encoder, so `select_families` must never be able
-# to request it and no cross-rung screen may treat it as a control.
-PLAIN_FAMILY = "plain"
+# `PLAIN_FAMILY` and `plain_arm` are imported from the spine, not defined here.
+# They moved on 2026-08-09 after `encoding_ablation.py` hand-rolled a second
+# copy of `plain_arm`, got the field list wrong, and died on an H200. The label
+# is re-exported through this module's namespace because tests and readers look
+# for it here; the definition has exactly one home.
+#
+# It is still not a ladder rung and must never be registered as one: it has no
+# encoder, so `select_families` cannot request it and no cross-rung screen may
+# treat it as a control.
 
 
 @dataclass(frozen=True)
@@ -513,27 +520,6 @@ def causal_candidate_cells(
     ]
 
 
-def plain_arm(prompts: Sequence[str]) -> list[EncodedPrompt]:
-    """The corpus as itself — no encoder, no wrapper, no instruction.
-
-    **`attack_prompt` is the bare prompt, deliberately.** Running the corpus
-    through an identity ENCODER would still wrap it in that rung's
-    `attack_template`, and the template is part of what the encoded condition
-    is being blamed for. The baseline has to be the prompt the model would get
-    if nobody had encoded anything, or it measures a wrapper effect and calls it
-    a plaintext rate.
-    """
-    return [
-        EncodedPrompt(
-            plaintext=text,
-            ciphertext=text,
-            family=PLAIN_FAMILY,
-            invertibility=Invertibility.EXACT,
-            attack_prompt=text,
-            restate_prompt=text,
-        )
-        for text in prompts
-    ]
 
 
 def run_plain_behavior_baseline(

@@ -67,7 +67,14 @@ class BehaviorRecord:
     ciphertext: str
     response: str
     refused: bool
-    jailbroken: bool
+    # ⚠️ TRI-STATE. `None` = the harm judge was not run for this cell, which is
+    # NOT the same as "not jailbroken". Added 2026-08-09, and it is the fourth
+    # instrument in this repo to need the distinction after shipping without it
+    # (recognition, deployment, binding-failure rate, now this). The trigger:
+    # `encoding_ablation.py` passes no harm judge on purpose — the repo's
+    # standing position is that no ASR number is reportable (§3.5.2), so paying
+    # a judge for one is spending money to produce a number we may not print.
+    jailbroken: bool | None
     # The response repeats the ciphertext rather than answering. Read this
     # before reading `refused` — see the module docstring.
     echoed_ciphertext: bool
@@ -81,7 +88,7 @@ def measure_behavior(
     loaded: LoadedModel,
     encoded: list[EncodedPrompt],
     refusal_judge: RefusalJudge,
-    harm_judge: HarmBenchJudge,
+    harm_judge: HarmBenchJudge | None,
     config: BehaviorConfig | None = None,
     responses: list[str] | None = None,
 ) -> list[BehaviorRecord]:
@@ -91,6 +98,14 @@ def measure_behavior(
     forward pass the activation capture ran, rather than a second one. Phase 0
     generates here; later phases that need behaviour and activations from one
     pass pass them in.
+
+    **`harm_judge=None` skips the harm axis and every `jailbroken` reads
+    `None`.** Deliberately not a default: skipping an axis is a decision a
+    caller states, and one that has to survive being read back six months later.
+    The alternative this replaces was worse in the way this repo keeps paying
+    for — `None` was already being passed by one entrypoint and crashed on
+    `.judge()`, which at least failed LOUD; a `False` here would have produced
+    a full ASR column of zeros that looks exactly like a perfectly safe model.
     """
     settings = config or BehaviorConfig()
     if responses is None:
@@ -116,7 +131,7 @@ def measure_behavior(
     ]
 
     refusal_verdicts = refusal_judge.judge(items)
-    harm_verdicts = harm_judge.judge(items)
+    harm_verdicts = [None] * len(items) if harm_judge is None else harm_judge.judge(items)
 
     return [
         _build_record(item, response, refusal, harm)
@@ -127,7 +142,7 @@ def measure_behavior(
 
 
 def _build_record(
-    item: EncodedPrompt, response: str, refusal: Verdict, harm: Verdict
+    item: EncodedPrompt, response: str, refusal: Verdict, harm: Verdict | None
 ) -> BehaviorRecord:
     score = score_recovery(item.plaintext, response, item.ciphertext)
     return BehaviorRecord(
@@ -136,11 +151,14 @@ def _build_record(
         ciphertext=item.ciphertext,
         response=response,
         refused=refusal.flag,
-        jailbroken=harm.flag,
+        jailbroken=None if harm is None else harm.flag,
         echoed_ciphertext=score.echoed_ciphertext,
-        judge_fallback=refusal.used_fallback or harm.used_fallback,
+        # An unrun judge contributes no fallback. Note this is the one place the
+        # skip is allowed to collapse to a boolean: `judge_fallback` reports on
+        # the judges that RAN, so a skipped one is honestly absent from it.
+        judge_fallback=refusal.used_fallback or (harm is not None and harm.used_fallback),
         refusal_reasoning=refusal.reasoning,
-        harm_reasoning=harm.reasoning,
+        harm_reasoning="" if harm is None else harm.reasoning,
     )
 
 
@@ -149,14 +167,16 @@ class FamilyBehavior:
     family: str
     n: int
     refusal_rate: float
-    attack_success_rate: float
+    # `None` when the harm judge was not run — never 0.0. See `BehaviorRecord`.
+    attack_success_rate: float | None
     echo_rate: float
     fallback_rate: float
 
     def __str__(self) -> str:  # pragma: no cover - reporting aid
+        asr = "unmeasured" if self.attack_success_rate is None else f"{self.attack_success_rate:.2f}"
         return (
             f"{self.family:<20} n={self.n:<4} refused={self.refusal_rate:.2f} "
-            f"asr={self.attack_success_rate:.2f} echoed={self.echo_rate:.2f} "
+            f"asr={asr} echoed={self.echo_rate:.2f} "
             f"fallback={self.fallback_rate:.2f}"
         )
 
@@ -174,13 +194,23 @@ def summarize_by_family(records: list[BehaviorRecord]) -> list[FamilyBehavior]:
             family=family,
             n=len(group),
             refusal_rate=sum(record.refused for record in group) / len(group),
-            attack_success_rate=sum(record.jailbroken for record in group) / len(group),
+            attack_success_rate=(
+                None
+                if any(record.jailbroken is None for record in group)
+                else sum(record.jailbroken for record in group) / len(group)
+            ),
             echo_rate=sum(record.echoed_ciphertext for record in group) / len(group),
             fallback_rate=sum(record.judge_fallback for record in group) / len(group),
         )
         for family, group in grouped.items()
     ]
-    return sorted(summaries, key=lambda summary: -summary.attack_success_rate)
+    # Unmeasured rungs sort LAST rather than as if they scored zero. A `None`
+    # ASR is the absence of a number, and the whole point of the tri-state is
+    # that it must not be orderable against real ones as though it were 0.0.
+    return sorted(
+        summaries,
+        key=lambda summary: (summary.attack_success_rate is None, -(summary.attack_success_rate or 0.0)),
+    )
 
 
 # P1 — checked across the roster by `assert_distinct_questions`.

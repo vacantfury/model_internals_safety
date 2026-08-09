@@ -72,23 +72,10 @@ from internals_safety.models.capture import capture_activations
 from internals_safety.models.generate import generate
 from internals_safety.models.interventions import ablate_direction
 from internals_safety.models.loader import load_model, prepare_prompts
-from internals_safety.pipeline import load_contrast_sets, resolve_run_paths
+from internals_safety.pipeline import load_contrast_sets, plain_arm, resolve_run_paths
 from internals_safety.probes.directions import Direction, difference_in_means
 
 POSITION = "instruction_final"
-
-
-def plain_arm(prompts: list[str]) -> list[EncodedPrompt]:
-    """The corpus verbatim as `EncodedPrompt`s — no encoder, no attack template.
-
-    Deliberately not an identity encoder: that would still wrap the text in the
-    encoded condition's instruction scaffold, and the scaffold is part of what
-    the encoded condition is being blamed for.
-    """
-    return [
-        EncodedPrompt(family="plain", plaintext=text, ciphertext=text, attack_prompt=text)
-        for text in prompts
-    ]
 
 
 def sweep_layers(n_layers: int, budget: int) -> list[int]:
@@ -327,6 +314,19 @@ def main(argv: list[str] | None = None) -> int:
 
     readings: list[AblationReading] = []
     record: dict = {"plaintext": asdict(plaintext_rates), "families": {}}
+
+    def checkpoint() -> None:
+        """Persist after EVERY family, measured or not.
+
+        Originally this ran only on the success branch, so a run whose first
+        rung came back UNMEASURED and whose second hit the wall left no
+        checkpoint at all — losing the negative result, which is a finding.
+        The plaintext arm is in here too and it costs generations, so a kill
+        before the first successful rung would have thrown that away as well.
+        """
+        (directory / "encoding_ablation.json").write_text(json.dumps(record, indent=2))
+
+    checkpoint()  # the plaintext arm is already paid for; land it before the loop
     for family in args.families:
         encoded_harmful = [encoders[family].encode(p.text) for p in harmful]
         encoded_benign = [encoders[family].encode(p.text) for p in harmless]
@@ -361,8 +361,21 @@ def main(argv: list[str] | None = None) -> int:
 
         real: list[tuple[CellEvidence, Direction]] = []
         control: list[tuple[CellEvidence, Direction]] = []
+        degenerate: list[int] = []
         for layer in cells:
             direction = difference_in_means(encoded_batch, plain_batch, layer, POSITION)
+            # ⚠️ A DEGENERATE CELL IS COVERAGE, NOT AN EXCEPTION — the same rule
+            # the causal-licensing wiring landed on 2026-08-06, re-derived here
+            # the hard way. `difference_in_means` returns a ZERO vector when the
+            # two conditions do not separate at that layer and says in its own
+            # comment that the caller sees `raw_norm` and discards the cell;
+            # this caller did not, so `project_out` raised four frames down and
+            # took the whole run with it. "The encoded and plain conditions were
+            # indistinguishable at layer L" is a measurement about the model,
+            # and it must not be able to lose the other fifteen cells.
+            if direction.raw_norm <= 0.0:
+                degenerate.append(layer)
+                continue
             real.append((evidence_for(direction), direction))
             # ONE matched-norm random per cell, so the control searches the same
             # space the real arm searches: best-of-N against best-of-N.
@@ -376,18 +389,33 @@ def main(argv: list[str] | None = None) -> int:
             )
             control.append((evidence_for(random), random))
 
+        if degenerate:
+            print(f"{family}: {len(degenerate)}/{len(cells)} cells degenerate "
+                  f"(zero separation) at layers {degenerate}", flush=True)
+
         # Selection can legitimately find NOTHING, and that is a finding rather
         # than an error: no valid direction exists to intervene on. Recorded and
-        # skipped, so one dead rung does not lose the rest of the run.
+        # skipped, so one dead rung does not lose the rest of the run. `real`
+        # being EMPTY — every cell degenerate — lands here too, which is why
+        # the message distinguishes the two: "nothing separated" and "something
+        # separated but nothing passed the screen" are different facts about
+        # the model and a reader must not have to guess which one happened.
         try:
+            if not real:
+                raise ValueError(
+                    f"all {len(cells)} candidate cells degenerate: the encoded and "
+                    "plain conditions did not separate at any swept layer"
+                )
             best_real = select_cell([e for e, _ in real], n_layers, config)
             best_control = select_cell([e for e, _ in control], n_layers, config)
         except ValueError as error:
             print(f"{family}: UNMEASURED — {error}", flush=True)
             record["families"][family] = {
                 "unmeasured": str(error),
+                "degenerate_layers": degenerate,
                 "candidates": [asdict(e) for e, _ in real],
             }
+            checkpoint()
             continue
 
         real_direction = next(d for e, d in real if e is best_real)
@@ -425,11 +453,14 @@ def main(argv: list[str] | None = None) -> int:
             "ability_shift": reading.ability_shift,
             "resolution": reading.resolution,
             "verdict": reading.verdict(config),
+            # Recorded even when empty: the reader needs the SEARCH SPACE the
+            # winner won against, and "no cell was discarded" is part of it.
+            "degenerate_layers": degenerate,
             "candidates": [asdict(e) for e, _ in real],
             "control_candidates": [asdict(e) for e, _ in control],
         }
         # Checkpoint per family — a wall kill must not lose a finished rung.
-        (directory / "encoding_ablation.json").write_text(json.dumps(record, indent=2))
+        checkpoint()
         print(f"{family}: L{reading.layer}  margin {reading.margin:+.3f}  "
               f"restored_fraction {reading.restored_fraction}  "
               f"ability_shift {reading.ability_shift}  verdict {reading.verdict(config)}",

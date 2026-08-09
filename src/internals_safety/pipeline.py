@@ -42,6 +42,7 @@ from internals_safety.measurements.lexical_decorrelation import (
 from internals_safety.probes.linear import probe_transfer_detail, reading_threshold
 from internals_safety.config import ProbeConfig
 from internals_safety.data import Prompt, prompt_set
+from internals_safety.encodings.base import EncodedPrompt, Invertibility
 from internals_safety.measurements.contract import Reading
 from internals_safety.measurements.regimes import (
     assign_regime,
@@ -60,6 +61,43 @@ from internals_safety.paths import OUTPUTS_DIR, run_dir
 # rungs that calibrate its floor have not run yet. That is why the floor lived
 # in three offline rescoring scripts and never reached the entrypoint.
 CrossRungScreen = Callable[[Sequence[dict[str, Any]]], Mapping[str, str]]
+
+
+# The plain baseline's family label. Not a ladder rung and deliberately not
+# registered as one: nothing about it is an encoding.
+PLAIN_FAMILY = "plain"
+
+
+def plain_arm(prompts: Sequence[str]) -> list[EncodedPrompt]:
+    """The corpus as itself — no encoder, no wrapper, no instruction.
+
+    **`attack_prompt` is the bare prompt, deliberately.** Running the corpus
+    through an identity ENCODER would still wrap it in that rung's
+    `attack_template`, and the template is part of what the encoded condition
+    is being blamed for. The baseline has to be the prompt the model would get
+    if nobody had encoded anything, or it measures a wrapper effect and calls it
+    a plaintext rate.
+
+    **Spine, by the rule in this module's docstring, and it was earned the hard
+    way (2026-08-09).** `encoding_ablation.py` hand-wrote its own copy of this
+    six-line function, omitted two required fields, and died on an H200 after a
+    queue wait — while an identical, correct version had been sitting in
+    `phase0_regime_map.py` since the plaintext baseline landed. Every arm the
+    two papers compare against a plaintext denominator has to be built the same
+    way or the denominators are not comparable, which is exactly the condition
+    the selection rule names.
+    """
+    return [
+        EncodedPrompt(
+            plaintext=text,
+            ciphertext=text,
+            family=PLAIN_FAMILY,
+            invertibility=Invertibility.EXACT,
+            attack_prompt=text,
+            restate_prompt=text,
+        )
+        for text in prompts
+    ]
 
 
 def add_common_arguments(parser: argparse.ArgumentParser, *, default_n_prompts: int) -> None:
