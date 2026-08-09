@@ -58,7 +58,7 @@ class TestTheNegativeControlCut:
             "tag_block": {"ability_rate": 0.00, "transfer_auroc": 0.63},
             "unicode_escape": {"ability_rate": 0.01, "transfer_auroc": 0.88},
         }
-        floor, named = recalibrate.control_floor(scored, controls)
+        floor, named = recalibrate.control_floor(scored, controls, "llama3_1_8b_instruct")
         assert named == ["reverse_characters", "tag_block"]
         # TWO controls is below `control_floor_min_controls`, so the floor falls
         # back to max and is labelled a bound — see instrument_layer.md §2.4.
@@ -74,6 +74,7 @@ class TestTheNegativeControlCut:
         floor, named = recalibrate.control_floor(
             {"zero_width": {"ability_rate": 0.99, "transfer_auroc": 0.94}},
             load_measurements_config().controls,
+            "llama3_1_8b_instruct",
         )
         assert named == []
         assert floor != floor  # NaN

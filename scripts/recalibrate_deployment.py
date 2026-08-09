@@ -48,6 +48,7 @@ from pathlib import Path
 import numpy as np
 
 from internals_safety.config import load_measurements_config
+from internals_safety.measurements.control_floor import AbilitySource
 from internals_safety.measurements.control_floor import derive as derive_control_floor
 from internals_safety.measurements.regimes import Regime, assign_regime, build_regime_map, refusal_verdict
 from internals_safety.models.capture import ActivationBatch
@@ -119,7 +120,7 @@ def rescore(results: dict, summaries: list[dict], config) -> dict[str, dict]:
     return out
 
 
-def control_floor(scored: dict[str, dict], controls_config) -> tuple[float, list[str]]:
+def control_floor(scored: dict[str, dict], controls_config, model: str) -> tuple[float, list[str]]:
     """The surface-feature noise floor, via the shared derivation.
 
     **The statistic changed 2026-08-07 (owner go): `mean + sigma*SD`, not
@@ -135,7 +136,11 @@ def control_floor(scored: dict[str, dict], controls_config) -> tuple[float, list
     """
     floor = derive_control_floor(
         {f: s["transfer_auroc"] for f, s in scored.items()},
-        {f: s["ability_rate"] for f, s in scored.items()},
+        ability=AbilitySource(
+            rates={f: s["ability_rate"] for f, s in scored.items()},
+            measured_on=model,
+            screens=model,
+        ),
         max_ability=controls_config.control_ability_max,
         sigma=controls_config.control_floor_sigma,
         min_controls=controls_config.control_floor_min_controls,
@@ -179,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\n{'='*86}\n{model}   ({run_dir})\n{'='*86}", flush=True)
 
         scored = rescore(results, summaries, config)
-        floor, controls = control_floor(scored, measurements.controls)
+        floor, controls = control_floor(scored, measurements.controls, model)
         print(f"negative control rungs (ability <= {max_ability}): {controls}")
         if not controls:
             # Loud, and it does not widen the cut to find one. The floor is the

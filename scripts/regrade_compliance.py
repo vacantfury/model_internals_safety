@@ -77,6 +77,7 @@ from pathlib import Path
 from internals_safety.config import load_judge_config, load_measurements_config
 from internals_safety.judges import JudgeItem, StrongRejectJudge, refusal_disagreement
 from internals_safety.judges.strongreject import RubricScoring
+from internals_safety.measurements.control_floor import AbilitySource
 from internals_safety.measurements.control_floor import derive as derive_control_floor
 from internals_safety.paths import PROJECT_ROOT
 from internals_safety.provenance import capture_provenance, guard_working_tree, write_run_record
@@ -271,7 +272,12 @@ def main(argv: list[str] | None = None) -> int:
     }
     floor = derive_control_floor(
         quality_by_cell,
-        ability_by_cell,
+        # Not a model at all: the "ability" here is the per-cell 0/1 that marks a
+        # control cell, and both names are the same grading pass, so the floor is
+        # NOT inherited. Stating it explicitly is the point of the required field.
+        ability=AbilitySource(
+            rates=ability_by_cell, measured_on="regrade-cells", screens="regrade-cells"
+        ),
         max_ability=0.0,
         sigma=controls_config.control_floor_sigma,
         min_controls=controls_config.control_floor_min_controls,

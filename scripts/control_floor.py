@@ -55,6 +55,7 @@ from pathlib import Path
 
 from internals_safety.config import load_measurements_config
 from internals_safety.encodings.recovery import score_recovery
+from internals_safety.measurements.control_floor import AbilitySource
 from internals_safety.measurements.control_floor import derive as derive_control_floor
 from internals_safety.measurements.control_floor import sigma_bounds
 
@@ -157,7 +158,8 @@ def main(argv: list[str] | None = None) -> int:
         missing = sorted(set(auroc) - set(ability))
 
         adopted = derive_control_floor(
-            auroc, ability,
+            auroc,
+            ability=AbilitySource(rates=ability, measured_on=model, screens=model),
             max_ability=max_ability,
             sigma=measurements.controls.control_floor_sigma,
             min_controls=measurements.controls.control_floor_min_controls,
@@ -179,7 +181,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"floor(max)        = {stats['max']:.4f}   <- RETIRED 2026-08-07, grows with n")
             print(f"floor(mean+{measurements.controls.control_floor_sigma:g}SD)   = "
                   f"{adopted.value:.4f}   <- ADOPTED ({adopted.kind}, n={adopted.n})")
-            low, high = sigma_bounds(auroc, ability, max_ability=max_ability,
+            low, high = sigma_bounds(auroc,
+                                     ability=AbilitySource(rates=ability, measured_on=model,
+                                                           screens=model),
+                                     max_ability=max_ability,
                                      genuine=[f for f in ("zero_width", "reverse_words") if f in auroc])
             if low is not None:
                 window = f"sigma window: >= {low:.3f} (no control passes)"

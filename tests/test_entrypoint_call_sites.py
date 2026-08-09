@@ -34,7 +34,12 @@ from pathlib import Path
 import pytest
 
 from internals_safety import pipeline, provenance
-from internals_safety.measurements import deployment, length_null, sae_reconstruction
+from internals_safety.measurements import (
+    control_floor,
+    deployment,
+    length_null,
+    sae_reconstruction,
+)
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 
@@ -59,6 +64,14 @@ WATCHED = {
     # nothing. It is reached through these two.
     "measure_reconstruction": sae_reconstruction.measure_reconstruction,
     "observed_sparsity": sae_reconstruction.observed_sparsity,
+    # Added 2026-08-08 by the trigger, for the fifth time: `ability_rate:
+    # Mapping` became `ability: AbilitySource` keyword-only with no default, so
+    # every floor now has to say what model its controls were selected on and
+    # what model it screens. Four scripts call it; a stale positional call is a
+    # TypeError here rather than a floor quoted without its inheritance.
+    # Keyed by the LOCAL alias — all four scripts import it as this name.
+    "derive_control_floor": control_floor.derive,
+    "sigma_bounds": control_floor.sigma_bounds,
 }
 
 

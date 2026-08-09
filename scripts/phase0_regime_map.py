@@ -153,6 +153,7 @@ from internals_safety.probes.directions import Direction, difference_in_means
 from internals_safety.probes.linear import probe_transfer_detail, reading_threshold
 from internals_safety.models.loader import LoadedModel, load_model, resolve_device
 from internals_safety.paths import ACTIVATIONS_DIR
+from internals_safety.measurements.control_floor import AbilitySource
 from internals_safety.measurements.control_floor import derive as derive_control_floor
 from internals_safety.pipeline import (
     CrossRungScreen,
@@ -1463,7 +1464,7 @@ def run_family(
     }
 
 
-def control_floor_screen(measurements) -> tuple[CrossRungScreen, dict[str, Any]]:
+def control_floor_screen(measurements, model: str) -> tuple[CrossRungScreen, dict[str, Any]]:
     """The cross-rung deployment screen, plus the evidence dict for the record.
 
     **This is TODO 60's substance.** Permutation licensing answers *is there a
@@ -1506,7 +1507,7 @@ def control_floor_screen(measurements) -> tuple[CrossRungScreen, dict[str, Any]]
         }
         floor = derive_control_floor(
             transfer_auroc,
-            ability_rate,
+            ability=AbilitySource(rates=ability_rate, measured_on=model, screens=model),
             max_ability=controls.control_ability_max,
             sigma=controls.control_floor_sigma,
             min_controls=controls.control_floor_min_controls,
@@ -1711,7 +1712,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     raw_path = directory / "cells.jsonl"
-    deployment_screen, control_floor_evidence = control_floor_screen(measurements)
+    deployment_screen, control_floor_evidence = control_floor_screen(
+        measurements, model_config.name
+    )
     summaries, readings, elapsed_seconds = run_families(
         families,
         directory,
