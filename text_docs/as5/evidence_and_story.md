@@ -392,8 +392,12 @@ two-thirds of Tülu-3's published safety pipeline made the model *less* safe. Th
 gap says it got substantially *better* at telling harm from harmless. **The two
 metrics disagree in sign, on every rung.**
 
-And it closes the cross-family question: **SFT behaves like Llama-3.1-8B-Instruct
-and DPO like Qwen2.5-7B.** The Llama/Qwen difference is not a family difference —
+⛔ **FALSIFIED 2026-08-08 (§4f).** This read: *SFT behaves like
+Llama-3.1-8B-Instruct and DPO like Qwen2.5-7B.* With the plaintext arm the two
+are different phenomena — Llama's encoding-induced benign excess is **+0.89**,
+SFT's is **+0.34**, and SFT already refuses 0.45 of benign PLAINTEXT. They match
+only on the encoded arm, which is exactly what leg 1 says cannot distinguish
+models. The superseded claim continued:** The Llama/Qwen difference is not a family difference —
 it is what DPO does that SFT does not, established on identical base weights,
 which no cross-family comparison could ever say.
 
@@ -516,7 +520,17 @@ rationale.
    0.08 against a 0.10 noise ceiling) while discriminating at 0.00 and +0.61
    respectively. Whether refusing encoded input is *desirable* has no bearing on
    whether the measurement can tell two very different models apart. It cannot.
-2. **The mechanism — NEW, and it is what §4e adds.** §4d could only say the
+2. ⛔ **WITHDRAWN 2026-08-08 by jobs `9027721`–`9027723` — read §4f before
+   using anything in this leg.** The ladder re-ran with its plaintext arm and
+   plaintext benign refusal falls in lockstep (0.45 → 0.17 → 0.16), so the
+   monotone encoded fall below is largely general de-refusal. In leg 1's own
+   currency — gap lost relative to plaintext — there is **no trend on any
+   rung** (`homoglyph` +0.35 → +0.50 → +0.34). What replaces it is a null and
+   is stronger: **the complete published pipeline moves plaintext harm
+   discrimination +0.55 → +0.80 and leaves the encoding-induced loss unchanged
+   at 0.34–0.50.** The text below is kept as the reasoning the re-run tested.
+
+   2. **The mechanism — NEW, and it is what §4e adds.** §4d could only say the
    effect "varies ~5× across post-training pipelines", which is a correlation
    across four unrelated models with everything else varying too. The Tülu
    ladder (`instrument_layer.md` §3.6.2, jobs `9011347`/`9011348`/`9011349`)
@@ -538,10 +552,13 @@ rationale.
    1 the evidence supports, and it comes from a controlled series rather than a
    cross-family comparison — call it flat and the result is lost.
 
-   It also closes the cross-family question leg 1 leaves open: **SFT behaves like
-   Llama-3.1-8B-Instruct and DPO like Qwen2.5-7B.** The Llama/Qwen difference is
-   not a family difference; it is what DPO does that SFT does not, on identical
-   base weights.
+   ⛔ **The claim that followed here — "SFT behaves like Llama-3.1-8B-Instruct and
+   DPO like Qwen2.5-7B" — is FALSIFIED (§4f).** With the plaintext arm: Llama's
+   benign refusal is 0.10 plain / 0.99 encoded, an encoding-induced excess of
+   **+0.89**; SFT's is 0.45 plain / 0.79 encoded, excess **+0.34**. Llama's blanket
+   refusal is encoding-induced, SFT's is mostly general over-refusal. They resemble
+   each other **only on the encoded arm**, which is leg 1's entire point — the claim
+   was made from the encoded arm alone.
 3. **The instrument.** None of the above is measurable without controls the field
    does not run — the benign arm, the echo screen, the length null, the control
    floor. Every defect found on the behaviour axis inflated apparent safety,
