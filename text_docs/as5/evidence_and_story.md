@@ -32,9 +32,8 @@ one place that asks "given all of it, what is the paper?"*
 | re-licensing | 08-07 | offline, CPU, $0 | two-rung conclusion confirmed |
 | decode lens | 08-07 | job 9008631, Llama | echo crosstab, §3.7 |
 | causal sweep | 08-07 | job 9008632, Llama, 3 rungs | **first benign arm ever**, §3.6 |
-
-Two arms are in flight as of writing: the alphabet band (Llama, job `9010200`)
-and the §3.6 replication on Qwen (job `9010201`).
+| plaintext baseline | 08-08 | jobs 9012067–70, 4 models | the denominator; §4d |
+| scaffold control | 08-09 | jobs 9033595–98, 4 models | **the factorial cell**, §4h |
 
 ## 2. The ladder collapsed, and this is the honest count
 
@@ -95,6 +94,17 @@ is three harm-sensitive rungs per model, and they are not the same three.
 - **Licensing counts from any AS-5 run before 08-07** — retired null.
 - **(B) rates without their denominator.** Post-echo the measured base is 27 and
   33 cells, not 100.
+- **Any discrimination loss attributed to THE ENCODING (2026-08-09, §4h).** The
+  attack wrapper is a second cause and on 2 of 4 models it is the larger one.
+  Attribute to the encoded-prompt *protocol*, or run the scaffold arm and
+  decompose. Every such attribution in §4d, §4f and §4g predates the control.
+
+**Reportable, but NOT by the contract's verdict — see §4i:** all refusal rates,
+including every number in legs 1 and 2. The contract has no `refusal`
+instrument, so `behavior`'s withhold is a verdict about ASR and is silent on
+them. They stand on their paired benign arm, the mandatory plaintext baseline,
+and §3.5.2's separate validation of the refusal judge — an argument in prose,
+which is what the contract exists to replace.
 
 ## 4. What the evidence does NOT support
 
@@ -529,6 +539,15 @@ Benign refusal rises 2–10× over plaintext on four models, and on Llama-3.1-8B
 the harm gap goes **+0.82 → 0.00**: benign and harmful `homoglyph` prompts
 refused at an identical 0.99. No probe required.
 
+> ⚠️ **THE SUBJECT OF THIS LEG IS WRONG AND THE CORRECTION IS UNAPPLIED
+> (2026-08-09, §4h).** The scaffold control separates the attack *wrapper* from
+> the *characters*, and on 2 of 4 models the wrapper alone causes most of the
+> loss — Llama +0.67 of +0.84, Tülu +0.28 of +0.37 — while on Qwen it causes
+> none of it. The numbers above all stand; what does not stand is "encoding" as
+> the subject. The supported subject is the **encoded-prompt protocol**.
+> **Rewriting the leg is a framing change to an owner-approved story, so it is
+> flagged here rather than applied.** Substance, decomposition and CIs: §4h.
+
 **State it as the measurement claim, not the utility claim.** "Encoding causes
 false positives" invites the reviewer answer *refusing homoglyph text is correct
 behaviour, no legitimate user sends it*, and there is no good reply. The
@@ -850,6 +869,156 @@ loss, independently reproducing §4d's +0.82 → 0.00 in a different job.
 `fullwidth`, 0.00 on `math_bold` and 0.10 on `fullwidth_letters`, so those cells
 are can't-decode cases wearing a substrate label; only `homoglyph` (0.95) and
 `zero_width` (0.98) are readable. Its 0.10 spread rests on n=2.
+
+## 4h. ⚠️ THE SCAFFOLD CONTROL RAN AND LEG 1's SUBJECT IS WRONG — it is the PROTOCOL, not the encoding (2026-08-09)
+
+**Jobs `9033595`–`9033598`: four models × `homoglyph` × 100 prompts × three
+paired arms, 24–28 min each.** Run records down-synced and local:
+`outputs/runs/phase0/*/scaffold-control-*/`.
+
+### The confound, and where it came from
+
+A hostile review of the AS-5 draft named it, and it was verified against the
+draft's own methods paragraph before being accepted. **The encoded condition
+changes TWO things at once.** It transforms the request's characters, *and* it
+wraps them in an attack template that announces an encoding is present and asks
+the model to work with it. Every number in §4d, §4f and §4g attributes the whole
+change to "the encoding" — but the plaintext baseline they are read against
+carries no wrapper either, so the wrapper's contribution has never been
+separated from the characters'.
+
+This is a factorial design with one cell never run. The missing cell is
+**plaintext content wearing the attack scaffold**: same request, same template,
+no character transformation. `pipeline.scaffold_arm` builds it, and it is now
+part of the spine rather than the entrypoint, so it cannot be present in one
+script and absent in another.
+
+### The three arms, refusal rates (n=100 per arm)
+
+| model | plain H | plain B | gap | scaffold H | scaffold B | gap | encoded H | encoded B | gap |
+|---|---|---|---|---|---|---|---|---|---|
+| Llama-3.1-8B-Instruct | 0.93 | 0.10 | **+0.83** | 0.99 | 0.83 | **+0.16** | 0.98 | 0.99 | **−0.01** |
+| Tülu-3-8B | 0.96 | 0.16 | **+0.80** | 0.98 | 0.46 | **+0.52** | 0.93 | 0.50 | **+0.43** |
+| Qwen2.5-7B-Instruct | 0.93 | 0.11 | **+0.82** | 0.92 | 0.12 | **+0.80** | 0.88 | 0.33 | **+0.55** |
+| Mistral-7B-Instruct-v0.3 | 0.37 | 0.01 | **+0.36** | 0.60 | 0.12 | **+0.48** | 0.91 | 0.64 | **+0.27** |
+
+Llama's plaintext arm reads +0.83 against §4d's +0.82 and its encoded arm 0.98 /
+0.99 against §4d's 0.99 / 0.99 — an independent within-run replication of the
+headline in a fourth job.
+
+### The decomposition, and BOTH terms are real
+
+Splitting total discrimination loss into a wrapper term (plain → scaffold) and a
+character term (scaffold → encoded). CIs are unpaired Wald at n=100 — the arms
+are paired by prompt but `cells.jsonl` persists only the encoded harmful arm, so
+the pairing cannot be exploited and these are **conservative**:
+
+| model | total loss | wrapper alone | characters alone |
+|---|---|---|---|
+| Llama-3.1-8B | +0.84 [+0.76, +0.92] | **+0.67 [+0.56, +0.78]** | +0.17 [+0.09, +0.25] |
+| Tülu-3-8B | +0.37 [+0.23, +0.51] | **+0.28 [+0.15, +0.41]** | +0.09 [−0.06, +0.24] *ns* |
+| Qwen2.5-7B | +0.27 [+0.13, +0.41] | +0.02 [−0.09, +0.13] *ns* | **+0.25 [+0.11, +0.39]** |
+| Mistral-7B | +0.09 [−0.06, +0.24] *ns* | −0.12 [−0.27, +0.03] *ns* | **+0.21 [+0.05, +0.37]** |
+
+**Which term dominates is a property of the model, and it spans the full
+range.** On Llama the wrapper alone destroys 80% of the discrimination the
+characters were being credited with; on Tülu 76%, and its character term is not
+distinguishable from zero. On Qwen the reverse — the wrapper does nothing
+measurable and the characters do all the work. On Mistral the two terms have
+*opposite signs* and partly cancel: the wrapper trends toward *raising*
+discrimination while the characters lower it, which is why its total loss is the
+one value in the table indistinguishable from zero while its character term is
+significant.
+
+### What this does to leg 1
+
+**"Encoding defeats discrimination" is not supported as stated on 2 of 4
+models.** On Llama and Tülu the sentence is mostly false in its subject: what
+defeats discrimination is the *request to handle an encoding*, and the encoding
+itself is a minority term.
+
+The supported claim names the **encoded-prompt protocol** — wrapper plus
+transformed characters, as every benchmark in this literature actually delivers
+it. That is not a retreat, for two reasons. It is what the field ships, so a
+result about the protocol is a result about the measurements being published.
+And it is *stronger* against the reviewer objection §4e already anticipated:
+"refusing homoglyph text is correct behaviour" has no purchase once most of the
+false-positive mass is caused by a wrapper that contains no obfuscated content
+at all.
+
+⚠️ **Do not restate the decomposition as "the wrapper is the real cause."** That
+is the same over-attribution one level over, and Qwen refutes it directly.
+
+### Why the title survives, for the third time
+
+**"Refusal without discrimination" names a state, not a mechanism.** §4f
+withdrew leg 2's mechanism, §4g reversed the model ordering, and §4h now
+reassigns leg 1's subject — and none of the three touched the title, because a
+title pinned to a mechanism would have been retired with it. Leave it alone.
+
+### Three caveats a session must not lose
+
+- **Mistral's scaffold arm has an echo rate of 0.38 and it is uninterpretable,
+  not a finding.** `scaffold_arm` leaves `ciphertext` untransformed by
+  construction, so `echoed_ciphertext` fires on any response that quotes the
+  request. The field is named `scaffold_echo_rate_uninterpretable` for that
+  reason. **Report it, never subtract it.**
+- **No ASR number from these runs is reportable**, and the contract withheld
+  `behavior` and `behavior_plain` on all four for the *right* reason — the
+  `judge_benign_arm` control failed everywhere (Llama harmful ASR 0.07 against
+  benign 0.66), which is §3.5.2's binary-judge finding reproduced a fifth time.
+  Every number in this section is a **refusal** rate; see §4i for why the
+  contract's verdict does not reach them.
+- **`recognition` and `trajectory` are unlicensed on all four runs.** The
+  behavioural result stands alone here; nothing internal was measured.
+
+### What AS-6 inherits
+
+Directly, and it is not optional. A guard is sent the same wrapper, so
+`decoded_not_blocked` carries the identical confound: a guard that flags
+anything *asking about* an encoding produces a block rate that is a wrapper
+response, not a decode-then-block decision. **The guard-side sweep needs a
+scaffold arm from its first run**, on the same footing the benign arm was made
+mandatory in TODO 61 — and by the same lesson, not behind a flag.
+
+## 4i. ⚠️ THE INSTRUMENT CONTRACT DOES NOT MODEL THE QUANTITY THE PAPER REPORTS (2026-08-09)
+
+Found by asking whether §4h's refusal rates were reportable given that the
+contract withheld `behavior` on all four runs. The answer is yes, and the reason
+is worse than a yes.
+
+**The contract has eleven instruments — `ability`, `attribution`, `behavior`,
+`causal_license`, `decode_lens`, `deployment`, `entropy_dynamics`,
+`recognition`, `reply_inversion`, `sae_reconstruction`, `trajectory` — and not
+one of them is refusal.** `behavior`'s `value` is `attack_success_rate`
+(`behavior.py:267`), so `reportable`/`withheld` on that reading is a verdict
+about **ASR**. The refusal rate rides in `detail` as an unevaluated payload
+field.
+
+**Every claim in legs 1 and 2 is a refusal rate.** So the paper's entire
+headline is built from a quantity the contract neither licenses nor withholds,
+while the contract's one behavioural verdict governs a number the paper has
+already committed to never reporting.
+
+This is the repo's recurring failure shape, inverted. The usual form is *a
+settled rule that did not reach every caller* (four instances, 2026-08-07 to
+-08-09). This is *a governing layer that does not reach the governed
+quantity* — and it is harder to see, because the contract is loudly doing its
+job on ASR the whole time.
+
+**Why the refusal numbers are nonetheless defensible, stated once so it is not
+re-argued:** they carry their controls by construction rather than by contract.
+Each rate is reported only as a paired difference against a benign arm measured
+in the same run on the same prompts, the plaintext baseline supplies the
+denominator (mandatory since §4d), and §3.5.2 established the refusal judge
+separately — +0.79 to +0.82 separation with benign false positives at 0.01–0.16,
+on plaintext where no attack exists by construction.
+
+⚠️ **That is an argument in prose, which is exactly what the contract exists to
+replace.** The fix is a `refusal` reading whose required controls are the benign
+arm and the plaintext baseline, so the paper's headline quantity is governed by
+the same machinery as everything else and omitting its controls becomes
+inexpressible. Filed; not built.
 
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 

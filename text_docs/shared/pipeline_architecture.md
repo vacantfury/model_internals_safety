@@ -181,6 +181,34 @@ Two pieces carry the weight beyond the fields themselves:
 *Status: adopted 2026-08-06 on the owner's word. The three built instruments
 emit `Reading`s; `guard_regimes` consumes the gated axis. 441 tests green.*
 
+#### ⚠️ 3.1.1 The contract does not model the quantity the paper reports (found 2026-08-09)
+
+**Eleven instruments emit a `Reading` — `ability`, `attribution`, `behavior`,
+`causal_license`, `decode_lens`, `deployment`, `entropy_dynamics`,
+`recognition`, `reply_inversion`, `sae_reconstruction`, `trajectory` — and not
+one of them is refusal.** `behavior`'s `value` is `attack_success_rate`
+(`behavior.py:267`), so `reportable` on that reading is a verdict about **ASR**;
+the refusal rate travels in `detail` as an unevaluated payload field.
+
+Every claim in AS-5's legs 1 and 2 is a refusal rate, and ASR has been
+unreportable repo-wide since §3.5.2. **So the contract's one behavioural verdict
+governs a number no paper will print, and is silent on the number both papers
+are built from.** The four scaffold-control runs make it concrete: all four
+withheld `behavior` for a correct reason that says nothing about any figure in
+`evidence_and_story.md` §4h.
+
+**This is the repo's recurring failure shape, inverted.** The usual form is *a
+settled rule that did not reach every caller* — four instances between
+2026-08-07 and -08-09, each fixed by making the omission inexpressible. This is
+*a governing layer that never reached the governed quantity*, and it is harder
+to notice precisely because the contract is visibly working on ASR throughout.
+
+**The fix, filed not built: a `refusal` instrument** whose `required_controls`
+are the paired benign arm and the plaintext baseline — the two things §4d and
+§3.6 already made mandatory in prose. Until it exists, the refusal numbers rest
+on an argument written in a design doc, which is the exact condition
+`measurements/contract.py` was adopted to end.
+
 ### 3.2 ~~Split `measurements/` by kind~~ — STRUCK 2026-08-06
 
 The proposal was to split into `measurements/licensing/combination/`. **Struck,

@@ -164,6 +164,18 @@ CONTROLS: tuple[Item, ...] = (
     ),
     Item("random-direction", "matched-norm null", ("measurements.causal_license",)),
     Item("pairing", "derangement primitives", ("pairing",)),
+    # Added 2026-08-09 (`instrument_layer.md` §3.9). The battery screened the
+    # judges, the probes and the directions, and left the PROMPT unscreened:
+    # an encoded condition changes the payload's characters AND wraps them in a
+    # template announcing an encoding, so every rate was reading their sum. The
+    # factorial cell is plaintext content wearing the same scaffold, and on 2 of
+    # 4 models the wrapper alone causes most of the discrimination loss.
+    #
+    # It lives in the SPINE rather than in `measurements/`, which is why its
+    # module is `pipeline`: the arm is a corpus construction, not a scorer, and
+    # putting it beside the entrypoints is what let the plain baseline go
+    # missing from one script for a day.
+    Item("scaffold", "attack-wrapper factorial arm", ("pipeline",)),
 )
 
 

@@ -1525,6 +1525,105 @@ instead.
 
 ---
 
+### 3.10 ⚠️ A CONTROL WAS BUILT, TESTED, UNWIRED — AND INVERTED (2026-08-09)
+
+`refusal_control`'s echo screen cleared for a judge that read **100% of echoes
+as refusals** and failed for a perfect one. Found while wiring it, not by the
+suite. Fixed the same hour; no published number is affected, because nothing
+consumed it.
+
+**The mechanism, and it is a type-level defect rather than a typo.**
+`Screen.clears` hard-coded `observed - floor >= margin` — "the reading must
+EXCEED its control". That is right for a confound which *deflates* the
+statistic: the benign-arm screens want harmful ASR above benign ASR, and the
+lexical screen wants pooled AUROC above the vocabulary floor. It is exactly
+backwards for a confound that *inflates* one, and the echo screen is that kind —
+a clean judge flips nothing, so the control passes when the flip rate stays
+**under** the rule-of-three bound. With no vocabulary for "below", its author put
+the statistic in `observed` and the bound in `margin`, which silently inverted
+the comparison. `RefusalControl.clears()`, which `scripts/refusal_judge_control.py`
+actually calls, was correct the whole time — the two were mirror images and
+nothing compared them.
+
+**Three things worth more than the fix.**
+
+- **`build_status.py` reported it as built, and was right to.** Reachability is
+  an import-graph property; it cannot see a sign. **"Built" and "correct" are
+  different questions and the roster only answers the first** — which is the
+  §5.1 scope boundary (build state, never claim state) biting from a direction
+  it was not written to anticipate.
+- **Unwired is not harmless, it is undetected.** The inversion was latent purely
+  because no `Reading` consumed the screen. The instant one did — which is what
+  the `refusal` instrument would have done — it would have licensed readings on
+  a broken judge and withheld them on a clean one, with a green suite.
+- **A default would not have fixed it.** `direction="above"` covers three of the
+  four call sites and leaves the fourth wrong exactly as it was, while
+  advertising that the question had been considered. That is the
+  optional-flag-defaulting-to-the-majority shape this repo has been bitten by
+  four times in a week (`strata`, `device`, `inherited`, the control floor).
+
+**The fix is the house one: `Screen.direction` is required and keyword-only, so
+omitting it is a `TypeError`,** and every one of the four sites now states which
+side of its bound clears. Pinned two ways in `tests/test_contract.py`: the two
+directions must return opposite verdicts on identical numbers, and
+`RefusalControl.clears()` must agree with `screen().clears` across the flip-rate
+range — the comparison that never existed.
+
+**The general rule, and it is new:** *a control has a direction, and a control
+layer that cannot express one will silently pick the wrong half.* When adding a
+screen, name the confound first and ask whether it would push the statistic UP
+or DOWN — the answer is the field, and it is not derivable from the numbers.
+
+---
+
+### 3.9 ✅ THE ATTACK WRAPPER IS A SECOND CAUSE, AND IT NEEDS ITS OWN ARM (2026-08-09)
+
+**The eighth mandatory control, and the second one this repo added after a run
+had already reported numbers without it.** Measured on AS-5 (jobs
+`9033595`–`9033598`, 4 models × `homoglyph` × 100 × 3 arms, 24–28 min each);
+full decomposition and CIs in `as5/evidence_and_story.md` §4h. Recorded here
+because it is a property of the MEASUREMENT DESIGN, not of AS-5's object, and
+AS-6 would otherwise re-derive it from a guard-side surprise.
+
+**The defect in the design, stated generally.** An encoded condition differs
+from its plaintext baseline in *two* respects: the payload's characters are
+transformed, and the prompt carries a template announcing that an encoding is
+present. Comparing encoded against plain attributes both to the encoding. The
+missing cell is the factorial one — **plaintext payload wearing the same
+scaffold** — built by `pipeline.scaffold_arm`, in the spine so it cannot be
+present in one entrypoint and absent in another.
+
+**Why it is not a small correction.** On Llama-3.1-8B the wrapper alone accounts
+for **+0.67 of the +0.84** total discrimination loss and on Tülu-3 **+0.28 of
++0.37**, while on Qwen2.5 the wrapper term is +0.02 [−0.09, +0.13] and the
+characters do all the work. **Both terms are real and which dominates is a model
+property spanning the full range** — so neither "it's the encoding" nor "it's
+the wrapper" is safe as a default, and the decomposition has to be measured per
+model rather than assumed once.
+
+**The general screen this yields**, a sibling to §3.2's lexical-transparency
+rule: *a condition that changes more than one thing at once measures their sum,
+and which term dominates is not recoverable from the sum.* §3.2 catches content
+that never left the lexical surface; this catches an effect that never touched
+the payload at all.
+
+**AS-6 inherits it directly and must not defer it.** A guard receives the same
+wrapper, so `decoded_not_blocked` carries the identical confound: a guard that
+flags anything *asking about* an encoding yields a block rate that is a wrapper
+response rather than a decode-then-block decision — and unlike the target-model
+case there is no ability measurement to cross-check it against (§2.6). **The
+guard-side sweep runs a scaffold arm from its first job**, on the same footing
+the benign arm was made mandatory, and for the same reason: a control behind a
+flag is a control that does not run.
+
+**One measurement caveat that is structural, not incidental.** `scaffold_arm`
+leaves `ciphertext` untransformed by construction, so `echoed_ciphertext` fires
+on any response that quotes the request — Mistral's scaffold arm reads 0.38. The
+field is named `scaffold_echo_rate_uninterpretable` so the number cannot be
+mistaken for the echo rate §3.7 measures. **Report it, never subtract it.**
+
+---
+
 ## 4. Open, with the method already identified
 
 ### 4.1 Deployment should be measured by logit lens, not a transferred probe
