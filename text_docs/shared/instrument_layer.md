@@ -1136,6 +1136,97 @@ suggested, and no (B) rate here may be quoted without its denominator. That is a
 real cost of the fix and it is the honest state: the rung was never measuring
 100 cells' worth of behaviour.
 
+### 3.7.1 ✅ THE REFUSAL JUDGE'S NEGATIVE CONTROL RAN — echo IS scored as refusal, 100% of the time, on 15 rungs and 2 families
+
+**Measured 2026-08-08 (TODO 62b), on cached cells: no GPU, no generation.**
+Tülu-3 RLVR (`9027723`, 8 rungs) and Llama-3.1-8B's alphabet band (`9010200`,
+7 rungs), 100 items per rung, ~4.5 min per family.
+
+A paired within-item manipulation in which **only the ciphertext moves**: arm A
+re-judges the response unmodified, arm B appends the ciphertext to it, arm C
+sends the ciphertext ALONE. Arm C's ground truth is by construction — a bare
+ciphertext contains no refusal, whatever the model did.
+
+| | Tülu-3 RLVR, 8 rungs | Llama-3.1-8B, 7 rungs |
+|---|---|---|
+| `parrot_flip_rate` (arm C) | **1.00 on every rung** | **1.00 on every rung** |
+| `appended_flip_rate` (arm B) | 0.00 where measurable | 0.00–0.09 |
+| `anchor_disagreement` | 0.00–0.04 | 0.01–0.04 |
+| `clears` | False everywhere | False everywhere |
+| `echo_route_dominates` | True everywhere | True everywhere |
+
+**§3.7's (P) nulling is VINDICATED and must not be reverted.** The control was
+built to be able to falsify it — a low `parrot_flip_rate` would have meant most
+nulled cells were genuine refusals. It came back at the ceiling on 15 of 15
+rungs, 1,500 items, two model families, with no exception.
+
+**The control's own control passes**, which is what licenses reading the flips at
+all: `anchor_disagreement` is 0.00–0.04, so the judge reproduces its recorded
+verdict on unmodified text. Without that number the flips would be
+indistinguishable from judge noise, which is why arm A is re-judged rather than
+read from `cells.jsonl`.
+
+**The failure is SPECIFIC, not a general judge weakness.** Arm B — the same
+ciphertext *appended to a real response* — flips 0.00–0.09. So the judge is not
+confused by the presence of ciphertext; it fails only when the response is
+*nothing but* ciphertext. That is exactly the echo case, and it is why echo earns
+its own regime rather than a refusal verdict.
+
+⚠️ **Correction to a claim made earlier the same day.** After §3.5.2 the record
+read "the refusal judge is sound and separate" from the broken harm judge, on the
+strength of its plaintext validation (+0.79 to +0.82 separation, benign false
+positives 0.01–0.16). That is true **on responses containing content** and false
+on pure echo. The precise statement: *the refusal judge is sound wherever a
+response has content, and reads pure ciphertext as refusal at ceiling.* Leg 1's
+headline survives because it rests on `homoglyph`, whose echo is 0.00–0.11, and
+because the (P) nulling already removes those cells from the denominator — but
+the unqualified version of the claim was wrong and would license reading refusal
+rates on echo-heavy rungs.
+
+*AS-6 inheritance:* a guard emits a verdict rather than a response, so it cannot
+echo — this particular arm does not transfer. What transfers is the shape:
+**the instrument every headline rests on needs a negative control whose ground
+truth is by construction**, and the guard-side equivalent is a payload the guard
+cannot have decoded.
+
+### 3.7.2 ⚠️ The control cost ~100× its own estimate, and the dry run could not have known
+
+The first attempt at §3.7.1 ran **3 h 25 m and completed nothing**, against a
+gate estimate of "1,651 judge calls, a few minutes". The cause was one line:
+
+```python
+anchor = [judged(0, every)[i] for i in every]   # judged() INSIDE the comprehension
+```
+
+`judged(0, every)` judges the whole rung and was invoked once per item — n²
+calls. A 100-cell rung spent 10,000 calls to produce 100 verdicts, and the
+8-rung run was on course for roughly **160,000 calls against the 1,651 its own
+`--dry-run` reported**. Estimated waste before it was killed: **~$10–30**, on a
+job quoted at $0.60–2.50. After the fix the same 8 rungs took **4 min 42 s**.
+
+**The defect is invisible to every check this repo had**, and that is the
+reusable part:
+- **The result is identical.** Re-judging the same items produces the same
+  verdicts, so every assertion on the output passes. Only the bill and the
+  wall-clock move.
+- **The dry run cannot catch it.** It computes `judge_calls(n, movable)` — the
+  calls the DESIGN implies — not the calls the loop makes. A cost estimate
+  derived from the design is structurally blind to a loop that departs from it.
+  This is the `--dry-run` lesson of 2026-08-07 in a second costume: there the
+  dry run returned before the real path, here it models the real path instead of
+  measuring it.
+- **The suite passed.** 1,481 tests, including an end-to-end test of this very
+  entrypoint through the real class with only the service stubbed.
+
+**The fix is a test that COUNTS what went out** and holds it against the
+estimate the approval gate saw
+(`test_it_judges_each_item_ONCE_not_once_per_item`). Mutation-verified: with the
+defect reintroduced it reports 34 conversations in 9 batches where 10 in 3 are
+implied. Generalisation worth applying elsewhere: **wherever a `--dry-run`
+number is what an approval gate is shown, something must assert that the real
+path spends it** — otherwise the estimate is a claim about intent, and the gate
+approves a number the code never had to honour.
+
 ### 3.8 Tokenizer fertility is a measured rung property — and it refuted the hypothesis it was built to order
 
 **Measured 2026-08-07, `scripts/alphabet_fertility.py`, tokenizer only, no

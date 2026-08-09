@@ -187,6 +187,72 @@ class TestTheEntrypointRunsItsRealPath:
         spec.loader.exec_module(module)
         return module
 
+    def test_it_judges_each_item_ONCE_not_once_per_item(self, run_dir, monkeypatch):
+        """The n^2 defect, pinned by COUNTING calls rather than checking output.
+
+        `anchor = [judged(0, every)[i] for i in every]` re-judges the whole rung
+        once per item. The verdicts are identical, so every assertion on the
+        RESULT passes — only the bill and the wall-clock move. Measured before
+        the fix: 1,375 calls for a 25-item rung against an intended 55, and the
+        real 8-rung run was on course for ~160,000 against the 1,651 its own
+        `--dry-run` reported.
+
+        **Why the dry run cannot cover this**, which is the reusable half: it
+        counts the calls the DESIGN implies (`judge_calls(n, movable)`), not the
+        calls the loop makes. A cost estimate derived from the design is blind
+        to a loop that departs from it, so the only honest check is to count
+        what actually went out and hold it against the estimate the gate saw.
+        """
+        from internals_safety.config import JudgeConfig
+        from internals_safety.judges.refusal import RefusalJudge
+        from internals_safety.measurements.refusal_control import judge_calls
+
+        from judge_stubs import StubService, yes_verdict
+
+        script = self._script()
+        sent = []
+
+        class CountingService(StubService):
+            def batch_chat(self, conversations, **kwargs):
+                sent.append(len(conversations))
+                return super().batch_chat(conversations, **kwargs)
+
+        monkeypatch.setattr(script, "load_judge_config", lambda: JudgeConfig())
+        monkeypatch.setattr(
+            script,
+            "RefusalJudge",
+            lambda config: RefusalJudge(
+                config, service=CountingService(default=yes_verdict())
+            ),
+        )
+        assert script.main([str(run_dir)]) == 0
+
+        # Movable is counted the way the DRY RUN counts it — `not refused` on the
+        # cell — because the dry run's number is what the approval gate saw, and
+        # that is what this test holds the real path to. Deliberately not
+        # `n_appended` from the record: `summarize_control` filters further
+        # downstream, so the two legitimately differ and comparing against the
+        # record would test the wrong contract.
+        cells = [
+            json.loads(line)
+            for line in (run_dir / "cells.jsonl").read_text().splitlines()
+            if line.strip()
+        ]
+        eligible = [
+            c for c in cells
+            if c.get("ciphertext") and (c.get("attack_response") or "").strip()
+        ]
+        n = len(eligible)
+        movable = sum(1 for c in eligible if not c.get("refused"))
+        assert sum(sent) == judge_calls(n, movable), (
+            f"{sum(sent)} conversations went out for a {n}-item rung, but the "
+            f"design implies {judge_calls(n, movable)} — the number the approval "
+            f"gate was shown. Batches: {sent}"
+        )
+        # And the batching itself: three arms, three calls. A per-item loop would
+        # show n batches of 1 even at the right total.
+        assert len(sent) <= 3, f"expected one batch per arm, got {len(sent)}: {sent}"
+
     def test_main_completes_and_writes_its_record(self, run_dir, monkeypatch):
         from internals_safety.config import JudgeConfig
         from internals_safety.judges.refusal import RefusalJudge

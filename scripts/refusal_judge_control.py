@@ -142,8 +142,19 @@ def main(argv: list[str] | None = None) -> int:
             return dict(zip(subset, flags))
 
         every = list(range(len(cells)))
-        anchor = [judged(0, every)[i] for i in every]
-        parrot = [judged(2, every)[i] for i in every]
+        # ⚠️ HOIST THE CALL OUT OF THE COMPREHENSION. This read
+        #     anchor = [judged(0, every)[i] for i in every]
+        # which re-judges the WHOLE rung once per item — n^2 judge calls, so a
+        # 100-cell rung spent 10,000 calls to produce 100 verdicts. It is silent
+        # because the RESULT is identical; only the bill and the wall-clock move.
+        # Measured at --limit 25: 1,375 calls / 303s against an intended 55 / 17s,
+        # and the 8-rung run was on course for ~160,000 calls against the 1,651
+        # its own --dry-run reported. The dry run cannot catch this — it counts
+        # the calls the design implies, not the calls the loop makes.
+        anchor_by_position = judged(0, every)
+        parrot_by_position = judged(2, every)
+        anchor = [anchor_by_position[i] for i in every]
+        parrot = [parrot_by_position[i] for i in every]
         # Arm B only where it can move — judging the rest buys nothing, since
         # its rate is computed over the movable items alone.
         movable = [i for i in every if not cells[i].get("refused")]
