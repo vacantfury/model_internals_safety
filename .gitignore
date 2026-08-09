@@ -62,3 +62,10 @@ secrets/
 
 # task-estate store + operational state (personal data — never committed; task-estate refactor 2026-08-04)
 /state/
+
+# LaTeX paper sources — local only, matching the guardrail sibling.
+# This repo is PUBLIC: paper dirs accumulate reviewer text, venue style files
+# under their own licenses, build artifacts and PDFs. Ignoring the whole tree
+# keeps that out by construction rather than by remembering. Anything from a
+# paper that should be public belongs in text_docs/. See paper/README.md.
+paper/
