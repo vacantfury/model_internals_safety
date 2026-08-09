@@ -1,0 +1,88 @@
+# The causal test on a content guard — the first one this project has run, and
+# the answer to the objection AS-6's own Limitations section leads with.
+#
+# Everything AS-6 reports is presence, not use: the decode probe establishes that
+# harmful content is linearly readable in the guard's residual stream, and the
+# verdict says the guard did not block. It does NOT establish that the verdict
+# computation uses that content. Ablate the direction and read the verdict, and
+# the two become distinguishable.
+#
+# Method: Arditi et al., NeurIPS 2024 (arXiv 2406.11717) — bypass, induce, and
+# KL preservation, with a matched-norm random-direction null. ESTABLISHED, ported
+# deliberately, and applied to a guard rather than a generator, which is ours:
+# the behaviour proxy is P(unsafe) at the verdict position rather than P(refusal
+# opening), because a guard has no refusal to bypass.
+#
+# ⚠️ Llama Guard FIRST, not WildGuard, and not both. Llama Guard is the guard
+# whose control floor is derived from a distribution (0.7098, 12 controls,
+# `instrument_layer.md` §2.7), so its four surviving rungs are the only guard
+# cells in this project that are currently screened AND reportable. Running the
+# causal test against unscreened cells would produce a causal claim about a
+# number we cannot report.
+entrypoint: as6_guard_probe
+description: >-
+  Llama Guard 3 8B's causal gate — ablate the harm direction, add it back, and
+  read the verdict, with a matched-norm random-direction null. Converts AS-6's
+  central claim from "the content is present" to "the verdict uses it", or
+  refutes it.
+
+gates: >-
+  Whether AS-6's enforcement-failure claim is causal or stays correlational, and
+  the two outcomes write different papers.
+
+  If ablating the harm direction moves the verdict on the four screened rungs —
+  bypass clears `min_bypass_fraction`, addition induces on benign prompts, KL
+  stays under threshold, and the random-direction null does not match it — then
+  `decoded_not_blocked` means what §4 says it means. The paper's Limitations
+  section loses its lead item and Results gains a causal subsection.
+
+  If the direction is correlationally licensed but NOTHING survives the causal
+  filter, that is the more interesting result and it breaks the current 2x2. The
+  content would be present and unused, which is neither "never decoded" nor
+  "decoded but not blocked" — a third failure mode the four cells cannot express.
+  The paper would then reframe around representation-without-use, and the map
+  becomes evidence for it rather than for enforcement failure.
+
+  If the gate returns degenerate (no viable direction anywhere in the swept
+  range), that is a coverage number and NOT a null: `licensed=None`, and the
+  build question becomes whether the plain contrast sets separate at all inside
+  the guard's classification prompt.
+
+target: llama_guard_3_8b
+
+# The FOUR rungs that survive Llama Guard's derived control floor (§2.7), and no
+# others. The causal gate itself is rung-INDEPENDENT — it is fit on the plain
+# contrast sets and swept once — so these rungs cost the per-rung passes only and
+# exist so the causal reading lands in a run record beside the decode map it is
+# about to qualify. Adding unscreened rungs would buy nothing and imply the gate
+# was per-rung.
+families:
+  - homoglyph
+  - zero_width
+  - fullwidth
+  - reverse_words
+
+n_prompts: 100
+
+# `lexical` is MANDATORY (`deployment.REQUIRED_CONTROLS`) or every decode
+# reading in the record is withheld. `causal_license` is the point of the run.
+instruments: [lexical, causal_license]
+run_name: guard-causal-llama-guard
+
+# Forward passes only. No generation, no judge, no money — the verdict is the
+# guard's own logits and the decode read is a probe.
+#
+# ⚠️ The wall is set from a cost estimate whose ONE load-bearing knob has never
+# been measured. `conf/cost.yaml` flags `prefill_tokens_per_s` as STILL ASSUMED
+# and argues it is not worth validating because it "contributes 0.01-0.05 h of a
+# multi-hour estimate" — which was true of every run this project has costed,
+# all of them generation-dominated. THIS run generates nothing, so that knob is
+# 100% of the estimate and its 4x range is the estimate's whole uncertainty.
+# 4 h is therefore ~8x the midpoint rather than a tight fit, and the run doubles
+# as the prefill measurement the knob has never had.
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "04:00:00"
