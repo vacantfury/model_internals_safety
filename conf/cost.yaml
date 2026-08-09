@@ -78,21 +78,58 @@ hardware:
     label: "H200 144GB"
     vram_gb: 144
     prefill_tokens_per_s: [4000, 16000]
-    # MEASURED, not assumed (2026-08-04, from the phase-0 pilot's `throughput`
-    # block in results.json — the tuning path this knob was created with):
-    #   Qwen2.5-7B  40.3 tok/s   (11436 s / 460800 budgeted decode tokens)
-    #   Llama-3.1-8B 70.6-71.3 tok/s  (two independent runs, 6523 s and 16158 s)
-    # The previous value here was [300, 1200] — a 7.5-17x overestimate, and
-    # since decode dominates it is the entire reason the pre-run estimate came
-    # in 2-4x under the truth (predicted 0.7-2.4 GPU-h/model, actual 4.5-8+).
+    # !! STILL ASSUMED. No run record carries a prefill measurement, so this is
+    # the one number on the measured profile that has never been checked. It
+    # contributes 0.01-0.05 h of a multi-hour estimate, so it is not worth a
+    # measurement pass of its own; it IS worth not calling it measured.
+    #
+    # RE-TUNED 2026-08-08 from 13 completed runs (`scripts/tune_cost_model.py`,
+    # artifact `outputs/analysis/cost_recalibration_20260808.json`). It was
+    # [40, 71], measured on the phase-0 pilot 2026-08-04, and that measurement
+    # is now known to have absorbed a DEFECT: `a0855fa` pinned probe fits
+    # single-threaded, which is 31x faster than the 8 threads an 8-CPU
+    # allocation takes by default. So the pilot timed a run that no longer
+    # exists, and every estimate since over-predicted time by at least 3.3x.
+    # Third value for this knob, and the first fitted to more than one run.
     #
     # READ THIS AS AN EFFECTIVE END-TO-END RATE, not a kernel benchmark: the
     # denominator is BUDGETED max_new_tokens (an upper bound on tokens actually
-    # emitted) and the numerator is whole-run wall clock, so it absorbs model
-    # load, capture passes, unbatched generation and synchronous judge latency.
+    # emitted) and the numerator is run wall clock, so it absorbs capture
+    # passes, probe fitting, unbatched generation and synchronous judge latency.
     # That is precisely what a wall-clock estimate needs; a raw tokens/s figure
     # would understate the time again in the same direction.
-    decode_tokens_per_s: [40, 71]
+    #
+    # ⚠️ THE RANGE IS FITTED TO ONE SHAPE — a ladder sweep of >= 3 rungs at
+    # n >= 50, which is what the approval gate is asked about. Runs of other
+    # shapes imply different rates and are NOT bugs: the estimator has no
+    # per-run fixed-cost term, so a 1-rung plaintext baseline amortises probe
+    # fitting and judge setup over eight times less work and implies 409-490
+    # tok/s, while the n=8 smoke implies 92.5. Costing a 1-rung run against
+    # this range over-predicts it by ~1.8x, which is the safe direction; the
+    # n=8 case is the unsafe one and is why the smoke shape is named here
+    # rather than silently averaged in. Adding a fixed-cost term would remove
+    # the stratification — filed, not done.
+    #
+    # ⚠️ THE LOW END IS THE HELD-OUT SET, NOT THE FITTED ONE. The 13 fitted runs
+    # span 233-305 tok/s, and the first thing checked against the new range was
+    # the four `spread_*` runs — whose records live only on the cluster, so the
+    # tuner could not see them and they are a genuine held-out set. They took
+    # 1:12-1:22 of job wall clock (sacct, 2026-08-08) against a census of
+    # 998,400 decode tokens, which implies ~216 tok/s at the slow end: BELOW the
+    # fitted floor. The low end is set to that rather than to the fit, because
+    # under-predicting time is the direction that gets a job killed at the wall,
+    # and because job wall clock charges the estimator for python/import/cache
+    # setup that `load_seconds` does not separately model. Fitting only to the
+    # runs that happen to be local would have produced a floor 8% too fast.
+    #
+    # Tuning path, and it is now automated: re-run `scripts/tune_cost_model.py
+    # --all` after any batch of runs. It reads completed run records, divides
+    # each preset's census by its measured wall clock, prints what it excluded
+    # and why, and flags a configured range that no longer overlaps the
+    # measured one. Keyless, no GPU, seconds. Down-sync the cluster's run
+    # records before trusting its floor — the tuner can only fit what is local,
+    # and it does not know what it cannot see.
+    decode_tokens_per_s: [216, 306]
     load_seconds: 300
 
 # The scheduler's hard walls. A per-model estimate that exceeds
