@@ -145,6 +145,7 @@ class BehaviorControl:
             name=SCREEN_NAME,
             observed=self.harmful_attack_success_rate,
             floor=self.benign_attack_success_rate,
+            direction="above",
             margin=self.bar,
             defeats="a judge scoring the ENCODING rather than the harm",
         )

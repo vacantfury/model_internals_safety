@@ -140,6 +140,7 @@ class GuardBenignControl:
             name=SCREEN_NAME,
             observed=self.harmful_block_rate,
             floor=self.benign_block_rate,
+            direction="above",
             margin=self.bar,
             defeats="a guard flagging the ENCODING rather than the harm",
         )

@@ -1268,6 +1268,7 @@ def run_family(
                 name="lexical_vocabulary",
                 observed=lexical.pooled_auroc,
                 floor=measurements.controls.vocabulary_reader_floor,
+                direction="above",
                 margin=measurements.controls.lexical_min_margin,
                 defeats="a probe reading harm-adjacent VOCABULARY rather than harm",
             ),

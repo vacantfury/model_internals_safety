@@ -69,6 +69,12 @@ from typing import Literal, Protocol, Sequence, runtime_checkable
 
 Kind = Literal["correlational", "causal"]
 
+# Which side of its bound a screen must land on to clear. "above" = the confound
+# would DEFLATE the statistic, so the reading must exceed the control (harmful
+# ASR above benign ASR). "below" = the confound would INFLATE it, so the reading
+# must stay under a ceiling (an echo-flip rate under the rule-of-three bound).
+Direction = Literal["above", "below"]
+
 # What the reading asserts. "positive" = we measured X; "null" = we measured no X.
 # The two need different evidence, which is the whole reason this type exists.
 Claim = Literal["positive", "null"]
@@ -92,8 +98,33 @@ class Screen:
     # What this screen measured — its own statistic, not necessarily the
     # instrument's headline number.
     observed: float
-    # What `observed` must beat for the screen to clear.
+    # The bound `observed` is read against. Named `floor` for the "above" case,
+    # which was the only case when this type was written; it is a CEILING when
+    # `direction="below"`.
     floor: float
+    # Which side of the bound clears — REQUIRED, keyword-only, no default.
+    #
+    # **Why this field exists, and why it has no default (2026-08-09).** The
+    # original `clears` hard-coded `observed - floor >= margin`, i.e. "observed
+    # must EXCEED its bound". That fits the screens whose confound inflates the
+    # number — the benign-arm ASR screen wants harmful ASR above benign ASR. It
+    # does NOT fit a screen whose confound is bounded ABOVE, and the repo had
+    # one: `refusal_control`'s echo screen, where a clean judge flips nothing
+    # and the control passes when the flip rate stays UNDER the rule-of-three
+    # bound. Written in the only vocabulary available, it put the statistic in
+    # `observed` and the bound in `margin` — which silently inverted it, so a
+    # judge flipping 100% of echoes CLEARED and a perfect judge did not.
+    #
+    # It never corrupted a number, for one reason: that screen was built,
+    # tested, and never wired into any `Reading.controls`. `build_status.py`
+    # reported it as built, because reachability cannot see a sign.
+    #
+    # A default of "above" would have covered three of four sites and left the
+    # fourth wrong exactly as it was. That shape — an optional flag defaulting
+    # to the majority — is the one that has failed in this repo four times in a
+    # week (`strata`, `device`, `inherited`, the control floor), so every screen
+    # states its own direction and omitting it is a `TypeError`.
+    direction: Direction = field(kw_only=True)
     # How far it must beat it. Kept beside the screen for the same reason
     # `control_margin` is: a threshold living elsewhere can move without the
     # numbers it licensed being re-derived.
@@ -111,10 +142,17 @@ class Screen:
 
     @property
     def clears(self) -> bool:
-        """Fails CLOSED on NaN — an uncomputed screen never passes."""
+        """Fails CLOSED on NaN — an uncomputed screen never passes.
+
+        Routes on `direction`, which is why that field is required: the two
+        cases are not variants of one comparison, they are opposite ones, and
+        a screen that guesses is a screen that can certify its own failure.
+        """
         if self.observed != self.observed or self.floor != self.floor:  # NaN
             return False
-        return (self.observed - self.floor) >= self.margin
+        if self.direction == "above":
+            return (self.observed - self.floor) >= self.margin
+        return (self.floor - self.observed) >= self.margin
 
 
 @dataclass(frozen=True)

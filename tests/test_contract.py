@@ -254,12 +254,12 @@ class TestTheControlBattery:
         """The reason a float could not hold it. The lexical screen is measured
         on a pooled paired AUROC over a DIFFERENT corpus, so 'value minus
         control' was never the right arithmetic for it."""
-        screen = Screen(name="lexical_vocabulary", observed=0.80, floor=0.619, margin=0.10)
+        screen = Screen(direction="above", name="lexical_vocabulary", observed=0.80, floor=0.619, margin=0.10)
         assert screen.clears
         assert screen.observed != reading().value
 
     def test_a_screen_that_does_not_clear_blocks_the_reading(self):
-        screen = Screen(name="lexical_vocabulary", observed=0.62, floor=0.619, margin=0.10)
+        screen = Screen(direction="above", name="lexical_vocabulary", observed=0.62, floor=0.619, margin=0.10)
         blocked = reading(controls=(screen,))
         assert not blocked.reportable
         assert blocked.failed_controls == ("lexical_vocabulary",)
@@ -268,6 +268,7 @@ class TestTheControlBattery:
         """A failed control that does not say what it was screening leaves a
         reader unable to judge whether the claim can be rescued."""
         screen = Screen(
+            direction="above",
             name="lexical_vocabulary", observed=0.10, floor=0.619, margin=0.10,
             defeats="a probe reading harm-adjacent VOCABULARY rather than harm",
         )
@@ -276,7 +277,68 @@ class TestTheControlBattery:
 
     def test_a_NaN_screen_fails_closed(self):
         """An uncomputed screen never passes — the rule everywhere in this layer."""
-        assert not Screen(name="x", observed=float("nan"), floor=0.5).clears
+        assert not Screen(direction="above", name="x", observed=float("nan"), floor=0.5).clears
+        assert not Screen(direction="below", name="x", observed=float("nan"), floor=0.5).clears
+
+
+class TestScreenDirection:
+    """⚠️ Added 2026-08-09 after a BUILT, TESTED, UNWIRED screen was found inverted.
+
+    `Screen.clears` hard-coded "observed must exceed floor", which fits a
+    confound that DEFLATES the statistic and is exactly backwards for one that
+    INFLATES it. `refusal_control`'s echo screen is the second kind: a clean
+    judge flips nothing. Written in the only vocabulary the type offered, it
+    cleared for a judge that flipped every echo and failed for a perfect one.
+
+    It never corrupted a published number because nothing consumed it — which
+    is the uncomfortable part, since `build_status.py` reported it as built.
+    Reachability is an import-graph property and cannot see a sign.
+    """
+
+    def test_the_two_directions_are_genuinely_opposite(self):
+        """Not variants of one comparison. Same numbers, opposite verdicts."""
+        above = Screen(direction="above", name="s", observed=0.9, floor=0.1)
+        below = Screen(direction="below", name="s", observed=0.9, floor=0.1)
+        assert above.clears
+        assert not below.clears
+
+    def test_a_below_screen_clears_when_it_stays_UNDER_its_ceiling(self):
+        assert Screen(direction="below", name="s", observed=0.01, floor=0.1).clears
+
+    def test_the_margin_tightens_BOTH_directions_rather_than_only_one(self):
+        """A margin that only bit on one side would reintroduce the asymmetry."""
+        assert not Screen(direction="above", name="s", observed=0.15, floor=0.1, margin=0.1).clears
+        assert not Screen(direction="below", name="s", observed=0.05, floor=0.1, margin=0.1).clears
+
+    def test_OMITTING_the_direction_is_a_TypeError_not_a_guess(self):
+        """The house fix shape: a default of "above" would have covered three of
+        the four call sites and left the fourth wrong exactly as it was. That is
+        the optional-flag-defaulting-to-the-majority shape this repo has been
+        bitten by four times in a week."""
+        with pytest.raises(TypeError):
+            Screen(name="s", observed=0.9, floor=0.1)  # type: ignore[call-arg]
+
+    def test_the_ECHO_screen_agrees_with_the_predicate_the_script_consumes(self):
+        """⚠️ THE MUTATION THAT WOULD HAVE CAUGHT IT.
+
+        `RefusalControl.clears()` was correct all along and `screen()` was its
+        mirror image; nothing compared them. Any future edit that re-inverts
+        either one fails here.
+        """
+        from internals_safety.measurements.refusal_control import RefusalControl
+
+        def control(flip: float) -> RefusalControl:
+            return RefusalControl(
+                family="x", n=100, parrot_flip_rate=flip,
+                appended_flip_rate=0.0, n_appended=50,
+            )
+
+        clean, broken = control(0.0), control(1.0)
+        assert clean.clears() is True and clean.screen().clears
+        assert broken.clears() is False and not broken.screen().clears
+        for flip in (0.0, 0.01, 0.03, 0.05, 0.2, 0.5, 1.0):
+            got = control(flip)
+            assert got.clears() == got.screen().clears, f"disagree at flip={flip}"
 
     # ---- the part TODO 57 actually added --------------------------------
 
@@ -291,19 +353,19 @@ class TestTheControlBattery:
 
     def test_running_the_required_screen_restores_reportability(self):
         """The requirement must be satisfiable, or it is just a permanent veto."""
-        screen = Screen(name="lexical_vocabulary", observed=0.80, floor=0.619, margin=0.10)
+        screen = Screen(direction="above", name="lexical_vocabulary", observed=0.80, floor=0.619, margin=0.10)
         assert reading(controls=(screen,), required_controls=("lexical_vocabulary",)).reportable
 
     def test_an_unrequired_screen_still_has_to_clear_if_it_RAN(self):
         """Asymmetric on purpose: not declaring a screen required means you need
         not run it, never that you may ignore what it said when you did."""
-        screen = Screen(name="extra", observed=0.10, floor=0.619)
+        screen = Screen(direction="above", name="extra", observed=0.10, floor=0.619)
         assert not reading(controls=(screen,), required_controls=()).reportable
 
     def test_the_primary_slot_still_fails_closed_on_its_own(self):
         """The additional screens are additions, not a replacement — a reading
         with a perfect battery and no primary control is still refused."""
-        screen = Screen(name="lexical_vocabulary", observed=0.99, floor=0.619)
+        screen = Screen(direction="above", name="lexical_vocabulary", observed=0.99, floor=0.619)
         assert not reading(control_reading=None, controls=(screen,)).reportable
 
 
