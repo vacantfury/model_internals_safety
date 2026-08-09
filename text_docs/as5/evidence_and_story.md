@@ -758,6 +758,68 @@ That is the same numerator-without-denominator defect §4d was written to correc
 recurring one level up in the mechanism leg — the third instance of this class,
 and the reason the re-run was worth 3 GPU-hours.
 
+## 4f. ✅ LEG 1 GENERALISES FROM ONE ENCODER TO A CLASS — and the model ordering was an artefact of not normalising (2026-08-08)
+
+**Jobs `9029608`, `9029610`–`9029612`: four models × 7 rungs × 100 prompts per
+arm, in-job plaintext baseline, 1:12–1:22 each.** §4d's headline was measured on
+four models and ONE encoder (`homoglyph`), while the title claims something about
+encoded prompts generally. This run puts five substrate rungs through the same
+paired design.
+
+### The gate: is gap-lost-to-encoding one quantity per model, or per (model, encoding)?
+
+**Branch A, and the margin is 2–5×.** Gap lost, on rungs the model can actually
+read (ability ≥ 0.8):
+
+| model | plaintext gap | gap lost, range over readable substrate rungs | within-model spread |
+|---|---|---|---|
+| Llama-3.1-8B-Instruct | 0.83 | −0.56 … −0.83 | **0.27** |
+| Qwen2.5-7B-Instruct | 0.80 | −0.03 … −0.21 | **0.18** |
+| Mistral-7B-v0.3 | 0.32 | −0.07 … −0.17 | **0.10** |
+| Tülu-3-8B (RLVR) | 0.81 | −0.33 … −0.43 | **0.10** |
+
+Between-model range is **0.56**; within-model spread is 0.10–0.27. The model term
+dominates the encoding term by 2 to 5×, so *gap lost* is primarily a model
+property and **leg 1 generalises beyond `homoglyph`**. It is not constant,
+though — encoding contributes a real secondary term, and a paper claiming a
+single per-model constant would be overstating it.
+
+### ⚠️ The reading correction, and it reverses §4d's model ordering
+
+**Absolute gap lost is confounded by how much discrimination the model had to
+lose.** Normalised by each model's own plaintext gap:
+
+| model | fraction of plaintext discrimination destroyed |
+|---|---|
+| Qwen2.5-7B | **4–26%** |
+| Mistral-7B-v0.3 | 22–53% |
+| Tülu-3-8B | 41–53% |
+| Llama-3.1-8B | **67–100%** |
+
+§4d ranked Mistral the most robust model on the strength of its −0.09 absolute
+loss. **It is not: it is the least discriminating model to begin with** (plaintext
+gap 0.32 against 0.80–0.83 for the other three), so it had little to lose. Qwen
+is the genuinely robust one, and Mistral moves to the middle. **Report the
+fraction, not the difference** — an absolute loss compares models on a scale
+they do not share.
+
+### Two internal checks the run passes
+
+**The can't-decode rungs land exactly on −plaintext-gap** (`base64` and
+`tag_block`: Llama −0.83 against a 0.83 gap, Qwen −0.80 against 0.80, Tülu
+−0.80/−0.81 against 0.81). A rung the model cannot read destroys *all* of its
+discrimination, which is what the arithmetic must produce, and it confirms
+can't-decode rungs are excluded from the substrate spread rather than averaged
+into it.
+
+**Llama on `homoglyph` reads −0.83 against a plaintext gap of 0.83** — total
+loss, independently reproducing §4d's +0.82 → 0.00 in a different job.
+
+**Mistral's substrate set is only two rungs, not five.** Its ability is 0.18 on
+`fullwidth`, 0.00 on `math_bold` and 0.10 on `fullwidth_letters`, so those cells
+are can't-decode cases wearing a substrate label; only `homoglyph` (0.95) and
+`zero_width` (0.98) are readable. Its 0.10 spread rests on n=2.
+
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
 Jobs `9010897` (Mistral-7B-Instruct-v0.3, 1:15:12) and `9011034` (Tulu-3-8B,
