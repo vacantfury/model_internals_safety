@@ -362,6 +362,19 @@ controls:
   # report about the scorer's character handling, not a reason to lower this.
   ability_sensitivity_floor: 1.0
 
+  # Draws for the noise null on cross-model spreads. A max-minus-min over k
+  # models is a MAX STATISTIC and n-dependent, so it is read against the spread
+  # k identical models at the observed mean would produce, never quoted bare.
+  # Tuning path: raise until every conclusion-bearing figure is seed-invariant.
+  # Measured over 50 seeds: at 20,000 every median and lower bound is stable to
+  # the reported 0.01. One upper bound oscillates (0.19/0.20) and RAISING THIS
+  # DOES NOT FIX IT — the spread is discrete, so a quantile on a grid boundary
+  # never settles; still unstable at 500,000. Nothing is claimed against it.
+  noise_null_draws: 20000
+  # Seed for the draws above. Declared, not incidental: one printed interval
+  # endpoint depends on it. Not a tunable.
+  noise_null_seed: 0
+
 
 # AS-6's verdict readout — how a guard's answer token is resolved.
 guard_verdict:

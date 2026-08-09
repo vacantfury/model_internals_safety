@@ -525,6 +525,39 @@ unaccompanied, is not a result.
 grid's last point rendered as **"100"** — a table claiming a zero-false-positive
 operating point that was never swept. Now `:g`.
 
+### 2.9 A CROSS-MODEL SPREAD is a max statistic too, and it needs its own null (2026-08-08)
+
+**§2.4's lesson, in a second place.** AS-5's leg-1 claim is that four models
+span 0.57 on the plaintext harmful arm and 0.08 encoded. Both are
+max-minus-min over four estimates — the same statistic shape whose
+n-dependence made the control floor's table non-portable — so neither means
+anything quoted bare. **The rule: every spread is read against a bootstrap of
+the spread k IDENTICAL models at the observed mean would produce at the same
+n.** Knobs `controls.noise_null_draws` / `noise_null_seed`; computed in
+`scripts/figure_arm_inversion.py`, which also emits the paper table from the
+same reads so the two cannot drift.
+
+*Why it was adopted:* an earlier pass compared two observed spreads directly
+and drew a conclusion the null does not support (§4d of AS-5's story). The
+encoded harmful spread of 0.08 sits INSIDE the null (median 0.05, ceiling 0.10)
+— the models are indistinguishable there, which is the finding; and the
+plaintext benign spread of 0.15 against a 0.12 ceiling is marginal and is
+reported as marginal.
+
+⚠️ **The null's interval endpoints are on a discrete grid and one of them does
+not converge — do not try to fix that by raising the draw count.** The spread of
+`Binomial(n,p)/n` draws lives on the 1/n grid, so a quantile falling on a grid
+boundary oscillates at any number of draws. Measured over 50 seeds at 20,000
+draws: every median and every lower bound is stable to the reported 0.01, and
+exactly one upper bound moves (0.19/0.20) — **still unstable at 500,000**. That
+is why the seed is a declared config value rather than an incidental literal.
+No claim rests on the moving endpoint (its cell's observed spread is 0.69).
+
+**AS-6 inherits this directly.** Any statement of the form "the guards differ"
+or "the rungs differ" is a spread, and a guard-side spread over two guards is a
+max over *two* estimates — where the null is widest and the temptation to read
+a difference is strongest.
+
 ---
 
 ## 3. Validated diagnostics

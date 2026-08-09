@@ -667,6 +667,32 @@ class ControlsConfig(StrictModel):
     # about the scorer's character handling, not a reason to lower this.
     ability_sensitivity_floor: float = 1.0
 
+    # ---- the null a CROSS-MODEL SPREAD is read against ----------------------
+    # Draws for the noise null on max-minus-min spreads across models
+    # (`scripts/figure_arm_inversion.py`). A spread over k models is a MAX
+    # STATISTIC and therefore n-dependent — the same error the control floor
+    # already paid for (`instrument_layer.md` §2.4) — so a spread means nothing
+    # until read against the spread k IDENTICAL models at the observed mean
+    # would produce. It is a control, not a summary, which is why it lives here.
+    #
+    # Tuning path: raise until every CONCLUSION-BEARING figure is seed-invariant,
+    # which is measured rather than assumed. At 20,000 draws over 50 seeds every
+    # median and every lower bound is stable to the reported 0.01, and exactly
+    # one printed value moves — the encoded-benign upper bound, 0.19 vs 0.20.
+    #
+    # ⚠️ Do NOT try to stabilise that last digit by raising this. The spread is a
+    # DISCRETE statistic (max-minus-min of Binomial(n,p)/n, so it lives on the
+    # 1/n grid), and when a quantile falls on a grid boundary the empirical
+    # endpoint oscillates at any draw count — measured still unstable at 500,000.
+    # The cell it affects has an observed spread of 0.69 against that bound, so
+    # no claim touches it. That is why the seed below is declared, not incidental.
+    noise_null_draws: int = 20_000
+    # The seed for the draws above. In config for the same reason
+    # `ProbeConfig.seed` is: it is part of the reproducibility contract, and here
+    # one printed interval endpoint genuinely depends on it (see the note above).
+    # Not a tunable — a seed has no better or worse value.
+    noise_null_seed: int = 0
+
 
 class SAEConfig(StrictModel):
     """I4 — the SAE reconstruction pre-gate (`measurements/sae_reconstruction.py`)."""

@@ -43,6 +43,12 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=8.0,<10",
+    # Figure generation for the paper directories only (scripts/figure_*.py).
+    # DEV rather than a main dep on purpose: the cluster env is built from the
+    # main list, and no job that runs there draws a figure. Nothing under src/
+    # imports it, which `tests/test_package_structure.py` is the natural place
+    # to notice if that ever changes.
+    "matplotlib>=3.9,<4",
 ]
 
 [tool.uv]
