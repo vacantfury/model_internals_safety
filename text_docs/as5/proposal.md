@@ -75,4 +75,25 @@ Model-size-agnostic: the pipeline is identical across scales; small open models 
 
 Deferred until the first-paper direction settles (S0 → S1 idea check → S2/S3). The venue scan will use the family's canonical conference timeline (`llm_guardrail_security/text_docs/shared/conference_timeline.md`) with a LIVE deadline check at that point.
 
-Nearest-window fact (from the canonical timeline, captured 2026-08-02): AAAI-27 AI Alignment (AIA) special track — abstract 2026-08-14, full paper 2026-08-21, AoE; CFP text/submission site still pending as of 07-29. Assessed 2026-08-02: too tight for a training-side first paper from a pre-code repo; a probe-only paper would fit the window but its open delta is narrow (candidate 4's scoop status). Next major windows to scan at S1 settle: ICLR 2027 (CFP pending), USENIX Security 27 cycle 1 (08-18/08-25).
+⚠️ **The nearest-window assessment that stood here has been MOVED OUT OF THIS REPO
+(2026-08-08), and the reason is a policy, not tidiness.** It named a specific
+venue, its special track and its two deadline dates, in this paper's own
+venue-strategy section, in a repo that is **public and name-linked**.
+
+A public repo is *non-anonymous online material*. Checked against the primary
+source 2026-08-08 (the venue's own instructions, quoted in the science organ's
+venue records): under double-blind review, preprints and public material are
+permitted on two conditions — the anonymous PDF must carry no citation or
+pointer to the non-anonymous material, **and the non-anonymous material must not
+reference the fact that the work was sent anywhere**. Breaking either is grounds
+for summary rejection.
+
+So the answer to the open question the paper skeleton carried is **yes, a public
+name-linked repo is fine** — provided this repo never names where the work goes.
+Window assessments, dates and track choices live in the venue records (private)
+and the family's canonical timeline; the pointer above is all that belongs here.
+
+⚠️ **This paragraph is itself written to the rule** — it does not name the venue,
+because a public file explaining our own routing would be the same violation one
+level up. `tests/test_public_repo_hygiene.py` enforces it, and it caught two
+drafts of this very section.
