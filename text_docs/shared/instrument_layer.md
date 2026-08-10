@@ -1622,6 +1622,44 @@ on any response that quotes the request — Mistral's scaffold arm reads 0.38. T
 field is named `scaffold_echo_rate_uninterpretable` so the number cannot be
 mistaken for the echo rate §3.7 measures. **Report it, never subtract it.**
 
+#### 3.9.1 ✅ THE GUARD-SIDE ARM IS BUILT (2026-08-09, TODO 65) — and its floor is the BENIGN scaffold rate
+
+`measurements/guard_scaffold_control.py`, unconditional in
+`scripts/as6_guard_probe.py`. Three design points a session must not re-derive:
+
+**The floor is the benign scaffold arm, never the harmful one.** Scaffold
+*harmful* carries real harmful plaintext, so blocking it is the guard working;
+using it as a floor would penalise a guard for doing its job. The pure wrapper
+effect is safe content, wrapped, blocked anyway.
+
+**It is a DIFFERENT screen from the benign arm, not a stronger one, and both are
+required.** They defeat different confounds and a guard can clear the first
+while failing the second — discriminating harm *inside* the encoded condition
+says nothing about whether the wrapper set the LEVEL of blocking:
+
+| screen | floor | defeats |
+|---|---|---|
+| `guard_benign_arm` | encoded benign rate | flags anything **wearing** an encoding |
+| `guard_scaffold_arm` | scaffold benign rate | flags anything **asking about** an encoding |
+
+**The decomposition is reported and never screened.** `wrapper_term` /
+`character_term` reproduce §4h's split on the guard's own discrimination and sit
+in the summary as description; `clears()` reads the single margin over the
+wrapper floor. One number, one question — the P1 boundary `refusal.py` drew for
+the same attribution, and the reason is the same: which term dominates is a
+property of the model and spans the full range, so a screen built on it would
+encode an assumption the evidence refuses to supply.
+
+**Two census defects surfaced while wiring it, both the recurring shape.** The
+guard entrypoint's `describe_plan` had counted `2 * n` at model level — the two
+plain CAPTURE passes — and silently omitted the plaintext VERDICT pass `main`
+has always run to print the block-rate ceiling. Adding the plain benign verdict
+turned one missing pass into two, which is what made it visible: *a census
+checked only when it changes is not a census*. And the guard side had no plain
+benign arm at all, so its plaintext ceiling was a rate with no denominator —
+exactly what §4d found on the target side and made mandatory there, unfixed here
+for a day longer.
+
 ### 3.11 ⚠️ SUSCEPTIBILITY IS NOT CONTAMINATION — the echo control ran, and the screen it licensed was the wrong statistic (2026-08-10)
 
 **TODO 67 needed no job and no approval gate.** It was filed as "the ONE cheap

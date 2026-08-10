@@ -228,6 +228,33 @@ guards, two base models, one answer. Derivation and the per-guard sigma finding:
 on rungs the guard blocks 65–92% of — an order of magnitude below the 0.77 this
 map was built around, and true. The instrument caught it before the paper did.
 
+### ⚠️ 0.6.1 THOSE FOUR RUNGS ARE SCREENED ON THE DECODE AXIS ONLY — the wrapper screen is BUILT and has not RUN (2026-08-09, TODO 65)
+
+The control floor above screens `decoded`. Nothing yet screens `blocked`, and
+the block rate is the other half of every cell in this map.
+
+The confound is `instrument_layer.md` §3.9, measured on the target side: the
+encoded condition changes the request's characters AND wraps them in a template
+announcing an encoding. **A guard that flags anything asking about an encoding
+produces a block rate that is a wrapper response, not a decode-then-block
+decision** — and there is no ability measurement on the guard side to cross-check
+it against, which is the same asymmetry that forced the floor's selector to be
+inherited. On the target side the wrapper alone accounted for +0.67 of Llama's
++0.84 discrimination loss and none of Qwen's, so it cannot be assumed either way
+here.
+
+`measurements/guard_scaffold_control.py` is built and unconditional in the
+entrypoint (§3.9.1 for the design; the floor is the BENIGN scaffold rate, and it
+is a different screen from the benign arm rather than a stronger one). Presets
+`guard_scaffold_llama_guard` / `guard_scaffold_wildguard` mirror the benign-arm
+family lists exactly so the floor re-derives identically.
+
+**Until both run, every `decoded_not_blocked` number in §2 and §3 — including
+WildGuard's 0.69 `combining_marks` headline — is unscreened on the block axis.**
+The three headlines this map has already lost to a control that ran afterwards
+(`caesar3`, both cipher bands) are the reason that sentence is here rather than
+in a footnote.
+
 ## 1. The licensing rule, settled by this run
 
 The open call in TODO 17(b) was: fixed margin, or a second permutation test

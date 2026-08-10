@@ -90,6 +90,10 @@ from internals_safety.measurements.deployment import (
 from internals_safety.measurements.guard_benign_control import (
     summarize_control as summarize_guard_benign_control,
 )
+from internals_safety.measurements.guard_scaffold_control import (
+    summarize_control as summarize_guard_scaffold_control,
+    verdict_passes as scaffold_verdict_passes,
+)
 from internals_safety.measurements.guard_regimes import (
     assign_guard_cell,
     build_guard_cell_map,
@@ -109,6 +113,7 @@ from internals_safety.pipeline import (
     load_contrast_sets,
     resolve_run_paths,
     run_families,
+    scaffold_arm,
     select_known,
 )
 from internals_safety.provenance import (
@@ -177,6 +182,16 @@ def run_family(
     plain_harmless_batch,
     measurements: MeasurementsConfig,
     cache_dir: Path,
+    # Keyword-only with NO default, so omitting the plaintext arm is a
+    # `TypeError` rather than a silent zero. Fifth application of the rule this
+    # repo has paid for four times in a week (`strata`, `device`, `inherited`,
+    # the control floor): a rule threaded into its callers is a rule that will
+    # be dropped by the next caller; a rule whose omission does not compile is
+    # not. A default of 0.0 here would report the guard as discriminating
+    # nothing in plaintext and make every wrapper term wrong by that amount.
+    *,
+    plain_harmful_block_rate: float,
+    plain_benign_block_rate: float,
     refresh: bool = False,
     xstest: XStestCapture | None = None,
 ) -> dict:
@@ -186,6 +201,10 @@ def run_family(
     once in `main` and passed down. `None` means the control was not requested,
     and then the decode reading is non-reportable by the contract — which is
     what every AS-6 run before 2026-08-08 was, silently.
+
+    The two plain block rates are model-level and identical for every rung; they
+    are passed down rather than re-measured so the scaffold decomposition can be
+    read off one rung's summary without joining it back to the run record.
     """
     config: GuardConfig = loaded.config
     family = encoder.family
@@ -261,6 +280,40 @@ def run_family(
         guard=config.name,
         benign_blocked=[v.unsafe for v in benign_verdicts],
         harmful_block_rate=harmful_block_rate,
+    )
+
+    # THE SCAFFOLD ARM (2026-08-09, TODO 65). Plaintext content wearing THIS
+    # rung's attack wrapper — the factorial cell that separates "the guard
+    # blocked the encoded content" from "the guard flags anything asking about
+    # an encoding". Two prefill-only verdict passes, no capture, no judge, $0.
+    #
+    # ⚠️ NOT behind `--instruments`, deliberately, and that is the whole lesson
+    # of TODO 61: measurement #4's benign arm sat behind a flag for a month and
+    # therefore never ran, so every ASR the repo held was unscreened. A control
+    # that can be omitted is a control that will be. The plain baseline was made
+    # mandatory for the same reason a day earlier.
+    #
+    # The wrapper is per-rung, not shared: `scaffold_family` bakes the rung's
+    # own `attack_template` in, so "encoded with Base64" and "encoded with
+    # homoglyph substitution" are different prompts and one scaffold arm cannot
+    # stand in for another's.
+    scaffold_items = scaffold_arm([prompt.text for prompt in harmful], encoder)
+    scaffold_benign_items = scaffold_arm([prompt.text for prompt in harmless], encoder)
+    scaffold_harmful_verdicts, _ = read_verdicts(
+        loaded, [item.attack_prompt for item in scaffold_items]
+    )
+    scaffold_benign_verdicts, _ = read_verdicts(
+        loaded, [item.attack_prompt for item in scaffold_benign_items]
+    )
+    scaffold_control = summarize_guard_scaffold_control(
+        family=family,
+        guard=config.name,
+        scaffold_harmful_blocked=[v.unsafe for v in scaffold_harmful_verdicts],
+        scaffold_benign_blocked=[v.unsafe for v in scaffold_benign_verdicts],
+        encoded_harmful_block_rate=harmful_block_rate,
+        encoded_benign_block_rate=benign_control.benign_block_rate,
+        plain_harmful_block_rate=plain_harmful_block_rate,
+        plain_benign_block_rate=plain_benign_block_rate,
     )
 
     cells = [
@@ -360,6 +413,32 @@ def run_family(
             # misnomer rather than a finding.
             "is_format_detector": benign_control.is_format_detector,
             "screen": dataclasses.asdict(benign_control.screen()),
+        },
+        # THE CONTROL ON WHAT THE BLOCK IS ABOUT. The benign arm above asks
+        # whether the guard flags anything WEARING the encoding; this asks
+        # whether it flags anything ASKING ABOUT one. A guard can clear the first
+        # and fail this — discriminating harm inside the encoded condition says
+        # nothing about whether the LEVEL of blocking was set by the wrapper.
+        #
+        # The decomposition is reported and never screened: `clears` reads the
+        # single margin above the wrapper floor, while `wrapper_term` and
+        # `character_term` describe how the loss splits. One number, one
+        # question — the boundary `refusal.py` drew for the same attribution.
+        "scaffold_arm": {
+            "n": scaffold_control.n,
+            "scaffold_harmful_block_rate": scaffold_control.scaffold_harmful_block_rate,
+            "scaffold_benign_block_rate": scaffold_control.scaffold_benign_block_rate,
+            "plain_gap": scaffold_control.plain_gap,
+            "scaffold_gap": scaffold_control.scaffold_gap,
+            "encoded_gap": scaffold_control.encoded_gap,
+            "wrapper_term": scaffold_control.wrapper_term,
+            "character_term": scaffold_control.character_term,
+            "total_loss": scaffold_control.total_loss,
+            "margin": scaffold_control.margin,
+            "bar": scaffold_control.bar,
+            "clears": scaffold_control.clears(),
+            "is_wrapper_responder": scaffold_control.is_wrapper_responder,
+            "screen": dataclasses.asdict(scaffold_control.screen()),
         },
         "decode": {
             "licensed": decode.licensed,
@@ -466,27 +545,37 @@ def describe_plan(
 ) -> str:
     """The approval-gate estimate, printed before anything loads.
 
-    Forward passes only: 2 capture passes per rung plus TWO verdict passes —
-    harmful and benign — over n prompts, with NO generation and NO judge call
-    anywhere. That is why the money line is exactly zero rather than a small
-    number.
+    Forward passes only: per rung, 2 capture passes plus FOUR verdict passes —
+    harmful and benign on the encoded arm, harmful and benign on the scaffold
+    arm — over n prompts, with NO generation and NO judge call anywhere. That is
+    why the money line is exactly zero rather than a small number.
 
-    ⚠️ **The benign verdict pass is counted here, and that is not a detail.**
-    When the benign arm landed (2026-08-08) this function still read `3 * n`,
-    so the estimate would have under-reported the run by a quarter and the
-    approval gate would have been shown a number for a run that no longer
-    existed. `behavior_control` had to make exactly this correction about itself
-    on 2026-08-07 — a control the cost estimate cannot see is a control nobody
-    approved — and pinning it costs one line. `guard_benign_control.verdict_passes`
-    is the same count stated where the control lives.
+    ⚠️ **Every arm is counted here, and that is not a detail.** When the benign
+    arm landed (2026-08-08) this function still read `3 * n`, so the estimate
+    under-reported the run by a quarter and the approval gate would have been
+    shown a number for a run that no longer existed. `behavior_control` made the
+    identical correction about itself on 2026-08-07 — *a control the cost
+    estimate cannot see is a control nobody approved*.
+
+    ⚠️ **And the model-level line was wrong in the same way until 2026-08-09.**
+    It read `2 * n`, counting the two plain CAPTURE passes and silently omitting
+    the plaintext verdict pass `main` has always run to print the block-rate
+    ceiling. Adding the plain benign verdict for the scaffold decomposition
+    turned one missing pass into two, which is what made it visible — a census
+    that is only ever checked when it changes is not a census. It is `4 * n` now
+    and derived below rather than restated.
     """
-    per_rung = 4 * n
+    # Derived from the controls themselves so the estimate cannot drift from
+    # what runs: two encoded verdicts + the scaffold arm's own count.
+    per_rung = 2 * n + 2 * n + scaffold_verdict_passes(n, n)
+    # 2 captures + 2 verdicts, both harmful and benign, all four rung-independent.
+    model_level = 2 * n + 2 * n
     n_candidates, causal_pass_units = causal
     # Each causal "pass" in `causal.forward_passes` is one sweep over a prompt
     # SET, so it costs n prompts. Converting here rather than in the counter
     # keeps that function comparable across entrypoints.
     causal_total = causal_pass_units * n
-    total = per_rung * len(families) + 2 * n + causal_total
+    total = per_rung * len(families) + model_level + causal_total
     return "\n".join(
         [
             f"guard          {config.name} ({config.hf_id})",
@@ -497,7 +586,8 @@ def describe_plan(
             f"rungs          {len(families)}: {', '.join(families)}",
             f"prompts        {n} harmful + {n} benign",
             "",
-            f"forward passes {total} ({per_rung} per rung + {2 * n} plain, captured once"
+            f"forward passes {total} ({per_rung} per rung, incl. the scaffold arm"
+            f" + {model_level} plain, captured and judged once"
             + (f" + {causal_total} causal)" if causal_total else ")"),
         ]
         + (
@@ -664,7 +754,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     plain_verdicts, _ = read_verdicts(loaded, [prompt.text for prompt in harmful])
     plain_block_rate = sum(v.unsafe for v in plain_verdicts) / len(plain_verdicts)
     plain_health = verdict_format_health(plain_verdicts)
+
+    # THE PLAIN BENIGN ARM. Rung-independent, one prefill-only pass, and until
+    # 2026-08-09 it did not exist — so the guard's plaintext ceiling was a rate
+    # with no denominator, exactly what AS-5 §4d found on the target side and
+    # made mandatory there. Without it the scaffold decomposition has no
+    # baseline to measure the wrapper term against, and "the guard discriminates
+    # harm in plaintext" was an assumption rather than a measurement.
+    plain_benign_verdicts, _ = read_verdicts(loaded, [prompt.text for prompt in harmless])
+    plain_benign_block_rate = sum(v.unsafe for v in plain_benign_verdicts) / len(
+        plain_benign_verdicts
+    )
     print(f"\nplaintext block rate: {plain_block_rate:.2f}  (the ceiling)")
+    print(
+        f"plaintext benign:     {plain_benign_block_rate:.2f}  "
+        f"(gap {plain_block_rate - plain_benign_block_rate:+.2f})"
+    )
     print(f"verdict format: {plain_health}", flush=True)
 
     raw_path = directory / "cells.jsonl"
@@ -686,6 +791,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"unmeasured {summary['n_unmeasured']}/{summary['n']}",
             flush=True,
         )
+        scaffold = summary["scaffold_arm"]
+        print(
+            f"    scaffold benign {scaffold['scaffold_benign_block_rate']:.2f} "
+            f"clears={scaffold['clears']} wrapper-responder="
+            f"{scaffold['is_wrapper_responder']} | gap plain {scaffold['plain_gap']:+.2f} "
+            f"-> scaffold {scaffold['scaffold_gap']:+.2f} -> encoded "
+            f"{scaffold['encoded_gap']:+.2f} (wrapper {scaffold['wrapper_term']:+.2f}, "
+            f"chars {scaffold['character_term']:+.2f})",
+            flush=True,
+        )
 
     summaries, readings, elapsed_seconds = run_families(
         families,
@@ -699,6 +814,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             plain_harmless_batch,
             measurements,
             activations_dir,
+            plain_harmful_block_rate=plain_block_rate,
+            plain_benign_block_rate=plain_benign_block_rate,
             refresh=args.refresh_activations,
             xstest=xstest,
         ),
@@ -730,6 +847,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "phase": PHASE,
             "corpus_digest": {"harmful": digest(harmful), "harmless": digest(harmless)},
             "plain_block_rate": plain_block_rate,
+            "plain_benign_block_rate": plain_benign_block_rate,
             "plain_verdict_format": plain_health,
             "elapsed_seconds": round(elapsed_seconds, 1),
             "summaries": summaries,

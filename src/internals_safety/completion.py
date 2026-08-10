@@ -171,6 +171,22 @@ CONTROLS: tuple[Item, ...] = (
         "benign-arm guard control (AS-6)",
         ("measurements.guard_benign_control",),
     ),
+    # Added 2026-08-09 (TODO 65). The scaffold ARM below is a corpus
+    # construction shared by both papers; this is the guard-side SCORER that
+    # reads it, and they are separate battery entries because the target side
+    # scores the arm through `refusal`/`behavior` while the guard has no such
+    # path — its verdict is its own instrument.
+    #
+    # Distinct from `guard-benign` and not a stronger version of it: that floor
+    # is the ENCODED benign arm and defeats "flags anything wearing the
+    # encoding"; this floor is the SCAFFOLD benign arm and defeats "flags
+    # anything asking about an encoding". A guard can clear the first and fail
+    # this one.
+    Item(
+        "guard-scaffold",
+        "attack-wrapper guard control (AS-6)",
+        ("measurements.guard_scaffold_control",),
+    ),
     Item("random-direction", "matched-norm null", ("measurements.causal_license",)),
     Item("pairing", "derangement primitives", ("pairing",)),
     # Added 2026-08-09 (`instrument_layer.md` §3.9). The battery screened the

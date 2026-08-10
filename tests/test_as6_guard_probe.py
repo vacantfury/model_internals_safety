@@ -140,6 +140,11 @@ def one_rung(sweep, tiny_guard_model, corpus, measurements, tmp_path_factory):
         plain_harmless,
         measurements,
         cache,
+        # The plaintext arm, model-level in `main`. Both rates are needed for
+        # the scaffold decomposition; a fixture supplying only the harmful one
+        # could not express the wrapper term at all.
+        plain_harmful_block_rate=0.9,
+        plain_benign_block_rate=0.1,
     )
 
 
@@ -314,9 +319,71 @@ def test_dry_run_plan_reports_zero_money_and_zero_judge_calls(sweep, tiny_guard_
     assert "money          $0.00" in plan
     assert "judge calls    0" in plan
     assert "generations    0" in plan
-    # FOUR passes per rung x 100, plus 200 plain captures: 2 captures, plus a
-    # verdict pass on EACH arm. The benign verdict pass landed 2026-08-08
-    # (`measurements/guard_benign_control.py`) and this assertion is what would
-    # have caught the estimate not following it — a control the cost estimate
-    # cannot see is a control nobody approved.
-    assert "forward passes 1000" in plan
+    # SIX passes per rung x 100 x 2 rungs, plus 400 model-level: 2 captures and
+    # 2 verdict passes over the plain corpus. Per rung that is 2 captures, a
+    # verdict pass on each encoded arm, and a verdict pass on each SCAFFOLD arm
+    # (TODO 65, 2026-08-09).
+    #
+    # This assertion is the census guard, and it has now caught two omissions
+    # rather than one. The benign verdict pass landed 2026-08-08 and had to be
+    # added here; wiring the scaffold arm exposed that the model-level term had
+    # read `2 * n` all along, silently omitting the plaintext verdict pass
+    # `main` has always run. A control the cost estimate cannot see is a control
+    # nobody approved.
+    assert "forward passes 1600" in plan
+
+
+def test_the_scaffold_arm_is_in_the_summary_and_was_not_optional(one_rung):
+    """TODO 65. The wrapper control has to be in every rung's record, and the
+    reason it is unconditional rather than behind `--instruments` is TODO 61:
+    measurement #4's benign arm sat behind a flag for a month and therefore
+    never ran, so every ASR the repo held was unscreened. `one_rung` requests no
+    instruments, so its presence here IS the assertion that the arm cannot be
+    switched off.
+    """
+    scaffold = one_rung["summary"]["scaffold_arm"]
+
+    assert set(scaffold) >= {
+        "scaffold_harmful_block_rate",
+        "scaffold_benign_block_rate",
+        "plain_gap",
+        "scaffold_gap",
+        "encoded_gap",
+        "wrapper_term",
+        "character_term",
+        "clears",
+        "is_wrapper_responder",
+        "screen",
+    }
+    # The floor is the BENIGN scaffold rate, never the harmful one — blocking
+    # harmful plaintext in a wrapper is the guard working, not a confound.
+    assert scaffold["screen"]["floor"] == scaffold["scaffold_benign_block_rate"]
+    assert scaffold["screen"]["direction"] == "above"
+    assert scaffold["wrapper_term"] + scaffold["character_term"] == pytest.approx(
+        scaffold["total_loss"]
+    )
+
+
+def test_the_plaintext_arm_cannot_be_omitted_from_a_rung(
+    sweep, tiny_guard_model, corpus, measurements, tmp_path
+):
+    """Omitting it must not compile. A default would silently report the guard
+    as discriminating nothing in plaintext and make every wrapper term wrong."""
+    harmful, harmless = corpus
+    plain_harmful, _, _ = sweep.capture_guard(
+        tiny_guard_model, [p.text for p in harmful], "plain-harmful", tmp_path
+    )
+    plain_harmless, _, _ = sweep.capture_guard(
+        tiny_guard_model, [p.text for p in harmless], "plain-harmless", tmp_path
+    )
+    with pytest.raises(TypeError):
+        sweep.run_family(
+            tiny_guard_model,
+            load_ladder()["rot13"],
+            harmful,
+            harmless,
+            plain_harmful,
+            plain_harmless,
+            measurements,
+            tmp_path,
+        )

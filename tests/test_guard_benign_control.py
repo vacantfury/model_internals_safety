@@ -195,8 +195,13 @@ class TestTheEstimateSeesTheControl:
 
         config = load_guard_config("wildguard")
         plan = module.describe_plan(config, ["zero_width", "homoglyph"], 100, "cpu")
-        # 2 capture + 2 verdict = 4 passes over n, per rung.
-        assert "400 per rung" in plan, plan
+        # 2 capture + 2 verdict = 4 passes over n, per rung — plus the scaffold
+        # arm's own 2 verdict passes since 2026-08-09 (TODO 65), which is why
+        # this reads 600 rather than the 400 it pinned when the benign arm
+        # landed. The assertion this class exists for is unchanged: the benign
+        # verdict pass must still be inside the number, and dropping it would
+        # take this back to 500.
+        assert "600 per rung" in plan, plan
         assert "money          $0.00" in plan
 
     def test_it_agrees_with_the_control_modules_own_count(self):
