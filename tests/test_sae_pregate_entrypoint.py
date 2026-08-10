@@ -187,3 +187,77 @@ class TestDryRunProvesNothingAboutTheRealPath:
 
         assert run(tmp_path, ["--dry-run"]) == 0
         assert not list(tmp_path.rglob("results.json"))
+
+
+class TestTheTargetArmIsTheBranchEveryPresetTakes:
+    """⚠️ The class above ran `main()` end to end and still missed a defect that
+    killed six H200 tasks — jobs `9049059`/`9049060`, 2026-08-10.
+
+    **Because it never passed `--ceiling-from`.** Every committed preset that is
+    not the ceiling arm passes it, so the branch the cluster actually executes
+    was the one branch with no end-to-end coverage: `ceiling_from` returns a
+    `Ceiling` dataclass (since `5bd8c32`, when the KL bar landed beside the
+    variance bar) and the print beside it still formatted it as a float.
+
+    **Why the static call-site guard could not help, again.**
+    `test_entrypoint_call_sites.py` binds a caller's ARGUMENTS against a live
+    signature. This is a RETURN type flowing into an f-string — the call binds
+    perfectly. Same lesson as `plain_arm`: the durable fix is not another
+    watcher, it is running the branch.
+
+    The ceiling artifact is produced by running `main()` in ceiling mode rather
+    than hand-written, per the fixture law: a hand-made ceiling file is a fixture
+    more permissive than the real thing, and `ceiling_from` raises on exactly the
+    fields such a fixture would be free to get wrong (`detail.arm`, the layer).
+    """
+
+    def ceiling_artifact(self, tmp_path) -> Path:
+        """Run the CEILING arm for real and hand back its record."""
+        assert run(tmp_path, ["--run-name", "pregate-ceiling"]) == 0
+        records = [p for p in tmp_path.rglob("results.json") if "pregate-ceiling" in str(p)]
+        assert len(records) == 1, f"expected one ceiling record, found {records}"
+        return records[0]
+
+    def test_the_target_arm_runs_end_to_end_against_a_real_ceiling(
+        self, stubbed, tmp_path
+    ):
+        """The exact shape of the cluster command, and what six tasks died on."""
+        ceiling = self.ceiling_artifact(tmp_path)
+
+        assert run(tmp_path, [
+            "--run-name", "pregate-target",
+            "--ceiling-from", str(ceiling),
+        ]) == 0
+
+        record = json.loads(
+            next(p for p in tmp_path.rglob("results.json") if "pregate-target" in str(p)
+                 ).read_text()
+        )
+        assert record["n_prompts"] == 2
+
+    def test_the_ceiling_is_printed_with_BOTH_of_its_terms(
+        self, stubbed, tmp_path, capsys
+    ):
+        """`Ceiling` carries variance AND KL because both are relative bars, and
+        shipping only one is the defect `5bd8c32` fixed one level down. A target
+        run that reports only one of them is that defect resurfacing in the
+        operator-facing output, where it is exactly as misleading."""
+        ceiling = self.ceiling_artifact(tmp_path)
+        capsys.readouterr()
+
+        run(tmp_path, ["--run-name", "pregate-target", "--ceiling-from", str(ceiling)])
+
+        printed = capsys.readouterr().out
+        assert "ceiling variance" in printed
+        assert "KL" in printed
+
+    def test_a_target_record_is_not_accepted_as_a_ceiling(self, stubbed, tmp_path):
+        """Chaining a target reading as a ceiling compounds one transfer ratio on
+        another and yields a confident number describing nothing. `ceiling_from`
+        guards it; this pins that the guard survives the entrypoint."""
+        ceiling = self.ceiling_artifact(tmp_path)
+        run(tmp_path, ["--run-name", "pregate-target", "--ceiling-from", str(ceiling)])
+        target = next(p for p in tmp_path.rglob("results.json") if "pregate-target" in str(p))
+
+        with pytest.raises(ValueError):
+            run(tmp_path, ["--run-name", "pregate-chained", "--ceiling-from", str(target)])

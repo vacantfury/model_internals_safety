@@ -176,7 +176,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     ceiling = ceiling_from(args.ceiling_from, layer) if args.ceiling_from else None
     if ceiling is not None:
-        print(f"  ceiling {ceiling:.4f} from {args.ceiling_from}", flush=True)
+        # BOTH terms, because `Ceiling` carries both and the gate reads both.
+        # This line formatted the whole dataclass as a float for as long as
+        # `ceiling_from` has returned one (`5bd8c32`, the KL bar landing beside
+        # the variance bar), and it killed all six tasks of jobs 9049059/9049060
+        # after the queue wait — every committed preset passes --ceiling-from,
+        # and no test did.
+        print(
+            f"  ceiling variance {ceiling.variance_explained:.4f} "
+            f"KL {ceiling.kl_recovered:.4f} from {args.ceiling_from}",
+            flush=True,
+        )
     verdict = (
         reading(quality, measurements.sae, ceiling=ceiling)
         if quality.n_prompts
