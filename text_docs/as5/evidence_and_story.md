@@ -588,10 +588,16 @@ discriminating one, with a plaintext gap of 0.32 against 0.80–0.83:
 | Llama-3.1-8B | **67–100%** |
 
 **The claim is about a class of encoders, not one** (§4g). Five substrate rungs
-through the same paired design give a within-model spread of 0.10–0.27 against a
-between-model range of 0.56 — the model term dominates the encoding term by 2–5×,
-so *gap lost* is primarily a model property. It is not a per-model constant, and
-a paper claiming one would be overstating it.
+through the same paired design, and the per-model mean gap lost separates the
+models by 0.53 — so the claim generalises beyond `homoglyph`.
+
+> ⚠️ **The QUANTITATIVE form of this leg is corrected (2026-08-10).** It read
+> "within-model spread 0.10–0.27 against a between-model range of 0.56 — the
+> model term dominates by 2–5×, so *gap lost* is primarily a model property."
+> On echo-clean cells the spread is **0.07–0.48** and the dominance **1.1×–7.7×**
+> (§4g, `instrument_layer.md` §3.11.1). **Do not write "primarily a model
+> property" and do not quote 2–5×.** The generalisation itself is unaffected;
+> only the claim that the encoding term is a minor one falls.
 
 **2. The controlled series — the remedy does not work, and the metric reports
 its progress backwards (§4f).**
@@ -849,6 +855,30 @@ dominates the encoding term by 2 to 5×, so *gap lost* is primarily a model
 property and **leg 1 generalises beyond `homoglyph`**. It is not constant,
 though — encoding contributes a real secondary term, and a paper claiming a
 single per-model constant would be overstating it.
+
+> ⚠️ **THE DOMINANCE MARGIN DOES NOT SURVIVE THE ECHO SCREEN (2026-08-10,
+> `instrument_layer.md` §3.11.1).** Three of the five substrate rungs —
+> `fullwidth`, `fullwidth_letters`, `zero_width` — fail the echo-displacement
+> screen on three of the four models, by 1.2–2.2× their own bar; `homoglyph` and
+> `math_bold` clear everywhere. Recomputing the identical statistic on echo-clean
+> cells (the reported figures reproduce as 2.1–5.6×, so it is like-for-like):
+> within-model spread **0.07–0.48** against a between-model range of **0.53**,
+> i.e. **1.1×–7.7×**. Llama goes 0.27 → 0.48 and Tülu 0.10 → 0.41. **At 1.1× the
+> two terms are the same size, so "primarily a model property" is not supported
+> and the sentence above must not be used as written.**
+>
+> **What survives, and it is most of the section.** The per-model MEAN gap lost
+> is nearly unmoved (0.684→0.572, 0.154→0.041, 0.390→0.440, 0.120→0.111), so
+> *models differ, and by a lot* stands — as does the normalised table below,
+> whose ordering is driven by the plaintext denominators. What falls is only the
+> quantitative dominance claim. **Leg 1 still generalises beyond `homoglyph`**;
+> what it may no longer say is that the encoding term is a minor one.
+>
+> The mechanism is exactly this section's own lesson one level up: echo rate
+> varies by rung far more than by model, so an unscreened spread ACROSS rungs is
+> partly measuring echo exposure. A displacement can sit under the bar on every
+> rung individually and still dominate the variance between them — screening each
+> reported gap is not sufficient for a statistic computed over gaps.
 
 ### ⚠️ The reading correction, and it reverses §4d's model ordering
 

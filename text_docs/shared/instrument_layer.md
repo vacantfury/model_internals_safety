@@ -1703,6 +1703,49 @@ block verdict has the same echo-vs-block ambiguity, and the guard-side benign ar
 (§0.6, TODO 65) supplies the second arm this screen requires — so the guard
 ladder should compute displacement from its first sweep rather than retrofit it.
 
+#### 3.11.1 ⚠️ Applied to the generalisation run, it removes that run's margin (2026-08-10)
+
+The screen was built on the four scaffold-control runs. Applied the same day to
+the four `spread-*` runs — AS-5 §4g, the run that generalises leg 1 from one
+encoder to a class, `outputs/analysis/echo_displacement_spread_20260810.json`:
+
+| rung | Llama | Qwen | Tülu | Mistral |
+|---|---|---|---|---|
+| `homoglyph` | 0.002 ✓ | 0.029 ✓ | 0.013 ✓ | 0.007 ✓ |
+| `math_bold` | 0.032 ✓ | 0.025 ✓ | 0.069 ✓ | — |
+| `fullwidth` | **0.159 ✗** | **0.205 ✗** | **0.195 ✗** | 0.008 ✓ |
+| `fullwidth_letters` | **0.252 ✗** | **0.176 ✗** | **0.134 ✗** | 0.001 ✓ |
+| `zero_width` | **0.116 ✗** | **0.181 ✗** | **0.160 ✗** | 0.024 ✓ |
+
+**Three of the five substrate rungs fail on three of the four models**, and they
+fail by 1.2–2.2× their own bar. `homoglyph` and `math_bold` clear everywhere.
+
+**What that does to §4g's margin.** §4g's claim is that within-model spread
+(0.10–0.27) is dominated 2–5× by between-model range (0.56), therefore *gap lost*
+is primarily a model property. Recomputing the identical statistic on echo-clean
+cells only — the reported figures reproduce §4g exactly at 2.1–5.6×, so the
+comparison is like-for-like:
+
+| | within-model spread | between-model range | dominance |
+|---|---|---|---|
+| as reported | 0.10 – 0.27 | 0.56 | 2.1× – 5.6× |
+| **echo-clean** | **0.07 – 0.48** | 0.53 | **1.1× – 7.7×** |
+
+Llama goes 0.27 → **0.48** and Tülu 0.10 → **0.41**, against a between-model
+range that barely moves (0.56 → 0.53). At 1.1× the two terms are the same size,
+so **"primarily a model property" is not supported on screened cells.** The
+per-model MEAN gap lost is nearly unmoved (0.684→0.572, 0.154→0.041,
+0.390→0.440, 0.120→0.111) — *that* models differ survives; *by how much the
+encoding term is dominated* does not.
+
+**The mechanism is the one this section already names.** Echo rate varies by rung
+far more than by model, so an unscreened spread across rungs is partly measuring
+echo exposure rather than encoding strength — and the three failing rungs are
+exactly the high-echo ones. **A spread statistic over rungs must be computed on
+echo-clean cells**, which is a stronger requirement than screening a single
+reported gap: the displacement can sit under the bar on every rung individually
+and still dominate the variance across them.
+
 ---
 
 ## 4. Open, with the method already identified
