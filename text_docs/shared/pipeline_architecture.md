@@ -203,11 +203,53 @@ settled rule that did not reach every caller* — four instances between
 *a governing layer that never reached the governed quantity*, and it is harder
 to notice precisely because the contract is visibly working on ASR throughout.
 
-**The fix, filed not built: a `refusal` instrument** whose `required_controls`
-are the paired benign arm and the plaintext baseline — the two things §4d and
-§3.6 already made mandatory in prose. Until it exists, the refusal numbers rest
-on an argument written in a design doc, which is the exact condition
-`measurements/contract.py` was adopted to end.
+**✅ BUILT 2026-08-09 (TODO 64): `measurements/refusal.py`, wired into
+`phase0_regime_map.py`.** Value is the **harm gap** — harmful minus benign
+refusal on the same prompts and condition — because a rate alone is
+uninterpretable and this repo has paid for that twice (§3.6 found refusal
+tracking the encoding rather than harm; §4d found every encoded rate reported
+with no plaintext denominator). Both control arms come free from sweeps already
+run: the **negative control** is a can't-decode rung's gap, where no
+discrimination over recovered content is possible — the same ability-0 free
+control that calibrates the deployment floor, one measurement over — and the
+**sensitivity arm** is the plaintext gap, so the contract's null path and §4d's
+mandatory baseline turn out to be one requirement reached from opposite
+directions. One reading per condition; wrapper-vs-character attribution is a
+comparison ACROSS conditions and stays the caller's, since one number answering
+two questions is what P1 forbids.
+
+⚠️ **Every refusal gap this repo holds is now correctly WITHHELD**, naming its
+required echo screen — which has never run on any family. Same shape as
+`behavior`'s benign arm, which withheld everywhere for weeks and then found the
+judge inverted. The cheap job that closes it is `scripts/refusal_judge_control.py`.
+
+#### ⚠️ 3.1.2 A broken instrument manufactures a NULL — the contract's null path was too permissive (fixed 2026-08-09)
+
+Found by wiring the above, and it is the more consequential of the two.
+
+`reportable` routes on the claim's direction, and the null path deliberately
+drops P2 and P3. **That argument is right and it does not extend as far as it
+was applied.** P2/P3 are *inflation* controls — is this signal really the control
+condition, really length — and a null has no signal to explain away. The screens
+in `controls` are **validity** controls: is the instrument measuring what it says
+at all. The null path dropped those too, so a claim could be reported with a
+declared-required screen never run.
+
+**Why that is not academic, in one arithmetic chain.** The refusal judge counts
+an echo as a refusal, by its own prompt. Encoded prompts make both arms echo
+heavily (§3.7: 71–74% of (S) cells on two of three sound rungs). So a judge that
+flips on echoes drives harmful *and* benign refusal to ~1.00 alike and reports a
+harm gap of **0.00** — which is AS-5's leg 1 verbatim: `+0.82 → 0.00`, benign and
+harmful refused at an identical 0.99. **The instrument defect and the paper's
+headline finding are the same number**, and the contract would have called it
+reportable with the echo control unrun.
+
+So §4e's asymmetry — *every defect on the behaviour axis inflates apparent
+safety* — has a second storey: a behaviour-axis defect can **manufacture the
+central claim**, not merely flatter a number. `Reading.validity_screens_hold`
+binds on both paths; blast radius at introduction was exactly one instrument,
+since `behavior`, `deployment` and `refusal` declare required screens and only
+`refusal` also makes null claims.
 
 ### 3.2 ~~Split `measurements/` by kind~~ — STRUCK 2026-08-06
 
