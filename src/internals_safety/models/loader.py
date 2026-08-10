@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Iterable, Sequence
+from typing import Iterable, Sequence, get_args
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizerBase
@@ -434,6 +434,50 @@ def instruction_final_offset(
     return (n_prefix - 1) - n_tokens
 
 
+def end_of_instruction_span(
+    tokenizer: PreTrainedTokenizerBase, rendered: str, user_message: str
+) -> int:
+    """How many tokens sit between the user message's end and the prompt's end.
+
+    This is Arditi et al.'s `eoi_toks` span, DERIVED from the live template
+    rather than hardcoded per model family: they sweep
+    `positions=range(-len(eoi_toks), 0)`, which for Llama-3.1-8B-Instruct is 5
+    tokens (`<|eot_id|>`, `<|start_header_id|>`, `assistant`, `<|end_header_id|>`,
+    `\\n\\n`) at offsets -5..-1.
+
+    Derived, because the number is a property of somebody else's chat template
+    and differs across the slate — AS-6's guards render through templates that
+    are not Llama-3.1's, and assuming five there would repeat the defect this
+    function exists to fix (`instrument_layer.md` §6.3.4). `instruction_final`
+    is at `-(span + 1)` by construction, which is why the old two-position spine
+    sampled one token OUTSIDE the span and one at its end.
+    """
+    return -instruction_final_offset(tokenizer, rendered, user_message) - 1
+
+
+def eoi_position_names(span: int) -> list[PositionName]:
+    """The position names covering an end-of-instruction span of `span` tokens.
+
+    `last` plus `last_minus_1..last_minus_(span-1)`. Fails LOUD when the span is
+    longer than the enumerated names rather than silently covering part of it:
+    a partially-swept span is exactly the failure mode that produced §6.3.4, and
+    returning a short list would reproduce it while looking like coverage.
+    """
+    if span < 1:
+        raise ValueError(f"end-of-instruction span must be at least 1 token, got {span}")
+    names: list[PositionName] = ["last"]
+    for k in range(1, span):
+        name = f"last_minus_{k}"
+        if name not in get_args(PositionName):
+            raise ValueError(
+                f"end-of-instruction span is {span} tokens, which needs {name}, but "
+                f"PositionName enumerates only up to last_minus_6. Extend it rather "
+                "than sweeping part of the span — partial coverage is what §6.3.4 was."
+            )
+        names.append(name)  # type: ignore[arg-type]
+    return names
+
+
 def resolve_position(
     tokenizer: PreTrainedTokenizerBase,
     rendered: str,
@@ -444,6 +488,8 @@ def resolve_position(
         return -1
     if position == "instruction_final":
         return instruction_final_offset(tokenizer, rendered, user_message)
+    if position.startswith("last_minus_"):
+        return -(1 + int(position.removeprefix("last_minus_")))
     raise ValueError(f"unknown position name: {position!r}")
 
 

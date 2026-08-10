@@ -2360,11 +2360,33 @@ layer, no difference-in-means direction both removes ≥50% of refusal and leave
 harmless behaviour within KL 0.1.* The reading remains `licensed=None`,
 `claim=null`, withheld for the correct reason — no sensitivity arm.
 
-**Next move, and it is now specific rather than exploratory:** add the
-end-of-instruction span to the capture spine (−5…−2, joining the two we have)
-and re-run the gate. Both papers inherit it — AS-6's guard renders through a
-different template whose own eoi span must be derived the same way, never
-assumed to be five tokens.
+**✅ BUILT the same day, and the build found something the plan did not
+anticipate: THE SPAN IS MODEL-DEPENDENT, and that alone invalidates cross-model
+comparisons drawn from the old spine.** `PositionName` gains `last_minus_1..6`,
+`end_of_instruction_span()` DERIVES the length from the live template, and
+`eoi_position_names()` refuses a span wider than the enumerated names rather
+than silently covering part of it. Measured against the real shipped tokenizers
+(`tests/test_eoi_positions.py`, tokenizers only, no weights):
+
+| model | eoi span | sites the old spine captured | missed |
+|---|---|---|---|
+| Llama-3.1-8B-Instruct | **5** | 1 of 5 (`last`) | **4** |
+| Qwen2.5-7B-Instruct | **5** | 1 of 5 | **4** |
+| Mistral-7B-Instruct-v0.3 | **1** | 1 of 1 | **0** |
+
+Mistral's template closes with `[/INST]` and generation begins immediately —
+there is no assistant header to sweep — so the two-position spine was **already
+complete** there and missing four of five sites on the other two. Consequences:
+a hardcoded 5 would have been wrong on Mistral by 5×, which is why the length is
+derived; and **any cross-model claim from a pre-fix run was comparing models at
+different coverage**, which is a confound nothing in the runs would have
+revealed. Llama-3.1's derived 5 independently reproduces Arditi's `eoi_toks`
+computed their way — the agreement is what licenses the port.
+
+**Next: re-run the gate with the span captured.** AS-6 inherits it directly and
+must derive its GUARDS' spans the same way — Llama Guard and WildGuard render
+through templates that are neither Llama-3.1's nor each other's, and the Mistral
+result shows assuming any single number is a real error, not a theoretical one.
 
 ### 6.4 The roster, the sequencing, and the literature map
 
