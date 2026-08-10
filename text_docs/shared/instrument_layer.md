@@ -1622,7 +1622,17 @@ on any response that quotes the request — Mistral's scaffold arm reads 0.38. T
 field is named `scaffold_echo_rate_uninterpretable` so the number cannot be
 mistaken for the echo rate §3.7 measures. **Report it, never subtract it.**
 
-#### 3.9.1 ✅ THE GUARD-SIDE ARM IS BUILT (2026-08-09, TODO 65) — and its floor is the BENIGN scaffold rate
+#### 3.9.1 ✅ THE GUARD-SIDE ARM IS BUILT AND HAS RUN (2026-08-09/10, TODO 65) — and its floor is the BENIGN scaffold rate
+
+> **RESULT, jobs `9049076`/`9049077` (2026-08-10, $0, 8 min each; map: `as6/phase1_map.md` §0.6.2).**
+> The wrapper term on the GUARD side is **+0.04 to +0.18**, against a target-side term that
+> *dominated* on 2 of 4 models (Llama +0.67 of +0.84). `is_wrapper_responder` is `False` on every
+> rung of both guards. **A confound's magnitude does not port from the target to the defence** —
+> which is the same shape as §2.6's finding that the control floor's selector does not port, and
+> the second time an AS-5 property has had to be re-measured rather than inherited on the guard
+> side. The screen still earned its cost: it withdrew WildGuard's largest cell, which blocks 0.44
+> of benign plaintext-in-a-wrapper and only 0.25 of the encoded harmful corpus.
+
 
 `measurements/guard_scaffold_control.py`, unconditional in
 `scripts/as6_guard_probe.py`. Three design points a session must not re-derive:
