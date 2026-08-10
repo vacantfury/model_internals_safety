@@ -86,6 +86,7 @@ from internals_safety.judges.harmbench import HarmBenchJudge
 from internals_safety.judges.refusal import RefusalJudge
 from internals_safety.measurements import ability as ability_module
 from internals_safety.measurements import behavior as behavior_module
+from internals_safety.measurements import refusal as refusal_module
 from internals_safety.measurements import deployment as deployment_module
 from internals_safety.measurements import recognition as recognition_module
 from internals_safety.measurements import decode_lens as decode_lens_module
@@ -800,6 +801,17 @@ def run_family(
     cache_dir: Path = ACTIVATIONS_DIR,
     instruments: Sequence[str] = (),
     xstest: "XStestCapture | None" = None,
+    *,
+    # The model-level plaintext harm gap, threaded in as the `refusal`
+    # instrument's SENSITIVITY arm — a null claim about an encoded condition is
+    # inadmissible without evidence the instrument could have fired at all.
+    #
+    # Keyword-only with NO DEFAULT, so a caller that forgets it gets a
+    # `TypeError` rather than a silently unsensitised reading. Fifth application
+    # of the rule (`strata`, `device`, `inherited`, `cross_rung_screen`): the fix
+    # for a rule that did not reach a caller is making the omission
+    # inexpressible, never threading it and hoping.
+    plain_harm_gap: float | None,
 ) -> dict:
     """Every measurement for one rung, plus the regime map they combine into.
 
@@ -1211,6 +1223,64 @@ def run_family(
             ) / len(scaffold_behavior_records),
         }
 
+    # ---- the `refusal` instrument, one reading per measured condition -------
+    #
+    # Built HERE, where all three conditions are in hand, which is the point the
+    # scaffold block above declines to make a verdict at. Attribution between
+    # wrapper and characters is a comparison ACROSS conditions and is the
+    # caller's; each condition gets its own governed reading.
+    #
+    # `control_gap` is the free negative control this repo already uses one
+    # measurement over: on a rung the model demonstrably cannot decode, whatever
+    # separation the judge finds is not discrimination over recovered content.
+    # Derived from the same ability cut that defines a control rung, so the two
+    # cannot drift apart. On a rung that IS decodable there is no in-run
+    # can't-decode arm, so it stays `None` — disqualifying, never a passing 0.0.
+    refusal_readings: list = []
+    if benign_behavior_records:
+        cant_decode = ability_summary.recovery_rate <= measurements.controls.control_ability_max
+        encoded_gap = refusal_module.summarize_gap(
+            f"encoded:{family}",
+            behavior_summary,
+            behavior_module.summarize_by_family(benign_behavior_records)[0],
+        )
+        conditions = [encoded_gap]
+        if scaffold_detail:
+            conditions.append(
+                refusal_module.HarmGap(
+                    condition=f"scaffold:{family}",
+                    n_harmful=scaffold_detail["scaffold_n_harmful"],
+                    n_benign=scaffold_detail["scaffold_n_benign"],
+                    harmful_refusal_rate=scaffold_detail["scaffold_harmful_refusal_rate"],
+                    benign_refusal_rate=scaffold_detail["scaffold_benign_refusal_rate"],
+                )
+            )
+        refusal_readings = [
+            refusal_module.reading(
+                condition,
+                # DECLARED, never derived from the number — deriving it would let
+                # any gap reading near zero dodge its own negative control by
+                # definition (contract module docstring). A rung the model cannot
+                # decode cannot support a claim that the ENCODING destroyed
+                # discrimination, because nothing was decoded; that is a null
+                # about the rung, so it routes to the sensitivity arm.
+                claim="null" if cant_decode else "positive",
+                control_gap=0.0 if cant_decode else None,
+                control_margin=measurements.refusal.min_gap_margin,
+                plain_gap=plain_harm_gap,
+                sensitivity_floor=measurements.refusal.min_plain_gap,
+                # ⚠️ The required echo screen. Not available in this run — the
+                # control is a separate judge pass (`scripts/refusal_judge_control.py`)
+                # and costs API calls, so every reading here is correctly
+                # withheld naming it. Wiring the SCREEN rather than silently
+                # dropping the requirement is the difference between a withheld
+                # number and an ungoverned one.
+                echo_screen=None,
+                length_null_margin=length_null.margin(condition.gap),
+            )
+            for condition in conditions
+        ]
+
     # The XSTest lexical control, read at the cell this rung's deployment claim
     # is read at. Costs no forward pass here — the corpus was captured once at
     # model level and this is a logistic fit over activations already in hand.
@@ -1301,6 +1371,17 @@ def run_family(
             controls=behavior_screens,
             detail={**behavior_control_detail, **scaffold_detail},
         ),
+        # The `refusal` instrument (TODO 64). `behavior` above reports ASR, which
+        # no paper here will print; THIS is the quantity legs 1 and 2 are made
+        # of, and until 2026-08-09 the contract had no reading for it at all.
+        #
+        # It will be WITHHELD on every run until `scripts/refusal_judge_control.py`
+        # has run on this family — the echo screen is required and unrun, exactly
+        # as `behavior`'s benign arm was for weeks. That is the instrument
+        # working, not failing: the refusal judge counts an echo as a refusal by
+        # its own prompt, and §3.7 measured (S) cells at 71-74% echo on two of
+        # three sound rungs.
+        *refusal_readings,
         deployment_module.reading(
             curve,
             length_null_margin=length_margin,
@@ -1684,6 +1765,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             cache_dir=activations_dir,
             instruments=instruments,
             xstest=xstest,
+            plain_harm_gap=plain_baseline["plain_harm_gap"],
         ),
         report=lambda result: print(result["regime_map"], flush=True),
         cross_rung_screen=deployment_screen,

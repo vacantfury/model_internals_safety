@@ -125,6 +125,12 @@ def family_result(pilot, tiny_model, harmful, harmless, plain_batches, judges, t
         refusal,
         harm,
         cache_dir=tmp_path,
+        # The `refusal` instrument's sensitivity arm. A REAL plaintext gap, not
+        # a convenient one: 0.83 is Llama-3.1-8B's measured value (§4h), so the
+        # fixture exercises the branch where a null claim about an encoded
+        # condition is admissible. A 0.0 here would silently make every null
+        # reading unsensitised and the tests would still pass.
+        plain_harm_gap=0.83,
     )
 
 
@@ -282,8 +288,8 @@ class TestRunFamily:
         refusal, harm = judges
         encoder = load_ladder()["base64"]
         args = (tiny_model, encoder, harmful, harmless, *plain_batches, MEASUREMENTS, refusal, harm)
-        first = pilot.run_family(*args, cache_dir=tmp_path)
-        second = pilot.run_family(*args, cache_dir=tmp_path)
+        first = pilot.run_family(*args, cache_dir=tmp_path, plain_harm_gap=0.83)
+        second = pilot.run_family(*args, cache_dir=tmp_path, plain_harm_gap=0.83)
         assert first["summary"]["activations"]["cache_hits"] == [False, False]
         assert second["summary"]["activations"]["cache_hits"] == [True, True]
 
@@ -365,7 +371,12 @@ class TestMain:
         # would otherwise pick whichever came first.
         instruments = {reading["instrument"] for reading in record["readings"]}
         assert instruments == {
-            "ability", "behavior", "behavior_plain", "deployment", "recognition", "trajectory"
+            "ability", "behavior", "behavior_plain", "deployment", "recognition",
+            "trajectory",
+            # Added 2026-08-09 (TODO 64). `behavior`'s value is ASR; THIS is the
+            # quantity legs 1 and 2 are made of, and the contract had no reading
+            # for it at all until now.
+            "refusal",
         }
         # Every reading states how to read its number and whether it was measured.
         for reading in record["readings"]:
@@ -383,6 +394,24 @@ class TestMain:
         withheld = json.loads((run / "results.json").read_text())["withheld"]
         assert "behavior" in withheld
         assert any("no negative control" in why for why in withheld["behavior"])
+
+    def test_refusal_is_withheld_for_want_of_the_ECHO_control(self, run):
+        """⚠️ The load-bearing consequence of TODO 64, end to end.
+
+        The `refusal` instrument governs the quantity both papers report, and
+        its required screen — has this judge been shown not to read an ECHO as a
+        refusal — is a separate judge pass that has never run on any family. So
+        every refusal gap this repo holds is correctly WITHHELD naming it.
+
+        That is the instrument working. §3.7 measured (S) cells at 71-74% echo on
+        two of three sound rungs, and the refusal judge counts an echo as a
+        refusal by its own prompt. If this test goes green by accident, either
+        the control ran or the requirement was quietly dropped — and the second
+        is what the contract exists to make impossible.
+        """
+        withheld = json.loads((run / "results.json").read_text())["withheld"]
+        assert "refusal" in withheld
+        assert any("NOT RUN" in why and "echo" in why.lower() for why in withheld["refusal"])
 
     def test_an_ability_zero_family_is_reported_as_the_ABSENCE_it_is(self, run):
         """TODO 42 closed, end to end through a real run record.

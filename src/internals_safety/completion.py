@@ -134,6 +134,15 @@ ROSTER: tuple[Item, ...] = (
 NOT_ROSTER: dict[str, str] = {
     "ability": "measurement #1 — the pilot's original four, predating the I-roster",
     "behavior": "measurement #4 — likewise",
+    "refusal": (
+        "measurement #4's DISCRIMINATION half, split out 2026-08-09 (TODO 64) — not an "
+        "I-roster instrument but the one the papers actually report. `behavior`'s value is "
+        "ASR, unreportable repo-wide since instrument_layer §3.5.2, so the contract governed "
+        "a number no paper will print and was silent on the refusal gap legs 1 and 2 are "
+        "made of. Separate module because P1 demands a distinct question: `behavior` asks "
+        "whether the attack succeeded, this asks whether refusal carries information about "
+        "harm — a model can score perfectly on the first and zero on the second"
+    ),
     "deployment": "measurement #2 — likewise",
     "recognition": "measurement #3 — likewise",
     "contract": "the instrument contract itself, not an instrument",
