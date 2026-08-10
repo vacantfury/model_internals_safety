@@ -99,12 +99,28 @@ is three harm-sensitive rungs per model, and they are not the same three.
   Attribute to the encoded-prompt *protocol*, or run the scaffold arm and
   decompose. Every such attribution in §4d, §4f and §4g predates the control.
 
-**Reportable, but NOT by the contract's verdict — see §4i:** all refusal rates,
-including every number in legs 1 and 2. The contract has no `refusal`
-instrument, so `behavior`'s withhold is a verdict about ASR and is silent on
-them. They stand on their paired benign arm, the mandatory plaintext baseline,
-and §3.5.2's separate validation of the refusal judge — an argument in prose,
-which is what the contract exists to replace.
+- **Any harm gap from `zero_width` or `fullwidth`/`fullwidth_letters` without
+  its echo-clean recomputation beside it (2026-08-10, instrument_layer §3.11).**
+  The echo route displaces those gaps by 0.107–0.256, in *both* directions
+  depending on which arm echoes harder (Llama `fullwidth` +0.27 → +0.43 clean;
+  Tülu-RLVR +0.42 → +0.16). ⚠️ This is the one behaviour-axis defect that
+  flatters the PAPER rather than the model — leg 1 claims discrimination
+  collapses toward zero and echo compression delivers that for free.
+
+**Reportable, and now GOVERNED (updated 2026-08-10):** the refusal gaps of legs
+1 and 2. Two things changed since this paragraph read "not by the contract's
+verdict". The `refusal` instrument exists (TODO 64), so the contract now models
+the quantity the paper reports rather than only ASR. And its required screen has
+**run**: `homoglyph` — the rung the plaintext baseline was deliberately paired
+with, and the one leg 1 rests on — displaces by **0.001–0.029 on all four
+models** and clears on every one. So the headline is screened on the echo axis
+rather than argued in prose. The screen now rides every run at zero cost.
+
+⚠️ Two limits, stated rather than buried. The two knobs `min_gap_margin` and
+`min_plain_gap` are still PLACEHOLDERs (`build_status.py`), so a *contract*
+verdict resting on them is not final; and the echo screen clears leg 1 on its
+own axis only — §4h's scaffold correction to leg 1's **subject** is untouched by
+it and still unapplied.
 
 ## 4. What the evidence does NOT support
 
@@ -1018,7 +1034,19 @@ on plaintext where no attack exists by construction.
 replace.** The fix is a `refusal` reading whose required controls are the benign
 arm and the plaintext baseline, so the paper's headline quantity is governed by
 the same machinery as everything else and omitting its controls becomes
-inexpressible. Filed; not built.
+inexpressible.
+
+**✅ BUILT 2026-08-09, and SCREENED 2026-08-10.** `measurements/refusal.py`
+reports the gap and is wired into the entrypoint; building it exposed a worse
+defect in the contract's null path (a broken instrument *manufactures* a null,
+and the null path was waiving the validity screens that would catch it — fixed
+the same day). The required screen then ran, and the outcome revised the screen
+itself: the obvious control — does the judge read a bare ciphertext as a
+refusal — measured **0.999**, but that is a property of the JUDGE, constant on
+every rung, so it could never gate anything. The screen is now the echo
+**displacement**, and on `homoglyph` it clears on all four models at 0.001–0.029.
+The prose argument above is retained for provenance; the machinery has replaced
+it. Detail: `instrument_layer.md` §3.11.
 
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 

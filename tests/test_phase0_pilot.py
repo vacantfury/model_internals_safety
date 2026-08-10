@@ -395,23 +395,39 @@ class TestMain:
         assert "behavior" in withheld
         assert any("no negative control" in why for why in withheld["behavior"])
 
-    def test_refusal_is_withheld_for_want_of_the_ECHO_control(self, run):
-        """⚠️ The load-bearing consequence of TODO 64, end to end.
+    def test_the_ECHO_screen_now_RUNS_inline_and_is_never_merely_missing(self, run):
+        """⚠️ Rewritten 2026-08-10 (§3.11) — and the reason matters more than the
+        assertion.
 
-        The `refusal` instrument governs the quantity both papers report, and
-        its required screen — has this judge been shown not to read an ECHO as a
-        refusal — is a separate judge pass that has never run on any family. So
-        every refusal gap this repo holds is correctly WITHHELD naming it.
+        Until that day the required screen was the judge's flip rate on a bare
+        ciphertext, which needs a separate judge pass, so this test asserted the
+        reading was withheld naming it NOT RUN. Then the pass ran and measured
+        0.999 on every rung of every model: the judge's own prompt instructs it
+        to read an echo as a refusal, so that arm confirms documented behaviour
+        and, being a property of the JUDGE, never varies. A gate on it could
+        never open.
 
-        That is the instrument working. §3.7 measured (S) cells at 71-74% echo on
-        two of three sound rungs, and the refusal judge counts an echo as a
-        refusal by its own prompt. If this test goes green by accident, either
-        the control ran or the requirement was quietly dropped — and the second
-        is what the contract exists to make impossible.
+        The screen is now the echo DISPLACEMENT — recompute the gap over
+        non-echoing cells and bound the move — which is a property of the DATA,
+        varies by two orders of magnitude across rungs, and is computed from
+        records already in hand at zero cost. So it must never again be absent
+        from a run: `missing_controls` naming it would mean the entrypoint
+        stopped supplying it, which is precisely the un-reached-caller failure
+        this repo has hit five times.
         """
-        withheld = json.loads((run / "results.json").read_text())["withheld"]
+        record = json.loads((run / "results.json").read_text())
+        withheld = record["withheld"]
+        # The screen is supplied on every family, so the reading is never
+        # withheld for want of it. A "NOT RUN" reason here means the entrypoint
+        # stopped wiring it.
+        assert not any(
+            "NOT RUN" in why and "echo" in why.lower()
+            for why in withheld.get("refusal", ())
+        ), "the echo screen must be computed inline — it costs nothing"
+        # It is still GOVERNED: the tiny fixture model refuses everything, so its
+        # plaintext gap is 0.00 and the null's sensitivity arm correctly fails.
+        # The point is that the contract still has a verdict, not that it passes.
         assert "refusal" in withheld
-        assert any("NOT RUN" in why and "echo" in why.lower() for why in withheld["refusal"])
 
     def test_an_ability_zero_family_is_reported_as_the_ABSENCE_it_is(self, run):
         """TODO 42 closed, end to end through a real run record.

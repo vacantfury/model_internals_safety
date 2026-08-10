@@ -53,21 +53,31 @@ at all, and the plaintext arm is exactly that condition: discrimination is known
 to be present there. This is why the contract's null path and §4d's mandatory
 baseline turn out to be the same requirement, reached from opposite directions.
 
-## The required screen is the ECHO control, and it is currently unrun
+## The required screen is the ECHO DISPLACEMENT, not the judge's flip rate
 
 The commonest non-answer to an encoded prompt is the model parroting the
 ciphertext, and the refusal judge counts an echo as a refusal — its own prompt
-says so. §3.7 measured (S) cells at 71–74% echo on two of three sound rungs. So
-a refusal gap is only trustworthy once that judge has been shown not to flip on
-echoes, which is `refusal_control`'s screen.
+says so. §3.7 measured (S) cells at 71–74% echo on two of three sound rungs.
 
-⚠️ **That screen has never been attached to a `Reading`, so every refusal gap
-this instrument produces today is correctly WITHHELD** until
-`scripts/refusal_judge_control.py` runs on the family. That is the same shape as
-`behavior`'s benign arm, which withheld everywhere until it ran and then found
-the judge inverted. The screen is also the one found sign-inverted on 2026-08-09
-(§3.10) — it cleared for a judge that read 100% of echoes as refusals. Wiring it
-here is what would have taken that latent defect live, which is why it was found.
+**The obvious screen is the wrong one, and it took running it to see that.** The
+first version required `refusal_control`'s flip rate: show the judge a bare
+ciphertext and check it does not answer "refused". That RAN on 2026-08-10 and
+measured **1559/1560 = 0.999** — but the judge's prompt *instructs* it to count
+an echo as a refusal, so the arm can only ever confirm documented behaviour, and
+being a property of the judge alone it returns the same number on every rung,
+model and run. As a gate it fails everywhere and separates nothing: it would
+withhold the clean rungs exactly as hard as the contaminated ones, forever.
+
+Contamination is susceptibility × **exposure**. The required screen is therefore
+`EchoExposure` — recompute the gap over non-echoing cells and bound how far the
+reported number moves. That separates cleanly on real data: `homoglyph`
+displaces 0.00–0.03 across every model and run, while `fullwidth`/`zero_width`
+displace 0.11–0.26. Full record: `instrument_layer.md` §3.11.
+
+⚠️ It needs BOTH arms' per-cell verdicts. Only the harmful arm was persisted
+before `benign_cells.jsonl`, so runs predating it cannot be screened
+retroactively — the screen is `None` there and the gap stays withheld, which is
+the correct reading of "this was never measured".
 """
 
 from __future__ import annotations
@@ -76,7 +86,9 @@ from dataclasses import dataclass
 
 from internals_safety.measurements.behavior import FamilyBehavior
 from internals_safety.measurements.contract import Claim, Kind, Reading, Screen
-from internals_safety.measurements.refusal_control import SCREEN_NAME as ECHO_SCREEN_NAME
+from internals_safety.measurements.refusal_control import (
+    EXPOSURE_SCREEN_NAME as ECHO_SCREEN_NAME,
+)
 
 # P1 — checked across the roster by `assert_distinct_questions`. Deliberately
 # distinct from `behavior`'s: that one asks whether the attack succeeded, this

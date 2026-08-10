@@ -87,6 +87,7 @@ from internals_safety.judges.refusal import RefusalJudge
 from internals_safety.measurements import ability as ability_module
 from internals_safety.measurements import behavior as behavior_module
 from internals_safety.measurements import refusal as refusal_module
+from internals_safety.measurements import refusal_control as refusal_control_module
 from internals_safety.measurements import deployment as deployment_module
 from internals_safety.measurements import recognition as recognition_module
 from internals_safety.measurements import decode_lens as decode_lens_module
@@ -1244,15 +1245,42 @@ def run_family(
             behavior_summary,
             behavior_module.summarize_by_family(benign_behavior_records)[0],
         )
-        conditions = [encoded_gap]
-        if scaffold_detail:
+        # ⚠️ The required echo screen, and it costs NOTHING to compute here.
+        # It was first specified as the judge's flip rate on a bare ciphertext,
+        # which needs a separate judge pass — and which, once run, turned out to
+        # be ~1.0 on every rung and therefore useless as a gate (§3.11). The
+        # quantity that actually varies is how far echo MOVES the gap, and both
+        # arms' per-cell verdicts are already in hand at this line. So the screen
+        # that governs the paper's headline is free and rides every run.
+        def exposure_screen(
+            harmful_records, benign_records, condition_family: str
+        ) -> "Screen":
+            return refusal_control_module.summarize_exposure(
+                condition_family,
+                harmful_refused=[record.refused for record in harmful_records],
+                harmful_echoed=[record.echoed_ciphertext for record in harmful_records],
+                benign_refused=[record.refused for record in benign_records],
+                benign_echoed=[record.echoed_ciphertext for record in benign_records],
+            ).screen()
+
+        conditions = [
+            (encoded_gap, exposure_screen(behavior_records, benign_behavior_records, family))
+        ]
+        if scaffold_detail and scaffold_behavior_records and scaffold_benign_behavior_records:
             conditions.append(
-                refusal_module.HarmGap(
-                    condition=f"scaffold:{family}",
-                    n_harmful=scaffold_detail["scaffold_n_harmful"],
-                    n_benign=scaffold_detail["scaffold_n_benign"],
-                    harmful_refusal_rate=scaffold_detail["scaffold_harmful_refusal_rate"],
-                    benign_refusal_rate=scaffold_detail["scaffold_benign_refusal_rate"],
+                (
+                    refusal_module.HarmGap(
+                        condition=f"scaffold:{family}",
+                        n_harmful=scaffold_detail["scaffold_n_harmful"],
+                        n_benign=scaffold_detail["scaffold_n_benign"],
+                        harmful_refusal_rate=scaffold_detail["scaffold_harmful_refusal_rate"],
+                        benign_refusal_rate=scaffold_detail["scaffold_benign_refusal_rate"],
+                    ),
+                    exposure_screen(
+                        scaffold_behavior_records,
+                        scaffold_benign_behavior_records,
+                        f"scaffold:{family}",
+                    ),
                 )
             )
         refusal_readings = [
@@ -1269,16 +1297,10 @@ def run_family(
                 control_margin=measurements.refusal.min_gap_margin,
                 plain_gap=plain_harm_gap,
                 sensitivity_floor=measurements.refusal.min_plain_gap,
-                # ⚠️ The required echo screen. Not available in this run — the
-                # control is a separate judge pass (`scripts/refusal_judge_control.py`)
-                # and costs API calls, so every reading here is correctly
-                # withheld naming it. Wiring the SCREEN rather than silently
-                # dropping the requirement is the difference between a withheld
-                # number and an ungoverned one.
-                echo_screen=None,
+                echo_screen=screen,
                 length_null_margin=length_null.margin(condition.gap),
             )
-            for condition in conditions
+            for condition, screen in conditions
         ]
 
     # The XSTest lexical control, read at the cell this rung's deployment claim
