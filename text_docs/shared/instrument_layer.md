@@ -2220,6 +2220,66 @@ base, so the model-transfer result carries over — but a guard's input is
 templated arm is the relevant one and it fails. A guard-side SAE claim needs its
 own pre-gate before it needs anything else.
 
+#### 4.8.1 ⚠️ THE DEPTH TREND WAS REAL AND IT DID NOT RESCUE I4 — the two bars trade off in OPPOSITE directions (2026-08-10)
+
+**Jobs `9065751` (deep ceiling) and `9065802` (deep templated), Scope layers 25
+and 29, four tasks, 58–116 s each, $0.** §4.8 flagged the templated KL as
+monotone in depth (0.178 → 0.343 → 0.468) and called three points *a direction,
+not a trend*. Extended two layers further, it is a trend — and following it
+uncovered the real structure, which neither arm alone could show.
+
+**The deep ceiling holds, so the comparison has a denominator.** Plain Base at
+Scope 25/29 reads variance 0.703 / 0.669 and KL **0.968 / 0.975**, against
+0.698–0.723 and 0.910–0.920 shallow. The third outcome `sae_pregate_base_plain_deep`
+was written to guard against — a degraded ceiling saying nothing — did not occur.
+
+**Both transfer ratios, all five measured layers:**
+
+| Scope layer | variance ratio | KL ratio | clears both at 0.80? |
+|---|---|---|---|
+| 17 | **0.868** | 0.194 | variance only |
+| 19 | **0.847** | 0.373 | variance only |
+| 21 | **0.819** | 0.514 | variance only |
+| 25 | 0.749 | **0.852** | KL only |
+| 29 | 0.659 | **0.996** | KL only |
+
+**They are monotone in opposite directions and they cross between 21 and 25. No
+measured layer clears both.** Shallow, the dictionary reconstructs the
+activations and destroys the model's behaviour; deep, it preserves the behaviour
+almost perfectly (0.996 of ceiling at Scope 29) and fails to reconstruct. L0
+falls with depth in step — 120 → 78 → 42 — which is the same fact from the
+sparsity side.
+
+**The deep KL is not an easy-bar artefact, and this was checked rather than
+assumed.** The matched random dictionary reads **negative** at every layer
+(−0.07 to −0.50: worse than deleting the layer), with a control margin of
+0.61–0.62 on the deep templated runs against 0.665 shallow. A high KL where a
+random control at the same sparsity is catastrophic is real signal. *Significance
+is not sufficiency* does not apply here; the control did its job.
+
+**Why deep layers do not rescue I4 even though KL says they might.** I4's job is
+FEATURE-level: which features distinguish decoded from non-decoded. That is a
+claim about the decomposition, and a decomposition capturing 44% of the variance
+is missing most of what it would have to read — regardless of how little the
+model's output notices. **KL fidelity licenses INTERVENING on features; variance
+licenses READING them, and I4 needs the second.** A gate reporting only KL would
+have declared Scope 29 excellent.
+
+> ⚠️ **What is interpolation and what is measured.** Linearly, the two ratios
+> cross around Scope 23–24 at a common value of **~0.73** — below the 0.80 bar,
+> which would mean no layer clears both anywhere. **That is interpolation, and
+> `min_transfer_ratio` = 0.80 is still a PLACEHOLDER knob**, so a tuned bar of
+> 0.70 would change the verdict at the crossing. Both facts point at the same
+> cheap experiment: three tasks at Scope 22/23/24, $0, which would replace the
+> interpolation with a measured maximum of `min(variance ratio, KL ratio)` and
+> let the knob be set from it. Filed as TODO 70.
+
+**The general lesson, and it is the two-term ceiling's second payment in one
+day.** §4.8 recorded that a variance-only gate would have licensed the shallow
+template. The deep arm shows the mirror image: a KL-only gate would have licensed
+Scope 29. **Neither term alone is a gate at any depth — the instrument is
+trustworthy only where both hold, and no measured layer is such a place.**
+
 ---
 
 ## 5. Known anomaly, unexplained
