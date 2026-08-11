@@ -2222,6 +2222,14 @@ own pre-gate before it needs anything else.
 
 #### 4.8.1 ⚠️ THE DEPTH TREND WAS REAL AND IT DID NOT RESCUE I4 — the two bars trade off in OPPOSITE directions (2026-08-10)
 
+> ⛔ **TWO CLAIMS IN THIS SECTION ARE REFUTED BY §4.8.2, MEASURED THE SAME DAY.
+> Read that section before quoting anything below.** (1) "No measured layer
+> clears both" — **Scope 22 does**, at `min(ratio) = 0.810`. (2) "Monotone in
+> opposite directions" — the **variance** ratio is monotone; the **KL** ratio is
+> not, and Scope 24 breaks it hard. The trade-off itself, the control check, and
+> the read-vs-intervene distinction all survive; the conclusion drawn from them
+> did not.
+
 **Jobs `9065751` (deep ceiling) and `9065802` (deep templated), Scope layers 25
 and 29, four tasks, 58–116 s each, $0.** §4.8 flagged the templated KL as
 monotone in depth (0.178 → 0.343 → 0.468) and called three points *a direction,
@@ -2278,7 +2286,62 @@ have declared Scope 29 excellent.
 day.** §4.8 recorded that a variance-only gate would have licensed the shallow
 template. The deep arm shows the mirror image: a KL-only gate would have licensed
 Scope 29. **Neither term alone is a gate at any depth — the instrument is
-trustworthy only where both hold, and no measured layer is such a place.**
+trustworthy only where both hold** *(and §4.8.2 finds exactly one such place)*.
+
+#### 4.8.2 ✅ THE CROSSING WAS MEASURED AND IT REFUTES THE INTERPOLATION — Scope 22 licenses (2026-08-10)
+
+**Jobs `9066418` (ceiling) and `9066464` (templated), Scope 22/23/24, six tasks,
+47–92 s each, $0.** §4.8.1 interpolated a peak of `min(variance ratio, KL ratio)`
+at **~0.73** near Scope 23–24 and concluded no layer could clear the 0.80 bar.
+**Measured, the peak is 0.810 at Scope 22, and that layer licenses.**
+
+| Scope | var ratio | KL ratio | **min** | licensed |
+|---|---|---|---|---|
+| 17 | 0.868 | 0.194 | 0.194 | ❌ |
+| 19 | 0.847 | 0.373 | 0.373 | ❌ |
+| 21 | 0.819 | 0.514 | 0.514 | ❌ |
+| **22** | **0.810** | **0.820** | **0.810** | **✅** |
+| 23 | 0.796 | 0.791 | 0.791 | ❌ |
+| 24 | 0.767 | 0.515 | 0.515 | ❌ |
+| 25 | 0.749 | 0.852 | 0.749 | ❌ |
+| 29 | 0.659 | 0.996 | 0.659 | ❌ |
+
+**The variance ratio IS monotone across all eight layers** (0.868 → 0.659,
+strictly decreasing). **The KL ratio is NOT** — it runs 0.514 → **0.820** →
+0.791 → **0.515** → 0.852 → 0.996, so Scope 24 sits 0.28–0.34 below both of its
+neighbours. Five points spaced two-to-four apart looked monotone and were not;
+the dense sample refutes it. **This is §3.8 repeating exactly** — tokenizer
+fertility also looked like a clean ordering variable across sparse points and
+died on measurement — and the preset cited that precedent as its reason to
+measure, which is the whole return on writing the reason down.
+
+**The controls are healthy on all three new layers** and do not explain the dip:
+random-dictionary readings −0.069 / −0.075 / −0.087 with margins 0.654 / 0.647 /
+0.632, and L0 declines smoothly 102 → 93 → 83. **Scope 24's KL dip is real and
+unexplained** — flag it, do not explain it away; it is a single layer at n=100
+and the honest options are a genuine property of that layer or a sampling
+artefact, distinguishable by a second seed at ~$0.
+
+> ⚠️ **THE LICENSE IS REAL AND IT IS THIN: 0.810 against a bar of 0.800, a
+> margin of 0.010, on a knob that is still a PLACEHOLDER.** `min_transfer_ratio`
+> = 0.80 was never derived, and this is the outcome band the preset's `gates:`
+> block named in advance as deciding nothing by itself — it landed just above
+> rather than just below, which is arguably the worse side, because it licenses
+> on an unearned number. **Nothing may be built on Scope 22 until the knob is set
+> from an argument about what I4 actually needs**, and that argument is now the
+> binding open item rather than another run.
+
+**What it changes for the route (TODO 70).** I4 is NOT retired for AS-5. The
+supported statement is: *a Base-fitted Llama Scope dictionary reads
+chat-templated Instruct activations at exactly one of eight probed layers, and
+only just.* That is a usable instrument with a stated restriction, and it is also
+a legitimate finding in its own right — the field's habit of picking a
+"reasonable" mid-to-late layer would have landed on 21, 24 or 25 and read a null.
+
+**AS-6 inherits the method, not the number.** Llama Guard 3 8B shares the base,
+but its layer-wise profile must be measured, never assumed from this one: the
+whole point of §4.8.2 is that this profile is not smooth enough to extrapolate
+across four layers, let alone across a fine-tune.
 
 ---
 
