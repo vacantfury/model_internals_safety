@@ -85,13 +85,16 @@ ROSTER: tuple[Item, ...] = (
         "I4",
         "SAE features",
         ("measurements.sae_reconstruction", "models.sae_loader"),
-        incomplete="the pre-gate PASSED its ceiling arm 2026-08-07 (job 9009915, "
-        "Llama-3.1-8B-Base on plain text: variance explained 0.698-0.723, KL "
-        "recovered 0.91-0.92, beating its matched random control by ~0.75), so the "
-        "loader is verified and the gating precondition is met; what remains is the "
-        "FEATURE instrument itself — which features distinguish decoded from "
-        "non-decoded — plus the Instruct TARGET arm, which is what a transfer number "
-        "requires and is cluster work",
+        incomplete="the pre-gate is ANSWERED end to end and its verdict is SPLIT "
+        "(jobs 9049084/9049085, 2026-08-10): the dictionary transfers Base->Instruct "
+        "(variance ratio ~1.01, licensed on all three layers) and CANNOT read "
+        "chat-templated activations (KL recovered 0.178/0.343/0.468 against floors "
+        "~0.73). Since AS-5's real inputs are templated, the FEATURE instrument is "
+        "deliberately NOT built against this dictionary as it stands — the route is "
+        "an open decision (TODO 69): fit on Instruct chat activations, restrict I4 "
+        "to plain text and say so, or retire I4 for AS-5. This item stays [PART] "
+        "because the roster asks what is BUILT, and a gate answering 'do not build "
+        "it this way' does not build it. See instrument_layer.md §4.8",
     ),
     Item("I5", "reply-inversion causal test", ("measurements.reply_inversion",)),
     Item(

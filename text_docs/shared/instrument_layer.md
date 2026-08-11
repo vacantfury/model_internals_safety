@@ -2155,6 +2155,71 @@ mutations (call site, prepend condition, identity check) are caught by three
 different tests, and `tests/test_real_bos_handling.py` pins the upstream
 behaviour across all five checkpoints.
 
+### 4.8 ✅ THE PRE-GATE IS ANSWERED — the dictionary transfers between MODELS and cannot read the CHAT TEMPLATE (2026-08-10)
+
+**Jobs `9049084` (plain) and `9049085` (templated), three layers each, 38–93 s
+per task on an H200, $0.** Both arms run Llama Scope dictionaries on
+Llama-3.1-8B-Instruct against the plain-text Base ceiling (job `9009915`).
+Records: `outputs/runs/sae_pregate/llama3_1_8b_instruct/pregate-instruct{,-plain}-L{17,19,21}/`.
+
+| arm | layer | variance | var floor | **KL recovered** | KL floor | licensed |
+|---|---|---|---|---|---|---|
+| plain | 17 | 0.709 | 0.558 | **0.798** | 0.735 | **✅** |
+| plain | 19 | 0.716 | 0.567 | **0.819** | 0.736 | **✅** |
+| plain | 21 | 0.730 | 0.578 | **0.804** | 0.728 | **✅** |
+| templated | 17 | 0.606 | 0.558 | **0.178** | 0.735 | ❌ |
+| templated | 19 | 0.600 | 0.567 | **0.343** | 0.736 | ❌ |
+| templated | 21 | 0.592 | 0.578 | **0.468** | 0.728 | ❌ |
+
+**Model transfer is not the problem — there is no problem.** Instruct
+reconstructs *better* than the Base model the dictionary was fitted on
+(variance ratio 1.016 / 1.011 / 1.009), so "the Llama Scope dictionary does not
+describe our model" is refuted on all three layers.
+
+**The chat template is the problem, and it is severe.** KL recovered falls to
+0.19 / 0.37 / 0.51 of the ceiling — a factor of 1.6–4× below the bar. The
+disjunction the two presets were built to separate lands on the branch
+`sae_pregate_instruct_plain.yaml` named in writing before the run: *a clean
+transfer here with a collapse there means the dictionary transfers fine between
+models and simply cannot read chat-formatted activations — a constraint on how
+I4 may be used, not a reason to abandon it.*
+
+> ⚠️ **THE VERDICT DOES NOT REST ON THE PLACEHOLDER KNOB, and that is worth
+> checking before quoting it.** `min_transfer_ratio` is 0.80 and untuned. The
+> plain arm's measured KL transfer is 0.868 / 0.890 / 0.883 and the templated
+> arm's is 0.194 / 0.373 / 0.514, so **every threshold in [0.55, 0.86] gives the
+> same verdict on both arms.** The conclusion is knob-independent; what the run
+> buys separately is that `min_transfer_ratio` can now be *set* from a measured
+> transfer instead of the unearned 0.80.
+
+**⚠️ THE TWO-TERM CEILING IS WHAT CAUGHT THIS, and a one-term gate would have
+inverted the finding.** Variance explained **passes its floor on all three
+templated layers** (0.592–0.606 against 0.558–0.578). Had `Ceiling` shipped only
+the variance term — which it did until `5bd8c32` — every templated layer would
+have read **LICENSED**, and I4 would have been built on a dictionary that
+reconstructs the activations while destroying the model's downstream behaviour.
+This is §4e's asymmetry one level up, on the instrument rather than the
+behaviour axis: **the defect would have inflated apparent instrument quality**,
+which is the direction these defects keep running.
+
+**What it decides, which is what a gate is for.** I4's feature instrument is
+**not** written against chat-templated activations — AS-5's real inputs — on
+this dictionary. Three routes remain, and they are not equivalent: fit or
+fine-tune a dictionary on Instruct chat-formatted activations (expensive, and
+the honest option); restrict I4 to plain-text conditions and state the
+restriction (cheap, but AS-5's conditions are templated, so it buys little); or
+retire I4 for AS-5 and let `ability` carry the decode axis alone, which is where
+§4.1's lens null already left it. **Note the templated KL rises monotonically
+with depth (0.178 → 0.343 → 0.468 at L17/19/21), so a deeper layer is the first
+thing to check** before concluding the template is unreadable everywhere — three
+points is a direction, not a trend.
+
+**AS-6 inherits this immediately.** Llama Guard 3 8B is a fine-tune of the same
+base, so the model-transfer result carries over — but a guard's input is
+*entirely* template (its prompt hard-wires the classification task), so the
+templated arm is the relevant one and it fails. A guard-side SAE claim needs its
+own pre-gate before it needs anything else.
+
 ---
 
 ## 5. Known anomaly, unexplained
