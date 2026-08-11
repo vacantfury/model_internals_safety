@@ -647,20 +647,32 @@ mechanism, and mechanisms are what got refuted — twice in two days. A title
 pinned to a mechanism would have had to be retired with it; this one did not,
 and that is the argument for leaving it alone through the next revision too.
 
-### ⚠️ The open question this story does not answer: where the internals enter
+### ✅ The open question is ANSWERED, and the answer was already on disk (2026-08-10)
 
 **As framed, every number in legs 1 and 2 is a refusal rate on a paired arm. AS-5
 could be written without a single activation capture.** That is not a weakness in
 the result — a phenomenon that needs no probe is harder to attack, and leg 1 says
 so explicitly. But this repo's defining property against its siblings is that it
-goes *inside* the model, and the story of record currently does not.
+goes *inside* the model, and the story of record did not.
 
-Named here rather than settled, because it is a **phase-1 design question** and
-§4d already routed phase 1 onto the false-positive axis — what makes a model
-refuse benign encoded content. That is where a probe earns its place: the
-behavioural result establishes *that* discrimination is destroyed and says
-nothing about *where* in the forward pass it is lost. Decide it when phase 1's
-shape is decided, not at writing time.
+**Design of record: `text_docs/as5/phase1_design.md`.** Read it before planning
+any internals work; this block is the pointer, not a second home.
+
+The one-line answer, computed from the §4h run records rather than from a new
+run: **a harm direction fit on plaintext separates encoded harmful from encoded
+benign activations at AUROC 0.938–0.995 on all four models, while the
+behavioural harm gap in the same condition spans −0.01 to +0.55.** On
+Llama-3.1-8B that is **0.981 against −0.01**. The discrimination is not lost in
+the representation; it is lost between representation and behaviour. It clears
+the length null (+0.28 to +0.34), a black-box surface baseline (+0.33 to +0.38)
+and XSTest lexical decorrelation — the three screens that have killed previous
+claims here.
+
+⚠️ **Two limits that travel with the number, always:** the control floor is
+UNUSABLE on those runs (`n_controls = 0`, single-family), so licensing is
+permutation-only — §2.5's live defect; and the reading is corroborated by one
+instrument, which is what `deployment.py`'s docstring already required be said.
+Both are stage-1/stage-2 line items in the design doc, not footnotes.
 
 ### The withdrawn leg 2, and where its derivation lives
 
@@ -1015,8 +1027,19 @@ title pinned to a mechanism would have been retired with it. Leave it alone.
   benign 0.66), which is §3.5.2's binary-judge finding reproduced a fifth time.
   Every number in this section is a **refusal** rate; see §4i for why the
   contract's verdict does not reach them.
-- **`recognition` and `trajectory` are unlicensed on all four runs.** The
-  behavioural result stands alone here; nothing internal was measured.
+- ⛔ **THIS BULLET WAS WRONG TWICE AND IS CORRECTED (2026-08-10).** It read:
+  *"`recognition` and `trajectory` are unlicensed on all four runs. The
+  behavioural result stands alone here; nothing internal was measured."*
+  **`trajectory` is unlicensed on all four — that part stands.** The other two
+  claims do not. **(a)** `recognition` is LICENSED on three of the four (Mistral
+  0.716, Qwen 0.854, Tülu 0.711) and withheld for a different and fixable reason,
+  `no negative control was run (P2)`; only Llama fails licensing, at 0.663 with a
+  length-null margin of 0.009. **(b)** *"nothing internal was measured"* omits
+  `deployment`, which is **licensed and screened on all four models at AUROC
+  0.938–0.995** and is one of the two reportable readings in every one of these
+  run records. The strongest internal reading this repo has sat in the same file
+  as the sentence saying there wasn't one. **It is now leg 1's internals leg** —
+  `phase1_design.md`, and §4e's open-question block.
 
 ### What AS-6 inherits
 
