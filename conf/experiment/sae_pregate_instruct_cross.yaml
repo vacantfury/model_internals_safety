@@ -1,0 +1,64 @@
+# **Is there ANY layer where this dictionary both reads and preserves? Measure
+# the crossing instead of interpolating it.**
+#
+# §4.8.1 established that the two bars move monotonically in OPPOSITE directions
+# with depth, on Llama-3.1-8B-Instruct through the chat template:
+#
+#   Scope layer   17     19     21     25     29
+#   variance     0.868  0.847  0.819  0.749  0.659   <- falls
+#   KL           0.194  0.373  0.514  0.852  0.996   <- rises
+#
+# So the maximum of `min(variance ratio, KL ratio)` — the quantity that decides
+# whether I4 is usable at all — lies in Scope 22-24 and has never been measured.
+# Linear interpolation puts it near 0.73, below the 0.80 bar, which would mean no
+# layer can clear both anywhere. **That is interpolation between points four
+# layers apart, and this repo has been wrong about a monotone-looking quantity
+# before** (`instrument_layer.md` §3.8: tokenizer fertility looked like an
+# ordering variable and was refuted by measuring it).
+#
+# Submit ONLY after `sae_pregate_base_plain_cross` has completed.
+entrypoint: sae_pregate
+description: >-
+  The same dictionaries on Llama-3.1-8B-Instruct through the chat template at
+  Scope 22/23/24 — measuring the crossing of the variance and KL transfer
+  ratios rather than interpolating it.
+
+gates: >-
+  Two things at once, and they are the last two open on I4.
+
+  (1) Whether any layer clears BOTH bars. If the measured maximum of
+  min(variance ratio, KL ratio) reaches 0.80, that layer is where I4's feature
+  instrument gets written and the restriction is a measured property. If it
+  peaks below, I4 is retired for AS-5 on a two-term impossibility rather than on
+  five failures — a materially stronger statement, and `ability` carries the
+  decode axis alone as §4.1's lens null already implied.
+
+  (2) It sets `min_transfer_ratio`, which is a PLACEHOLDER at 0.80 and currently
+  the only reason the verdict could be called a knob artefact. Measuring the
+  crossing gives the knob a basis in the same data it governs, which is the
+  house rule for every heuristic number.
+
+  A peak that lands between 0.73 and 0.80 is the one outcome that decides
+  nothing on its own — it would mean the verdict genuinely turns on the knob,
+  and the knob must then be set from an argument about what I4 needs rather
+  than from this run. Say so rather than rounding it.
+
+target: llama3_1_8b_instruct
+
+# The crossing ceiling, per layer — `tasks()` appends `-L<layer>`. Same
+# plain-ceiling / templated-target asymmetry as both earlier pairs, and for the
+# same reason: a templated Base ceiling reads -915 and is no denominator.
+source_runs:
+  llama3_1_8b_base: pregate-base-plain-cross
+
+sae_layers: [22, 23, 24]
+
+n_prompts: 100
+run_name: pregate-instruct-cross
+
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "01:00:00"

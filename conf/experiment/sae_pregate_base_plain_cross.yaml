@@ -1,0 +1,48 @@
+# **The denominator for the CROSSING probe.** Third and last ceiling arm of the
+# I4 pre-gate: Scope 22/23/24, the window where §4.8.1's two transfer ratios
+# cross.
+#
+# Its own preset for the same reason `sae_pregate_base_plain_deep.yaml` is one —
+# the shallow preset is the record of a run that happened, and widening its
+# `sae_layers` retroactively would make that record ambiguous about which layers
+# it covered.
+#
+# ⚠️ Required, not a formality: `ceiling_from` raises on a layer mismatch
+# deliberately, because a ceiling read from the wrong layer shifts the floor a
+# few percent and never errors. The templated crossing arm cannot run until this
+# one has.
+entrypoint: sae_pregate
+description: >-
+  Llama Scope dictionaries against Llama-3.1-8B-Base on PLAIN text at Scope
+  22/23/24 — the ceiling the crossing probe is judged against.
+
+gates: >-
+  Whether the crossing window has a denominator. The ceiling has now been read at
+  five layers spanning the whole region — variance 0.698/0.708/0.723/0.703/0.669
+  and KL 0.919/0.920/0.910/0.968/0.975 at Scope 17/19/21/25/29 — so it is
+  well-behaved on both sides of the window and a collapse inside it would itself
+  be the finding: the dictionary family would be unreadable exactly where the two
+  bars meet, and the route decision (TODO 70) would go to option (b) or (c) with
+  no further run. If it interpolates smoothly, as five layers suggest, the
+  templated crossing arm is readable against it.
+
+target: llama3_1_8b_base
+
+# No chat template — the distribution the dictionaries were fitted on.
+render_chat: false
+
+# LLAMA SCOPE's indices, ours minus one. 22/23/24 = our resid_pre 23/24/25.
+# The window is chosen from measurement, not taste: the variance ratio passes
+# 0.80 between Scope 21 (0.819) and 25 (0.749) and the KL ratio passes it
+# between 21 (0.514) and 25 (0.852), so any layer clearing BOTH is in here.
+sae_layers: [22, 23, 24]
+
+n_prompts: 100
+run_name: pregate-base-plain-cross
+
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "01:00:00"
