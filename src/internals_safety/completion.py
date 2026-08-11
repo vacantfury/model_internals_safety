@@ -85,16 +85,18 @@ ROSTER: tuple[Item, ...] = (
         "I4",
         "SAE features",
         ("measurements.sae_reconstruction", "models.sae_loader"),
-        incomplete="the pre-gate is ANSWERED end to end and its verdict is SPLIT "
-        "(jobs 9049084/9049085, 2026-08-10): the dictionary transfers Base->Instruct "
-        "(variance ratio ~1.01, licensed on all three layers) and CANNOT read "
-        "chat-templated activations (KL recovered 0.178/0.343/0.468 against floors "
-        "~0.73). Since AS-5's real inputs are templated, the FEATURE instrument is "
-        "deliberately NOT built against this dictionary as it stands — the route is "
-        "an open decision (TODO 69): fit on Instruct chat activations, restrict I4 "
-        "to plain text and say so, or retire I4 for AS-5. This item stays [PART] "
-        "because the roster asks what is BUILT, and a gate answering 'do not build "
-        "it this way' does not build it. See instrument_layer.md §4.8",
+        incomplete="the pre-gate is ANSWERED across EIGHT layers (jobs 9049084/9049085, "
+        "9065751/9065802, 9066418/9066464; 2026-08-10) and the dictionary reads "
+        "chat-templated Instruct activations at exactly ONE of them: Scope 22, "
+        "min(variance ratio, KL ratio) = 0.810. Every other probed layer fails one "
+        "term or the other — variance falls monotonically with depth while KL does "
+        "NOT rise monotonically (Scope 24 dips 0.28 below both neighbours). The "
+        "FEATURE instrument is not built yet because the 0.810 clears a bar "
+        "(min_transfer_ratio = 0.800) that is still a PLACEHOLDER, so the license "
+        "rests on an unearned number; deriving that knob from what I4 actually needs "
+        "is the binding precondition (TODO 70). This item stays [PART] because the "
+        "roster asks what is BUILT, and a gate naming the one layer it could be built "
+        "at does not build it. See instrument_layer.md §4.8.2",
     ),
     Item("I5", "reply-inversion causal test", ("measurements.reply_inversion",)),
     Item(
