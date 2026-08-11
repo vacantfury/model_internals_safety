@@ -1,0 +1,55 @@
+# **Does the chat template become readable deeper in the model?**
+#
+# The shallow run (jobs 9049084/9049085, 2026-08-10) answered the pre-gate with a
+# SPLIT verdict: the dictionary transfers Base -> Instruct essentially perfectly
+# (variance ratio ~1.01, licensed on all three layers) and CANNOT read
+# chat-templated activations (KL recovered 0.178 / 0.343 / 0.468 against floors
+# ~0.73). Record: `text_docs/shared/instrument_layer.md` §4.8.
+#
+# The one structure in that failure is that it is MONOTONE IN DEPTH: 0.178 at
+# Scope 17, 0.343 at 19, 0.468 at 21. Three points is a direction, not a trend,
+# and the cheapest way to tell which is to extend the same measurement two
+# layers further rather than to argue about it.
+#
+# Submit ONLY after `sae_pregate_base_plain_deep` has completed — `ceiling_from`
+# needs the matching-layer artifact and raises without it.
+entrypoint: sae_pregate
+description: >-
+  The same dictionaries on Llama-3.1-8B-Instruct through the chat template, at
+  Scope layers 25 and 29 — extending the monotone depth trend the shallow run
+  found in KL recovered.
+
+gates: >-
+  Which of TODO 70's three routes I4 takes, and they lead to opposite builds.
+  If KL recovered continues rising and clears its floor at depth, the finding is
+  that a Base-fitted dictionary CAN read chat-formatted activations late in the
+  model — the feature instrument gets written, restricted to deep layers, and
+  the restriction is stated in the paper as a measured property rather than a
+  hedge. If it plateaus below the floor, the template is unreadable at every
+  depth this dictionary family covers, I4 is retired for AS-5, and `ability`
+  carries the decode axis alone — which is where §4.1's logit-lens null already
+  left it. Either way the route stops being an open decision.
+
+  A third outcome is possible and must not be read as either: if the deep
+  CEILING degrades (its own preset gates that), the comparison has no
+  denominator and this arm says nothing about the template.
+
+target: llama3_1_8b_instruct
+
+# The deep ceiling, per layer — `tasks()` appends `-L<layer>`. Same asymmetry as
+# the shallow pair and for the same reason: the ceiling is PLAIN and this arm is
+# TEMPLATED, because a templated Base ceiling reads -915 and is no denominator.
+source_runs:
+  llama3_1_8b_base: pregate-base-plain-deep
+
+sae_layers: [25, 29]
+
+n_prompts: 100
+run_name: pregate-instruct-deep
+
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "01:00:00"

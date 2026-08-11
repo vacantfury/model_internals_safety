@@ -1,0 +1,49 @@
+# **The DENOMINATOR for the deep-layer probe.** Same arm as
+# `sae_pregate_base_plain.yaml`, two layers deeper.
+#
+# It exists as its own preset rather than as wider `sae_layers` on the original
+# because that preset is the record of a run that happened (jobs 9009915 and
+# its siblings), and widening it retroactively would make the record ambiguous
+# about which layers that run actually covered.
+#
+# ⚠️ It is NOT optional and it is NOT a formality. `ceiling_from` requires a
+# ceiling artifact at the MATCHING layer and raises otherwise, deliberately —
+# a ceiling read from the wrong layer shifts the floor by a few percent and
+# never errors. So the deep templated arm cannot run until this one has.
+entrypoint: sae_pregate
+description: >-
+  Llama Scope dictionaries against Llama-3.1-8B-Base on PLAIN text at the deep
+  layers — the ceiling the deep templated arm is judged against.
+
+gates: >-
+  Whether the deep-layer comparison has a denominator at all. The shallow
+  ceiling reads variance 0.698-0.723 and KL 0.91-0.92 at Scope 17/19/21; if it
+  holds up here, the deep templated arm is readable against it and the route
+  decision (TODO 70) turns on that arm's number. If the ceiling itself degrades
+  at depth, the deep probe is unreadable for the same reason the TEMPLATED Base
+  ceiling was unreadable at -915 — no meaningful denominator — and the honest
+  conclusion is that this dictionary family cannot answer the depth question,
+  which sends the route decision to options (b) or (c) without a further run.
+
+target: llama3_1_8b_base
+
+# No chat template — the distribution the dictionaries were fitted on, and the
+# only reading that tests the loader rather than our prompt rendering.
+render_chat: false
+
+# LLAMA SCOPE's indices, which are ours minus one (`LlamaScopeSAE.our_layer`).
+# 25/29 here = our resid_pre 26/30, against the shallow pair's 18/20/22.
+# Verified 2026-08-10 that Llama Scope publishes all 32 layers as SUBFOLDERS of
+# `fnlp/Llama3_1-8B-Base-LXR-8x` — querying them as separate repos returns
+# RepositoryNotFoundError for every layer including ones already run.
+sae_layers: [25, 29]
+
+n_prompts: 100
+run_name: pregate-base-plain-deep
+
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "01:00:00"
