@@ -39,6 +39,7 @@ PURE_MODULES = (
     "ability_control",
     "behavior_control",
     "refusal_control",
+    "dissociation",
     "contract",
     "causal_license",
 )

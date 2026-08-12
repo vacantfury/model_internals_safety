@@ -166,6 +166,51 @@ it does.
 — there is no internals leg and AS-5 ships behavioural, which §4e already says is
 a publishable paper.
 
+### ✅ 5.1 STAGE 0 RAN 2026-08-12 — the gate PASSES, on THREE of four models
+
+**Offline, no job, $0.** `scripts/internals_dissociation.py` over
+`measurements/dissociation.py`; artifact
+`outputs/analysis/internals_dissociation_20260812.json`. Reproduce with
+`uv run python scripts/internals_dissociation.py`. Encoded rates below are
+**echo-screened**; the plaintext arm deliberately is not (§5's asymmetry).
+
+| model | internal AUROC [95%] | plain gap | encoded gap | destroyed | verdict |
+|---|---|---|---|---|---|
+| Llama-3.1-8B | **0.981** [0.961, 1.000] | +0.83 | **−0.01** | **101.1%** [96.2, 105.9] | ✅ |
+| Qwen2.5-7B | **0.995** [0.986, 1.000] | +0.82 | +0.57 | 30.5% [15.0, 46.0] | ✅ |
+| Tülu-3-8B | **0.971** [0.947, 0.995] | +0.80 | +0.42 | 47.8% [32.6, 62.9] | ✅ |
+| Mistral-7B-v0.3 | 0.938 [0.903, 0.973] | +0.36 | +0.26 | 26.8% [**−9.4**, 63.0] | ⛔ |
+
+**The echo screen passes on all four** — displacement 0.001–0.020 against bars
+0.034–0.112. §3.11's rule is satisfied and `homoglyph`'s cleanliness (TODO 67)
+reaches the internals leg intact.
+
+⛔ **Mistral fails, and the failure is on the BEHAVIOURAL half — a denominator
+story, not an internals one.** Its representation is fine (0.938, lower bound
+0.903, clear of the floor). What fails is that its plaintext discrimination is
+small enough (+0.36 against the others' +0.80 to +0.83) that the encoded gap is
+not distinguishable from it: the destroyed-fraction interval straddles zero.
+**There is not enough discrimination there to destroy.** That is the same fact
+§4d already recorded one level up — Mistral is the *least discriminating* model,
+not the most robust one — arriving now in the internals leg, so it is
+convergent rather than a new problem.
+
+⚠️ **The point estimate alone would have passed it.** 26.8% reads as a real
+loss; the interval says it is not resolvable at n=100. §5 item 3 required CIs
+for exactly this, and this is its first bite. **Never quote the four-model
+version of this table.**
+
+**What it does to stage 1.** §8's "passes → build stage 1" branch is taken. The
+scope narrows to the three models where plaintext discrimination is large enough
+to lose, which does not touch §6(a)'s contrast — Llama and Qwen are both in.
+
+⚠️ **The two limits are unchanged and still travel with every number here:** the
+control floor is UNUSABLE on all four runs (permutation-only licensing, §2.5),
+which is stage 1(b)'s job; and the AUROC intervals are conditional on the
+selected (layer × position) cell, so they are narrower than the truth by an
+amount stage 0 cannot estimate (`instrument_layer.md` §4.9). Neither is closed
+by this run and neither may be dropped from a quotation of it.
+
 ---
 
 ## 6. Stage 1 — the two capture gaps, and they are the run

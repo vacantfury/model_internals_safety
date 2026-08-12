@@ -192,6 +192,17 @@ CONTROLS: tuple[Item, ...] = (
         "attack-wrapper guard control (AS-6)",
         ("measurements.guard_scaffold_control",),
     ),
+    # Not a control against a confound — the combination layer for AS-5's
+    # internals leg, listed here because the roster's job is to account for
+    # every measurement module and an unlisted one is how a built instrument
+    # goes unreachable. Its own screen (`internal_behavioural_dissociation`)
+    # guards against claiming "represented but unread" from a probe too weak to
+    # tell that apart from "not represented".
+    Item(
+        "dissociation",
+        "internal-vs-behavioural comparison (AS-5 stage 0)",
+        ("measurements.dissociation",),
+    ),
     Item("random-direction", "matched-norm null", ("measurements.causal_license",)),
     Item("pairing", "derangement primitives", ("pairing",)),
     # Added 2026-08-09 (`instrument_layer.md` §3.9). The battery screened the

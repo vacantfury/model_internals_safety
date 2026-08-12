@@ -2345,6 +2345,58 @@ across four layers, let alone across a fine-tune.
 
 ---
 
+### 4.9 ✅ THE AUROC NOW CARRIES AN INTERVAL, and the interval is what decides (2026-08-12)
+
+`measurements/dissociation.py` adds the estimator the run records never carried:
+every AUROC this repo reports has been a bare point estimate, and a claim that
+two quantities *differ* cannot be made from two points. Built for AS-5's
+internals leg (`as5/phase1_design.md` §5) and homed here because **AS-6 needs it
+identically** — `decoded_not_blocked` is the same shape of claim on a guard.
+
+**The estimator is Hanley & McNeil (1982), Radiology 143(1):29-36** (DOI
+`10.1148/radiology.143.1.7063747`; citation checked against the record, not
+recalled), using Q1 = A/(2−A) and Q2 = 2A²/(1+A). **DeLong is the better
+estimator and is unavailable to us**: it needs the raw per-case scores, and the
+records persist only the per-cell BOOLEAN read at a percentile operating point.
+Reconstructing an AUROC from those booleans would be a different statistic
+wearing the same name.
+
+⚠️ **The interval is CONDITIONAL ON THE SELECTED CELL, and no version of this
+estimator fixes that.** `deployment` reports the max transfer AUROC over a
+(layer × position) grid. The permutation null of maxima licenses that
+selection's *significance*; it does nothing for the *interval*, which is
+computed as though the winning cell had been named in advance and is therefore
+narrower than the truth by an amount this layer cannot estimate. The caveat
+lives in the accessor's NAME —
+`auroc_interval_conditional_on_selection` — rather than in a docstring, because
+this repo has four instances of a caveat that was documented and skipped.
+Closing it needs a held-out cell or a nested resample; neither is built.
+
+**Two build lessons, both caught by existing guards rather than by review.**
+
+*(a) The estimator was one step from being anchored on a remembered constant.*
+The first test asserted Hanley & McNeil's own worked example from memory — "A =
+0.893, n = 29/51, SE = 0.037". The implementation returns **0.042** for those
+inputs. The recalled number was dropped rather than the code changed, because
+it was memory and nothing here may ride on memory, and the anchor became a
+**bootstrap on simulated scores**: the closed form tracks a resampled standard
+error to 0.0002 at AUROC 0.79 and is consistently conservative above 0.93,
+which is the safe direction for a claim whose lower bound must be high. *A test
+anchored on a remembered constant tests the memory, not the code* — and it is
+the stronger anchor anyway, since a transcription slip does not track a
+bootstrap to three decimals.
+
+*(b) A threshold's stated derivation did not produce its stated number.* The
+fraction's denominator guard was born as a constant `0.10`, justified in its own
+comment as "the width of a Wald interval on a gap at n=100 when both arms sit
+near 0.5". That width is **0.139**. `tests/test_config_discipline.py` flagged
+the literal, and the fix was not to correct the constant but to **derive it
+away**: the denominator is thin exactly when the plaintext gap does not exceed
+its own 95% half-width, which scales with n instead of assuming one. *The best
+outcome of the magic-number test is a number that stops existing.*
+
+---
+
 ## 5. Known anomaly, unexplained
 
 On Llama-3.1-8B the **recognition** probe licenses on `reverse_characters`
