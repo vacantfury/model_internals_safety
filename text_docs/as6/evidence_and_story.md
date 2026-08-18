@@ -142,3 +142,46 @@ decode".
 - **The citation gap.** The Llama Guard *3* checkpoint cannot be cited: the Herd
   paper is absent from science's master bib and the venue bib is a generated
   subset of it (TODO 63). The draft cites the family and names the checkpoint.
+- **⚠️ THE PAPER HAS NO RELATED WORK SECTION AND TWO REFERENCES** (`inan2023…`
+  = Llama Guard *1*, and WildGuard's NeurIPS D&B entry — both of them the
+  objects of study, neither of them prior work). Sections run Introduction →
+  Scope → Method → Results → Limitations → bibliography. This is the largest
+  structural gap AS-6 has and it is entirely offline work: the priors are
+  already identified and deep-read, in `text_docs/as6/s1_idea_check.md` and
+  TODO items 12/15. The delta argument is **already settled and must be
+  written, not re-derived** — the Level-3 floor is set by SIREN (2604.18519)
+  alone; Gamma-Guard (EMNLP 2025) is qualitative-only with zero encoding rungs;
+  DecipherGuard (2509.16870) owns the *behavioural* "guards fail on encoded
+  prompts" result and is never claimable here; Zhao et al. (2507.11878) is the
+  nearest capture-position prior; Youstra et al. (2508.17158) is the nearest
+  prior to the whole AS-5/AS-6 thesis. **One prior is still unchecked and
+  blocks the section: arXiv 2608.03201** (refusal-cue shortcut in
+  LlamaGuard3/Qwen3Guard, published 2026-08-04), filed in TODO 15 as
+  "scoop-check it before AS-6 scopes further" and never run. Scoop-check it
+  first; a Related Work written around an unread nearest-neighbour is the
+  expensive kind of rewrite.
+
+## 4. Corrected
+
+- **✅ FIXED 2026-08-18 — `Limitations` withheld numbers `Results` was
+  reporting, in both kits, for nine days.** Its first paragraph read *"One
+  guard's decode map is screened; the other's is not, yet … We therefore
+  withhold the unscreened guard's decode-axis numbers"* — written 2026-08-08,
+  correct that day. Job `9031680` derived WildGuard's floor on 2026-08-09
+  (`phase1_map.md` §0.6), the `Results` section was drafted the same day *from
+  that job*, and Table 1 has reported WildGuard's decode-axis AUROCs and cells
+  ever since. So the paper asserted the absence of its own table. **The comment
+  standing directly above the paragraph had predicted the rewrite in terms** —
+  *"if it lands, this paragraph shrinks to 'both guards screened, and here is
+  what it cost'"* — which makes this the second instance in this estate of *a
+  note predicting a defect is not a guard against it* (the first: the paper-kit
+  parity defect, `CLAUDE.md`, 2026-08-12). Replaced with the limitation that
+  actually survives, and which `Method` already sets up: **the control set is
+  selected by a PROXY** — the guard's base model, because a format-locked
+  classifier cannot be asked to restate a payload — so the residual assumption
+  is that a safety fine-tune acquires no decoding its base lacks, and the
+  direction of that error is stated (it inflates the floor, which can only
+  *remove* conditions from the reported map, never add them: conservative for
+  the policy failure we report). Enforcement question filed as TODO 72 rather
+  than settled here: three candidate guards were weighed and none is clean, so
+  the form is a design decision, not a mechanical follow-on.
