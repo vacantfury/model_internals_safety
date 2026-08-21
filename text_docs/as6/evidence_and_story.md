@@ -593,3 +593,52 @@ rank conditions ("the authors do not rank conditions or guards based on small
 apparent differences"), and Table 1's attrition as "perhaps the strongest
 empirical contribution". The free-fix pass was load-bearing for the review it had
 not yet seen.
+
+### 8.1 ⚠️ CORRECTION to §8's cost triage: the local per-prompt records are the RETIRED operating point
+
+§8 said the operating-point sweep and every confidence interval were offline and
+$0, on the strength of finding `decode_score` and `decode_threshold` per prompt
+in `outputs/runs/as6_phase1/*/scores-b10/cells.jsonl`. **The records are real,
+complete and load cleanly, and they are the wrong run.** `results.json` there
+records `probes.reading_percentile = 50.0`, retired 2026-08-08; the paper's
+Table 2 comes from run `9033528` at 75, whose records are **not local**.
+
+Recomputing from them reproduces the SUPERSEDED map exactly — Llama Guard
+8 / 17 / 12 / 25, which is `phase1_map.md` §0.6's retired table to the cell — and
+disagrees with the paper by up to 17 points on `reverse_words`. **Attaching a
+confidence interval to that would put an interval on a number the paper does not
+contain**, which is worse than having none. The same trap as every other
+instance in this repo: *a measurement is only as current as the code it timed*,
+here one level over — an artifact is only as current as the knob it was produced
+under.
+
+**The split that actually holds**, and it is a clean one:
+
+- **Free and valid now — threshold-INDEPENDENT quantities.** A block rate never
+  consults the decode read. The computed block-rate intervals match Table 2's
+  point estimates exactly on all seven reported conditions (Llama Guard
+  0.92 / 0.83 / 0.85 / 0.65, WildGuard 0.71 / 0.75 / 0.73), which is itself the
+  check that the local records are the right *guard runs* even at the wrong
+  operating point. Artifact: `outputs/analysis/review_statistics_20260821.json`.
+- **Needs run `9033528` down-synced** — every threshold-DEPENDENT quantity: the
+  sweep (con 5), `decoded_not_blocked` recounts, and the `blocked_without_decoding`
+  interval (con 7).
+- **Needs the wrapper/benign run records down-synced** — AUROC intervals, benign-arm
+  rates, wrapper margins, and the joint factorial with its interaction term
+  (con 8). Only WildGuard's benign arm is local; `phase1_map.md` §2 carries the
+  summary numbers but a summary cannot yield an interaction interval.
+
+None of this is a re-run. It is an rsync, and sessions do not self-pull.
+
+**`scripts/review_statistics.py` FAILS CLOSED on this rather than documenting it.**
+It reads the source run's own `reading_percentile`, compares it against the
+settled value, and withholds every threshold-dependent quantity with a stated
+reason when they disagree — the instrument contract's rule applied to an offline
+analysis script. The settled value is duplicated there as a literal on purpose:
+a guard that reads the same config the run would have read cannot detect that the
+run predates it.
+
+**One table edit was tried and reverted.** Block-rate intervals in `tab:map`
+cost 25.5pt of overhang that neither `\tabcolsep` nor `\footnotesize` absorbs
+(the overhang is font-independent). They are computed and stored; they belong in
+TODO 78's appendix of full per-condition rates, not wedged into the main table.
