@@ -169,3 +169,80 @@ def test_payload_final_lands_on_the_payload_inside_the_guard_template(llama_guar
     assert piece.lstrip("Ġ") == "bread"
     # Genuinely mid-prompt: the taxonomy epilogue and assistant header follow.
     assert offset < -20
+
+
+# --- the end-of-instruction span, per guard --------------------------------
+
+
+@pytest.mark.parametrize(
+    "guard, expected_span",
+    [("llama_guard_3_8b", 55), ("wildguard", 25)],
+)
+def test_the_guards_eoi_span_is_NOT_the_target_models_five(guard, expected_span):
+    """Derived, not assumed — and the answer is that Arditi's sweep does not port.
+
+    `instrument_layer.md` §6.3.4 fixed the capture spine for TARGET models by
+    deriving the end-of-instruction span from the live template (Llama-3.1 and
+    Qwen2.5 are 5 tokens, Mistral-v0.3 is 1) and said in terms that AS-6 "must
+    derive its GUARDS' spans the same way". This is that derivation, and the
+    numbers are 55 and 25.
+
+    They are large for a structural reason, not by accident: on a chat model the
+    post-instruction span is an assistant-header run, while a guard's template
+    puts the CLASSIFICATION TASK after the payload -- Llama Guard's taxonomy
+    epilogue, WildGuard's `Answers: [/INST]` scaffold. So a guard's span is task
+    text, and sweeping it is not the same experiment Arditi et al. run.
+    """
+    from transformers import AutoTokenizer
+
+    from internals_safety.models.loader import end_of_instruction_span
+
+    config = load_guard_config(guard)
+    tokenizer = AutoTokenizer.from_pretrained(config.hf_id)
+    rendered = render_guard_prompt(tokenizer, config, PAYLOAD)
+    assert end_of_instruction_span(tokenizer, rendered, PAYLOAD) == expected_span
+
+
+@pytest.mark.parametrize("guard", ["llama_guard_3_8b", "wildguard"])
+def test_eoi_position_names_REFUSES_a_guard_span_rather_than_covering_part(guard):
+    """The loud failure is the point: partial coverage is what §6.3.4 WAS.
+
+    `PositionName` enumerates to `last_minus_6`, i.e. spans of at most 7. Both
+    guards exceed it by a wide margin. Extending the enumeration to 55 would be
+    the wrong fix -- it would make an ill-posed sweep expressible. The refusal
+    is the correct state until the causal arm's guard analogue is designed.
+    """
+    from transformers import AutoTokenizer
+
+    from internals_safety.models.loader import end_of_instruction_span, eoi_position_names
+
+    config = load_guard_config(guard)
+    tokenizer = AutoTokenizer.from_pretrained(config.hf_id)
+    rendered = render_guard_prompt(tokenizer, config, PAYLOAD)
+    span = end_of_instruction_span(tokenizer, rendered, PAYLOAD)
+    with pytest.raises(ValueError, match="enumerates only up to last_minus_6"):
+        eoi_position_names(span)
+
+
+@pytest.mark.parametrize(
+    "guard, expected_offset",
+    [("llama_guard_3_8b", -56), ("wildguard", -26)],
+)
+def test_instruction_final_still_lands_on_the_payload_on_BOTH_guards(guard, expected_offset):
+    """Why the span finding does NOT touch any published AS-6 number.
+
+    The decode probe reads at `instruction_final`, which is `-(span + 1)` by
+    construction and therefore the payload's final token on both guards. The
+    span result constrains the causal arm, which `Limitations` already declares
+    unrun; the decode map is unaffected. Pinned so a future reader does not have
+    to re-derive that distinction from the span numbers alone.
+    """
+    from transformers import AutoTokenizer
+
+    config = load_guard_config(guard)
+    tokenizer = AutoTokenizer.from_pretrained(config.hf_id)
+    rendered = render_guard_prompt(tokenizer, config, PAYLOAD)
+    ids = tokenizer(rendered, add_special_tokens=False)["input_ids"]
+    offset = resolve_position(tokenizer, rendered, PAYLOAD, "instruction_final")
+    assert offset == expected_offset
+    assert tokenizer.convert_ids_to_tokens(ids[offset]).lstrip("Ġ▁") == "bread"

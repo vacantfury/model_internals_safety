@@ -135,31 +135,36 @@ decode".
   rather than a coincidence. **Leg 3's conclusions are unaffected** — the
   ordering is unchanged and `blocked_without_decoding` stays at 0.00–0.11 — but
   any quoted cell must now name which operating point produced it.
+- **⚠️ THE CAUSAL ARM IS BLOCKED BY A DESIGN QUESTION, not a config number
+  (measured 2026-08-21, $0).** The capture-spine fix that followed AS-5's
+  `n_eligible: 0` derives the end-of-instruction span from the live template and
+  said in terms that AS-6 must derive its guards' spans the same way. Done:
+  **Llama Guard 3 is 55 tokens and WildGuard is 25**, against 5 for a chat
+  model — because a guard's template puts the *classification task* after the
+  payload rather than an assistant header, so its span is task text and sweeping
+  it is not the experiment Arditi et al. run. `eoi_position_names` refuses both
+  (it enumerates to `last_minus_6`), and the refusal is the correct state:
+  extending it to 55 would make an ill-posed sweep expressible. **No published
+  number moves** — `instruction_final` is `-(span + 1)`, so it still lands on the
+  payload's final token on both guards, which is the right site for the content
+  probe; the verdict read never consults a swept position. So `Limitations`'
+  "specified but not run" stands, now for a better-understood reason.
+  `instrument_layer.md` §6.3.5.
 - **Two guards, one corpus.** The dissociations are properties of two
   checkpoints. §3.6.1's lesson from the AS-5 side applies: a conclusion from one
   model is not a conclusion, and two is the minimum that makes a dissociation
   one — not the number that makes either guard's behaviour general.
-- **The citation gap.** The Llama Guard *3* checkpoint cannot be cited: the Herd
-  paper is absent from science's master bib and the venue bib is a generated
-  subset of it (TODO 63). The draft cites the family and names the checkpoint.
-- **⚠️ THE PAPER HAS NO RELATED WORK SECTION AND TWO REFERENCES** (`inan2023…`
-  = Llama Guard *1*, and WildGuard's NeurIPS D&B entry — both of them the
-  objects of study, neither of them prior work). Sections run Introduction →
-  Scope → Method → Results → Limitations → bibliography. This is the largest
-  structural gap AS-6 has and it is entirely offline work: the priors are
-  already identified and deep-read, in `text_docs/as6/s1_idea_check.md` and
-  TODO items 12/15. The delta argument is **already settled and must be
-  written, not re-derived** — the Level-3 floor is set by SIREN (2604.18519)
-  alone; Gamma-Guard (EMNLP 2025) is qualitative-only with zero encoding rungs;
-  DecipherGuard (2509.16870) owns the *behavioural* "guards fail on encoded
-  prompts" result and is never claimable here; Zhao et al. (2507.11878) is the
-  nearest capture-position prior; Youstra et al. (2508.17158) is the nearest
-  prior to the whole AS-5/AS-6 thesis. **One prior is still unchecked and
-  blocks the section: arXiv 2608.03201** (refusal-cue shortcut in
-  LlamaGuard3/Qwen3Guard, published 2026-08-04), filed in TODO 15 as
-  "scoop-check it before AS-6 scopes further" and never run. Scoop-check it
-  first; a Related Work written around an unread nearest-neighbour is the
-  expensive kind of rewrite.
+- **✅ CLOSED 2026-08-18 — the citation gap.** The Herd paper landed in science's
+  `llm-security` master as `grattafiori2024llama3`, and the draft now cites the
+  family *and* the version-3 8B checkpoint. The key was nearly minted twice; see
+  §5.3.
+- **✅ CLOSED 2026-08-18 — Related work is written**, 2 → 12 citations, and the
+  scoop check that blocked it cleared: arXiv 2608.03201 classifies prompt–
+  *response* pairs with zero encoded inputs, so the Level-3 floor stays SIREN
+  alone and the paper became a citation that helps rather than a threat. A
+  closer prior surfaced from its reference list and is now cited: Tasawong et
+  al., LLMSEC 2025, prompt-side keyword bias in safeguards — the wrapper
+  screen's published motivation. Full positioning of record in §5.
 
 ## 4. Corrected
 

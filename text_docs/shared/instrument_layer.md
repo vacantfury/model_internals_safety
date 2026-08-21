@@ -2872,6 +2872,56 @@ must derive its GUARDS' spans the same way — Llama Guard and WildGuard render
 through templates that are neither Llama-3.1's nor each other's, and the Mistral
 result shows assuming any single number is a real error, not a theoretical one.
 
+#### 6.3.5 ✅ THE GUARDS' SPANS ARE DERIVED — 55 and 25, and Arditi's sweep does NOT port to a guard
+
+*2026-08-21. Tokenizers only, no weights, no GPU, seconds, $0. This is the check
+§6.3.4 above named in writing and nobody had run — the third opportunity in this
+estate to not repeat* a note predicting a defect is not a guard against it, *and
+the first time it was taken before a job rather than after one.*
+
+| model | eoi span | `instruction_final` | `eoi_position_names(span)` |
+|---|---|---|---|
+| Llama-3.1-8B-Instruct | 5 | −6 | `last`, `last_minus_1..4` |
+| Mistral-7B-Instruct-v0.3 | 1 | −2 | `last` |
+| **Llama Guard 3 8B** | **55** | **−56** | ⛔ **refused** |
+| **WildGuard** | **25** | **−26** | ⛔ **refused** |
+
+**The number is not 5, and it is not wrong — the abstraction is.** On a chat
+model the post-instruction span is an assistant-header run: fixed scaffolding,
+a handful of tokens, and generation begins at its end. On a guard the template
+puts the **classification task after the payload** — Llama Guard's taxonomy
+epilogue and "First line must read 'safe' or 'unsafe'", WildGuard's
+`AI assistant: … --- … Answers: [/INST] <|assistant|>`. So a guard's span is
+*task text*, and sweeping its 55 positions is not the experiment Arditi et al.
+run; it is a different one that happens to share a definition.
+
+**`eoi_position_names` refuses both, and the refusal is the correct state.**
+`PositionName` enumerates to `last_minus_6` (spans ≤ 7). Extending it to 55
+would be the wrong fix: it would make an ill-posed sweep *expressible*, which is
+the inverse of this repo's standing pattern — make the omission inexpressible.
+The enumeration stays where it is until the causal arm's guard analogue is
+designed, and the loud failure is what will surface that decision instead of
+letting a job discover it.
+
+**⚠️ What this does NOT touch: any published AS-6 number.** `instruction_final`
+is `-(span + 1)` by construction, so it lands on the payload's final token on
+both guards (verified: offset −56 and −26, both decoding to `' bread'`) — the
+correct site for a *content* probe, which is what the decode read is. The
+verdict read is teacher-forced continuation logits via `verdict_context` and
+never consults a swept position. So `phase1_map.md`'s map and the paper's
+Table 1 stand; the constraint falls entirely on the causal arm, which
+`Limitations` already declares specified-but-not-run. **Stating that separation
+explicitly is the point** — a reader meeting "55, not 5" without it would
+reasonably assume the map was captured at the wrong place.
+
+**Consequence for the causal arm.** It is blocked by a *design* question, not a
+config number: what is the analogue of an end-of-instruction sweep for a
+format-locked classifier whose post-payload span is its own task description?
+That is real work with an uncertain payoff, and it is now the honest reason the
+arm is unrun — better than "the sweep was too sparse", which is what §6.3.3/6.3.4
+would have suggested by analogy. Pinned in
+`tests/test_real_guard_tokenizers.py` (`slow`, tokenizers only).
+
 ### 6.4 The roster, the sequencing, and the literature map
 
 **Superseded and moved.** The ranked instrument roster that stood here — with each
