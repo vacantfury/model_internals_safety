@@ -1128,7 +1128,7 @@ prompts within a spread of 0.08, inside the n=100 noise ceiling, while spanning
 gap, and under the encoded-prompt protocol it loses 27–101% of its plaintext
 value. (§4d, §4g; unchanged.)
 
-**Beat 2 — the signal is still there.** A harm direction **fit on plaintext**
+**Beat 2 — ⛔ WITHDRAWN 2026-08-21, see §4k. The probe was reading item identity; with items held out it reads 0.618–0.811, BELOW its own plaintext baseline. Kept below as the refuted text.** ~~The signal is still there.~~ A harm direction **fit on plaintext**
 transfers into the encoded condition at AUROC **0.938–0.995 on all four
 models**, at a late-mid layer at the end of the instruction in every case
 (L21 / L18 / L19 / L27, `instruction_final` throughout). On Llama-3.1-8B the
@@ -1257,6 +1257,77 @@ arm runs. And the intro now carries a **note on the title**, because *refusal
 without discrimination* can be misread as *the model cannot discriminate*, which
 our own internals result refutes: the title names the behavioural state, and the
 last measurement shows the discrimination is still there, unused.
+
+## 4k. ⛔ THE INTERNALS LEG IS REFUTED — the probe was reading item identity, not harm (2026-08-21)
+
+**§4j's beat 2 is WITHDRAWN. Do not quote AUROC 0.938–0.995 anywhere, ever
+again.** Found by a hostile methods review the same day §4j was written, and
+settled by measurement: job `9407323`, CPU, `short` partition, $0, no GPU.
+Script `scripts/split_half_transfer.py`, artifact
+`outputs/analysis/split_half_transfer_20260821.json`.
+
+### The defect
+
+`probe_transfer` fits on **all 100 plaintext harmful + all 100 plaintext
+benign** and evaluates on the homoglyph versions of **those same 200 items**.
+The CONDITION is held out; the ITEMS are not. `crossval_scores`' docstring
+states the opposite in writing — *"unlike the transfer probe there is no free
+held-out set"* — so the code believed the transfer probe had one. It did not.
+The encoded activation of item *i* sits near the plaintext activation of item
+*i*, because the model decodes the transform at ability 0.86–0.98, so a probe
+told "plaintext item *i* is harmful" scores encoded item *i* high by memory.
+
+### The numbers
+
+| model | paper (no split) | **item-split** | 95% band | plaintext CV |
+|---|---|---|---|---|
+| Llama-3.1-8B | 0.981 | **0.618** | [0.524, 0.714] | 0.707 |
+| Qwen2.5-7B | 0.995 | **0.811** | [0.742, 0.870] | 0.898 |
+| Tülu-3-8B | 0.971 | **0.698** | [0.618, 0.775] | 0.806 |
+| Mistral-7B | 0.938 | **0.727** | [0.631, 0.796] | 0.870 |
+
+**The sample-size confound is CLOSED, which is what makes this a verdict rather
+than a worry.** The split halves the training set as well as holding out items,
+so part of the drop could have been fewer samples. Scoring the SAME probe at the
+SAME training size on the items it was trained on gives **0.971–0.998**, against
+0.618–0.811 on items it was not: leakage at fixed *n* is **+0.19 to +0.38**.
+Difference-in-means shows it too (+0.15 to +0.32), so it is item memory, not
+logistic capacity — a rank-one mean difference carries item identity across this
+transform just fine.
+
+### ⚠️ The honest reading runs OPPOSITE to what §4j claimed
+
+The paper said the representation is intact and only the read-out fails (H-B).
+With items held out, **the encoded reading is BELOW the within-plaintext
+cross-validated reading on all four models, by 0.087 to 0.143.** The harm
+representation is **degraded** under the protocol, not intact. What survives is
+a dissociation of DEGREE — representation down ~0.1 AUROC while behavioural
+discrimination falls 27–101% — which is a far weaker claim than the one written,
+and it leans toward H-A rather than H-B.
+
+⚠️ **Llama, the model that carried the story, is the worst case**: 0.618 with a
+band whose floor is 0.524, and its own plaintext CV is only 0.707. *"The harm is
+linearly present at near-ceiling"* was never true on Llama; it had no baseline,
+which is exactly what the review said — **the paper never reported a
+within-plaintext AUROC, so "the signal survives" had no denominator.**
+
+⛔ **Do NOT read the floor column as a verdict.** The control floors (Llama
+0.6765, Qwen 0.6708, Tülu 0.6417, Mistral 0.6569) were derived from control
+rungs measured under the SAME leaky procedure, so they are inflated too.
+Comparing a split-half reading against a no-split floor is apples to oranges;
+re-deriving the floors under the split is another cheap CPU job and is owed
+before any clears/fails claim.
+
+### The lesson, and it is not the one about probes
+
+§4j was written, committed and pushed on the strength of a measurement nobody
+had audited, one day before a review found the audit. The repo's own record
+already warned in the same file that the run record said *"nothing internal was
+measured"* — the correction to that sentence was right about `deployment`
+existing and wrong about what it measured. **Finding a number in a run record is
+not the same as knowing what it is a number for.** Every previous instance of
+this class was caught by a run dying; this one had to be caught by a reviewer,
+because a leaky probe produces a beautiful result and no error.
 
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
