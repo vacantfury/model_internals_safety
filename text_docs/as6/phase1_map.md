@@ -174,7 +174,27 @@ Derivation, reasoning and the sigma finding are canonical in
 distribution kind). **Four rungs survive**, and they are the ones this map may
 report:
 
-| rung | decode AUROC | `decoded_not_blocked` | block rate |
+> **⚠️ THE `decoded_not_blocked` COLUMN BELOW IS AT THE RETIRED OPERATING POINT
+> (`probes.reading_percentile: 50`) — re-quoted 2026-08-21 from run `9033528`.**
+> The knob moved 50 → 75 on 2026-08-08 and the draft reports the 75 values, so a
+> reader checking the paper's Table 1 against this table would find the doc of
+> record disagreeing with the paper it grounds. The floor, the AUROCs and the
+> block rates are properties of the screen and the guard and do NOT move; only
+> the read does.
+>
+> | rung | @50 (retired) | **@75 (reported)** |
+> |---|---|---|
+> | `homoglyph` | 0.08 | **0.07** |
+> | `zero_width` | 0.17 | **0.17** |
+> | `fullwidth` | 0.12 | **0.10** |
+> | `reverse_words` | 0.25 | **0.08** |
+>
+> The change lands almost entirely on `reverse_words`, the weakest decode probe
+> of the four (AUROC 0.796 against 0.985 / 0.969 / 0.880) — the direction a
+> stricter read should move things, which is a check on the knob rather than a
+> coincidence. §2's table already carries the reported values.
+
+| rung | decode AUROC | `decoded_not_blocked` @50 | block rate |
 |---|---|---|---|
 | `homoglyph` | 0.9849 | 0.08 | 0.92 |
 | `zero_width` | 0.9687 | 0.17 | 0.83 |

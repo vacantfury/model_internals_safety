@@ -124,8 +124,10 @@ decode".
   p = 0.048) are on disk and cost $0 to re-read once the gate is trusted, and the
   attrition instrumentation added the same day means the next run diagnoses
   itself rather than costing a fourth queue cycle.
-- **⚠️ The map in `phase1_map.md` predates the operating-point change and must be
-  re-quoted from run `9033528`.** Same guard, same four rungs, same block rates
+- **✅ CLOSED 2026-08-21 — the map in `phase1_map.md` no longer contradicts the
+  draft.** §0.6's table predated the operating-point change and carried no
+  marker, so the doc of record disagreed with the paper it grounds; it now
+  states both reads and points at §2 for the reported one. Same guard, same four rungs, same block rates
   (0.92 / 0.83 / 0.85 / 0.65) — but `reading_percentile` moved 50 → 75 this
   session, and `decoded_not_blocked` moved with it: homoglyph 0.08 → **0.07**,
   zero_width 0.17 → **0.17**, fullwidth 0.12 → **0.10**, reverse_words 0.25 →
@@ -364,3 +366,67 @@ where they pointed. Testing the claim rather than accepting or dismissing it is
 what separated the two — and dismissing it on the correct grounds ("`parse_entries`
 returns a dict, so this cannot happen") would have closed the ticket and left the
 silent overwrite in place.
+
+---
+
+## 6. ⚠️ The reviewer-lens self-review ran 2026-08-21, and it says the third guard is NOT the next spend
+
+Full review (gitignored, reviewer text): `text_docs/reviews/as6_selfreview_20260821.md`.
+Verdict **Borderline** at a general top-tier track, **Weak Accept** at a
+safety/alignment one; contribution **Significant** on the method axis, **Moderate**
+on the empirical. It was commissioned to test one belief and it refuted it.
+
+**The belief tested: "two guards, one corpus" is the binding weakness, so TODO 75's
+third guard is the right ~10 GPU-hours.** It is roughly the FIFTH weakness, and the
+purchase is aimed at the axis the paper is least exposed on. Three findings, none of
+which needs a GPU, and the ordering matters more than any of them individually.
+
+- **⚠️ The Method describes our own rigor as the flaw a referee rejects on.** It reads
+  *"the transfer AUROC at the best licensed layer--position cell"*, which to anyone who
+  reviews probing papers is an uncorrected grid search over layers × positions with the
+  max reported. **We do not do that.** `deployment.py:85–99` tests the max against a
+  null of maxima under shuffled TRAIN labels, so the search sits inside the null;
+  `contract.py` enforces it as `selection_inside_null` with the withhold reason
+  *"layer/position selection was not inside the null (P7)"*; and `probes/linear.py:139`
+  fits on a held-out split with a shuffled-label control refitted on the SAME split.
+  None of it is in the paper. **Two sentences convert the most likely reject reason into
+  a stated strength** — the highest value-per-word edit available, and it is free.
+- **⚠️ Not one confidence interval appears anywhere.** At n=100 the Wilson intervals are
+  7 → [3.4, 13.7], 10 → [5.5, 17.4], 17 → [10.9, 25.5], 23 → [15.8, 32.2]. The
+  EXISTENCE claim survives — the smallest cell clears zero — but every ORDERING the text
+  leans on does not: LG `homoglyph` 7 and LG `fullwidth` 10 overlap almost entirely, and
+  `Limitations` ¶3's *"shrinks every cell without reordering them"* is an
+  ordering-stability claim about quantities whose order was never established. Arithmetic
+  on cells already on disk.
+- **⚠️ The screens collapsed the CONDITION axis, not the guard axis, and the paper never
+  says so.** `tab:map` is 7 rows minus 2 self-labelled controls = **five rows over three
+  encodings**, of which the two that replicate across guards — `homoglyph`, `zero_width` —
+  are the same family (Unicode substitution/invisible characters). A 19-rung ladder
+  yielded two encodings of one kind. **A third guard adds a third column on those same
+  two encodings**, so it leaves the objection a referee computes in ten seconds from the
+  table completely untouched.
+
+**Where that leaves TODO 75.** The counter-argument is not weak and is recorded rather
+than dismissed: the abstract nominates the SCREENING METHODOLOGY as the main
+contribution, and cross-family portability of the inherited-ability selector is that
+contribution's own generalisation — so the third guard is coherent *on the method axis*.
+The split is clean: **third guard strengthens the METHOD claim; a second CORPUS
+strengthens the EMPIRICAL claim.** The empirical claim is the weaker of the two, and it
+is the one whose thinness is visible from a table. The tiebreaker is the paper's own
+cautionary tale: a **corpus** property (length) faked the entire result once and its
+control removed 11 of 17 conditions on one guard, while `Limitations` already argues the
+inherited selector's error direction is conservative. **So if exactly one run is bought,
+a second corpus buys more than a third guard** — filed as TODO 76 beside 75, both
+gated, neither authorised.
+
+**Two smaller findings worth carrying.** The abstract states *"80 per cent for a target
+model in the same design"* with no citation — an uncited companion-study number doing
+comparative work in an abstract, unsupported outright if AS-5 is not citable at review
+time. And the abstract is 403 words with **17 numerals** against a house rule of 1–3;
+the structural problem is ordering, since ~250 words of attrition precede the positive
+finding, which risks reading as instrument fragility rather than as rigor.
+
+**Recommended sequence, all free and none contingent on a run:** state the null-corrected
+selection → intervals in `tab:map` → fix or cut the 80-per-cent figure → rewrite the
+abstract → say the surviving band is one encoding family. *Then* re-put the run question
+with the paper in its repaired state.
