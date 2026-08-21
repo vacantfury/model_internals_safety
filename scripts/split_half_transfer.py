@@ -34,12 +34,12 @@ split.
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import sys
 from pathlib import Path
 
 import numpy as np
-import torch
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedKFold
@@ -63,8 +63,21 @@ def _fit_logistic(features: np.ndarray, labels: np.ndarray, seed: int) -> Logist
     return model
 
 
-def _cell(batch: ActivationBatch, layer: int, position: str) -> np.ndarray:
-    return batch.select(layer, position).numpy().astype(np.float64)
+def _cell(path: str, layer: int, position: str) -> np.ndarray:
+    """Load one activation file, keep ONE (layer, position) slice, free the rest.
+
+    The four files are ~105 MB each and hold [n_prompts, n_layers, n_positions,
+    d_model]; we need [n_prompts, d_model]. Loading all four at once is ~420 MB
+    of tensor plus torch's own footprint, which a login node kills (exit 137,
+    measured). Loading one at a time keeps the peak at one file and the retained
+    set at ~1.6 MB per cell. float32 is kept -- the probe is fit in float64 by
+    sklearn anyway, and upcasting here would double the peak for nothing.
+    """
+    batch = ActivationBatch.load(Path(path))
+    cell = batch.select(layer, position).clone().numpy()
+    del batch
+    gc.collect()
+    return cell
 
 
 def _stack(pos: np.ndarray, neg: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -182,16 +195,15 @@ def main() -> int:
         paths = record["activations_path"]
         per_family = paths["per_family"][family]
 
-        batches = {
-            name: ActivationBatch.load(Path(p))
-            for name, p in (
+        cells = {
+            name: _cell(path, layer, position)
+            for name, path in (
                 ("plain_h", paths["plain_harmful"]),
                 ("plain_b", paths["plain_harmless"]),
                 ("enc_h", per_family["encoded_harmful"]),
                 ("enc_b", per_family["encoded_harmless"]),
             )
         }
-        cells = {k: _cell(v, layer, position) for k, v in batches.items()}
 
         result = analyse(
             cells["plain_h"], cells["plain_b"], cells["enc_h"], cells["enc_b"],
