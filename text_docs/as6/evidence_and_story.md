@@ -517,3 +517,79 @@ check follows the generator by construction.
 
 **State: all four kits (AS-5 and AS-6, both kits each) build with 0 errors, 0
 undefined references, and 0 curation text in the rendered PDF. Suite 2219 green.**
+
+---
+
+## 8. The full external review came back 4/reject — and 9 of its 10 objections cost $0 (2026-08-21)
+
+Desk check now **passes** on all four criteria (length, topic, minimum quality,
+and prompt-injection screening). What follows is the substantive review:
+**rating 4 "ok but not good enough, rejection", confidence 4.**
+
+**The headline, and it is not what either of our own run proposals assumed:
+almost nothing the reviewer objects to is the science being wrong. It is that a
+METHODOLOGY paper does not specify its method.** Cons 2, 3, 5 and 6 are one
+sentence four times over: the paper never states the probe estimator, the
+layer/position grid, split sizes, seeds, permutation count, the control-floor
+protocol (which conditions are controls, the floor values, the required margin),
+the threshold-selection criterion, the corpus, the 19 encodings, the wrappers, or
+checkpoint revisions. **We have every one of those written down already** in
+`instrument_layer.md` §2.7, `conf/`, and the code. That is transcription, not
+research.
+
+**⚠️ NEITHER TODO 75 NOR TODO 77 IS WHAT THIS REVIEWER ASKED FOR.** Guard count
+appears **nowhere** in the ten objections; the corpus appears only as *name it*
+(con 6) and *your conclusion is corpus-specific* (con 9), both wording. §6's
+self-review concluded the third guard was the wrong spend; this review says
+**neither run is the bottleneck.** Both remain filed and gated, and the case for
+either is now weaker than the case for the free work.
+
+**Cost triage, verified against local artifacts rather than estimated.**
+`outputs/runs/as6_phase1/*/scores-b10/cells.jsonl` holds **1900 cells per guard,
+all 19 conditions, with per-prompt `decode_score` AND `decode_threshold`**, plus
+`blocked`, `p_unsafe`/`p_safe` and the tri-state `decoded`. So the operating-point
+sweep, every confidence interval, and the joint factorial are **offline and $0**.
+
+| # | Objection | Cost |
+|---|---|---|
+| 1 | Causal claim overstated; recast as probe separability | $0 prose (the test is design-blocked, §3) |
+| 2 | Probe spec absent | $0 prose; multi-seed refit alone needs GPU |
+| 3 | Control-floor protocol absent | $0 prose |
+| 4 | "Capability failure accounts for the rest" contradicts our own tri-state | $0 prose |
+| 5 | Sweep not shown; post-hoc operating point | **$0** — `decode_score` is local |
+| 6 | Corpus/encodings/wrappers/checkpoints unnamed | $0 prose |
+| 7 | CIs only on one quantity | **$0** — from local cells |
+| 8 | Wrapper screen → report the full factorial + interaction | **$0** — arms are local |
+| 9 | "Retires the format-detector account" too broad | $0 prose |
+| 10 | No baselines | **half $0** — two of the four are already ours |
+
+**Con 4 is a real self-contradiction and con 1 quotes a sentence WE ADDED
+YESTERDAY.** §5.4 says *"The capability failure accounts for the rest of the
+ladder"* one clause before saying those cells are *"unmeasured, not not
+decoded"*. And §7's new Conclusion says *"the payload's content is present in the
+residual stream and the verdict does not act on it"* — the second clause is
+exactly the causal claim `Limitations` disclaims. **The conclusion written to fix
+a desk reject reintroduced the overclaim the rest of the paper is careful about.**
+That is this repo's recurring failure mode landing in the newest prose, and it
+argues for reading a new section against the paper's own disclaimers before it
+ships.
+
+**Con 10 is half-answered by material already in the paper.** The reviewer wants
+an uncontrolled transfer probe (that is Table 1's first row) and a length-only
+classifier (that is the length null). Both exist as *screens* and neither is
+presented as a *baseline*. Reframing costs nothing; the multi-position model and
+the decoder-plus-guard pipeline are genuine new work.
+
+**⚠️ THE NINE SUGGESTED CITATIONS ARE UNVERIFIED AND SOME MAY NOT EXIST.** An LLM
+reviewer's reading list is not evidence of existence, which is the exact mirror
+of the error this repo already made in the other direction (the coverage sweep's
+three false "misses"). **No suggested reference lands without primary-source
+verification and an evidence tier**, per the config-cites-its-paper rule and the
+lit-search handbook. Filed as its own task rather than folded into the writing.
+
+**Two pros worth carrying, because they credit work from item 76 done hours
+earlier:** the reviewer singles out Table 2's Wilson intervals and its refusal to
+rank conditions ("the authors do not rank conditions or guards based on small
+apparent differences"), and Table 1's attrition as "perhaps the strongest
+empirical contribution". The free-fix pass was load-bearing for the review it had
+not yet seen.
