@@ -127,7 +127,7 @@ def analyse(
 
     # --- B and C: item-split, over many random folds ---------------------------
     rng = np.random.default_rng(seed)
-    b_scores, c_scores = [], []
+    b_scores, c_scores, f_scores, g_scores = [], [], [], []
     for _ in range(n_splits):
         # One shared permutation, halved -- fold A trains, fold B is scored.
         idx_h = rng.permutation(n_h)
@@ -138,10 +138,26 @@ def analyse(
         tr_x, tr_y = _stack(plain_h[fit_h], plain_b[fit_b])
         te_x, te_y = _stack(enc_h[held_h], enc_b[held_b])
 
-        b_scores.append(_auroc(_fit_logistic(tr_x, tr_y, seed).decision_function(te_x), te_y))
-        c_scores.append(_auroc(dim_scores(plain_h[fit_h], plain_b[fit_b], te_x), te_y))
+        # F/G: the SAME probe, same training size, scored on the items it was
+        # trained on (encoded versions of fold A). B/C above score fold B. The
+        # pair isolates ITEM LEAKAGE from TRAINING-SET SIZE, which the A-vs-B
+        # comparison alone cannot do: B halves the training set as well as
+        # holding out the items, so part of its drop is fewer samples, not
+        # memory. F minus G is leakage at fixed n.
+        seen_x, seen_y = _stack(enc_h[fit_h], enc_b[fit_b])
 
-    for key, values in (("B_split_logistic", b_scores), ("C_split_dim", c_scores)):
+        fitted = _fit_logistic(tr_x, tr_y, seed)
+        b_scores.append(_auroc(fitted.decision_function(te_x), te_y))
+        f_scores.append(_auroc(fitted.decision_function(seen_x), seen_y))
+        c_scores.append(_auroc(dim_scores(plain_h[fit_h], plain_b[fit_b], te_x), te_y))
+        g_scores.append(_auroc(dim_scores(plain_h[fit_h], plain_b[fit_b], seen_x), seen_y))
+
+    for key, values in (
+        ("B_split_logistic", b_scores),
+        ("C_split_dim", c_scores),
+        ("F_seen_logistic", f_scores),
+        ("G_seen_dim", g_scores),
+    ):
         arr = np.asarray(values)
         out[key] = {
             "mean": float(arr.mean()),
@@ -160,6 +176,11 @@ def analyse(
     out["E_plain_crossval"] = _auroc(oos, train_y)
 
     out["leakage_gap_A_minus_B"] = out["A_reproduce_no_split"] - out["B_split_logistic"]["mean"]
+    # The clean leakage estimate: same probe, same training size, seen minus unseen.
+    out["leakage_at_fixed_n_logistic"] = (
+        out["F_seen_logistic"]["mean"] - out["B_split_logistic"]["mean"]
+    )
+    out["leakage_at_fixed_n_dim"] = out["G_seen_dim"]["mean"] - out["C_split_dim"]["mean"]
     return out
 
 
@@ -226,6 +247,10 @@ def main() -> int:
               f"  [{result['C_split_dim']['p2_5']:.4f}, {result['C_split_dim']['p97_5']:.4f}]")
         print(f"  D no split       (diff-in-means) : {result['D_dim_no_split']:.4f}")
         print(f"  E plaintext cross-validated      : {result['E_plain_crossval']:.4f}")
+        print(f"  F seen items     (logistic, n/2) : {result['F_seen_logistic']['mean']:.4f}")
+        print(f"  G seen items     (dim, n/2)      : {result['G_seen_dim']['mean']:.4f}")
+        print(f"  --> leakage at FIXED n (F - B)   : {result['leakage_at_fixed_n_logistic']:+.4f}"
+              f"   (dim, G - C: {result['leakage_at_fixed_n_dim']:+.4f})")
         print(f"  --> leakage gap A - B            : {result['leakage_gap_A_minus_B']:+.4f}")
 
     if args.out:
