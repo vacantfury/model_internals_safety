@@ -48,8 +48,12 @@ CITE_PATTERN = re.compile(
     r"\\(?:no)?cite[a-zA-Z]*\*?\s*(?:\[[^\]]*\]\s*){0,2}\{([^}]*)\}"
 )
 
-#: A whole-line LaTeX comment. Keys inside commented-out prose are not cited.
-COMMENT_PATTERN = re.compile(r"(?m)^\s*%.*$")
+#: A LaTeX comment: an UNESCAPED ``%`` through end of line. Two properties are
+#: load-bearing. It must not eat ``\%`` (a literal percent sign in prose), and
+#: it must leave the newline in place, so a ``\citep{a,b%<newline>c}`` line
+#: continuation still closes its brace group. A whole-line-only pattern was the
+#: first version and it leaked: ``\citep{a} % cf. \citep{b}`` cited ``b``.
+COMMENT_PATTERN = re.compile(r"(?m)(?<!\\)((?:\\\\)*)%.*$")
 
 #: The start of a BibTeX entry, capturing its key.
 ENTRY_PATTERN = re.compile(r"(?m)^@(\w+)\s*\{\s*([^,\s]+)\s*,")
@@ -75,13 +79,11 @@ def master_bibs(corpus: Path) -> list[Path]:
 
 
 def cited_keys(tex: str) -> set[str]:
-    """Extract every key cited by *tex*, ignoring whole-line comments."""
-    body = COMMENT_PATTERN.sub("", tex)
+    """Extract every key cited by *tex*, ignoring LaTeX comments."""
+    body = COMMENT_PATTERN.sub(r"\1", tex)
     keys: set[str] = set()
     for group in CITE_PATTERN.findall(body):
-        # A `%` line-continuation inside a \citep{a,b%\n c} list survives the
-        # comment strip above, because it is not a whole-line comment.
-        for key in group.replace("%", " ").split(","):
+        for key in group.split(","):
             key = key.strip()
             if key:
                 keys.add(key)
@@ -112,6 +114,19 @@ def parse_entries(bib: str) -> dict[str, str]:
     return entries
 
 
+def entry_keys(bib: str) -> list[str]:
+    """Every entry key in *bib*, in order and WITH REPEATS.
+
+    ``parse_entries`` returns a dict, so a key defined twice inside one file
+    collapses there with the last copy silently winning. That is the same
+    one-master violation the cross-direction check exists to catch, one scope
+    down, and this corpus has had exactly it -- a ``zou2024circuitbreakers``
+    present twice and disagreeing with itself about a venue. So the repeats are
+    kept here and counted by ``resolve_corpus``.
+    """
+    return [match.group(2) for match in ENTRY_PATTERN.finditer(bib)]
+
+
 def resolve_corpus(bibs: list[Path]) -> tuple[dict[str, str], dict[str, list[str]]]:
     """Merge every direction bib into one key map, reporting cross-direction clashes.
 
@@ -124,8 +139,12 @@ def resolve_corpus(bibs: list[Path]) -> tuple[dict[str, str], dict[str, list[str
     seen_in: dict[str, list[str]] = {}
     for path in bibs:
         direction = path.parent.name
-        for key, entry in parse_entries(path.read_text(encoding="utf-8")).items():
-            available.setdefault(key, entry)
+        text = path.read_text(encoding="utf-8")
+        parsed = parse_entries(text)
+        # entry_keys, not parsed.items(): the repeats have to survive to here,
+        # or a within-file duplicate is resolved silently one level down.
+        for key in entry_keys(text):
+            available.setdefault(key, parsed[key])
             seen_in.setdefault(key, []).append(direction)
     duplicated = {key: names for key, names in seen_in.items() if len(names) > 1}
     return available, duplicated
@@ -146,12 +165,15 @@ def build(paper_id: str, *, corpus: Path) -> tuple[int, list[Path]]:
 
     available, duplicated = resolve_corpus(bibs)
     if duplicated:
+        lines = []
+        for key, names in sorted(duplicated.items()):
+            if len(set(names)) == 1:
+                lines.append(f"{key}: {len(names)}x within {names[0]}")
+            else:
+                lines.append(f"{key}: across {', '.join(sorted(set(names)))}")
         raise SystemExit(
-            "the same key is defined in more than one direction bib -- one master\n"
-            "per key, so merge or rename in the corpus before generating:\n  "
-            + "\n  ".join(
-                f"{key}: {', '.join(names)}" for key, names in sorted(duplicated.items())
-            )
+            "one key, one entry -- the corpus defines a key more than once, so\n"
+            "merge or rename it there before generating:\n  " + "\n  ".join(lines)
         )
 
     tex_files = sorted(paper_dir.rglob("paper.tex"))

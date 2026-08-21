@@ -97,6 +97,28 @@ class TestCitedKeys:
             "tasawong-etal-2025-shortcut"
         }
 
+    def test_a_TRAILING_comment_does_not_leak_a_citation(self) -> None:
+        # The whole-line-only strip this replaced returned {live, parked}: a
+        # key we deliberately stopped citing came back, and had it been dropped
+        # from the corpus at the same time the build would have aborted on a
+        # key nothing cites.
+        tex = r"\citep{live} % superseded, was \citep{parked}"
+        assert bvb.cited_keys(tex) == {"live"}
+
+    def test_an_ESCAPED_percent_is_not_a_comment(self) -> None:
+        # The reason the strip cannot be a bare `%.*$`: prose says "40\% of".
+        tex = r"Refusal fell by 40\% here \citep{beta}"
+        assert bvb.cited_keys(tex) == {"beta"}
+
+    def test_the_continuation_still_survives_the_stricter_strip(self) -> None:
+        # Stripping to end of line must LEAVE the newline, or the brace group
+        # of a wrapped \citep never closes and every key in it is lost.
+        assert bvb.cited_keys("\\citep{first,second,%\n  third}") == {
+            "first",
+            "second",
+            "third",
+        }
+
 
 class TestParseEntries:
     def test_a_note_field_with_braces_is_not_truncated(self) -> None:
@@ -238,8 +260,14 @@ class TestAgainstTheRealCorpus:
                 )
 
 
-class TestCrossDirectionDuplicates:
-    """One key, one master. A key in two directions silently demotes one copy."""
+class TestDuplicateKeys:
+    """One key, one entry -- in either scope.
+
+    Across directions, a second copy silently stops being the citation. WITHIN
+    one direction it is worse: ``parse_entries`` returns a dict, so the last
+    copy wins and nothing is reported at all. Both are the same violation and
+    the check has to see both, which is why ``entry_keys`` keeps the repeats.
+    """
 
     def test_a_key_in_two_directions_is_an_ERROR(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -260,7 +288,33 @@ class TestCrossDirectionDuplicates:
         assert "jiao2026siren" in message
         assert "llm-security" in message and "model-internals" in message
 
-    def test_the_real_corpus_has_no_cross_direction_duplicates(self) -> None:
+    def test_a_key_defined_TWICE_IN_ONE_direction_is_an_ERROR(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        corpus = _corpus(tmp_path)
+        (corpus / "llm-security" / "references.bib").write_text(
+            HYPHENATED_ACL_ENTRY + "\n\n" + HYPHENATED_ACL_ENTRY, encoding="utf-8"
+        )
+        kit = tmp_path / "paper" / "as-x" / "kit"
+        kit.mkdir(parents=True)
+        (kit / "paper.tex").write_text(r"\citep{jiao2026siren}", encoding="utf-8")
+        monkeypatch.setattr(bvb, "PAPER_ROOT", tmp_path / "paper")
+        with pytest.raises(SystemExit) as caught:
+            bvb.build("as-x", corpus=corpus)
+        message = str(caught.value)
+        assert "tasawong-etal-2025-shortcut" in message
+        # The two scopes must be told apart in the message, or the operator
+        # goes looking in the wrong file for a duplicate that is in front of
+        # them. This one is within a single direction.
+        assert "within" in message and "across" not in message
+
+    def test_a_dict_merge_would_have_hidden_the_within_file_case(self) -> None:
+        # Mutation: this is what resolve_corpus did before entry_keys existed.
+        doubled = HYPHENATED_ACL_ENTRY + "\n\n" + HYPHENATED_ACL_ENTRY
+        assert len(bvb.parse_entries(doubled)) == 1
+        assert len(bvb.entry_keys(doubled)) == 2
+
+    def test_the_real_corpus_has_no_duplicate_keys(self) -> None:
         corpus = bvb.corpus_dir()
         bibs = bvb.master_bibs(corpus)
         if not bibs:

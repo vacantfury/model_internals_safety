@@ -319,3 +319,43 @@ a generated entry fails it). Coverage is scoped by the generator's own header
 marker, so a kit still on a hand-written bib is visibly *out* of coverage rather
 than silently passing, and joins it the moment it is migrated — AS-5's kits are
 out today. `tests/test_build_venue_bib.py`.
+
+### 5.4 The review pass on the generator — one finding real, one refuted, and the refuted one was the useful half
+
+The testing standard's independent review pass ran on `build_venue_bib.py` and
+returned two findings. Both were tested before either was acted on, which is the
+only reason the second one produced anything.
+
+**Real, and fixed.** The comment strip was whole-line only, so a *trailing*
+comment leaked: `\citep{live} % superseded, was \citep{parked}` cited `parked`.
+Harmless while `parked` is still in the corpus (BibTeX prints only cited entries)
+and a loud abort once it is not — the build fails on a key nothing cites. The
+strip is now an unescaped `%` through end of line, which has two constraints
+pulling against each other and both are pinned: it must not eat `\%` in prose
+("refusal fell by 40\%"), and it must **leave the newline**, or a wrapped
+`\citep{a,b%⏎c}` never closes its brace group and loses every key in it.
+
+**Refuted as reported.** The second finding said a key defined twice inside one
+`references.bib` would trip the cross-direction clash check and misreport itself
+as a one-master violation across directions. It cannot: `parse_entries` returns a
+**dict**, so the repeat collapses before `resolve_corpus` ever sees it, and the
+check returns clean. Verified by running it.
+
+**But the refutation is the finding.** The repeat collapses *silently, with the
+last copy winning* — nobody is told, and that is the same one-master violation
+the check exists to catch, one scope down. This corpus has had exactly it: a
+`zou2024circuitbreakers` present twice and disagreeing with itself about a venue,
+found by hand days earlier. So the fix is to make the reviewer's assumed
+mechanism true — `entry_keys()` keeps the repeats, `resolve_corpus` counts
+occurrences rather than files, and the error message names the two scopes apart
+(`2x within model-internals` vs `across llm-security, model-internals`) so the
+operator does not go looking in the wrong file. The real corpus is clean under
+the widened check, across all three direction bibs.
+
+**The transferable part:** *a refuted finding is not a discharged one.* The
+reviewer read a mechanism that was not there and was wrong about the failure;
+the reason they thought to look was a gap that was real, one level down from
+where they pointed. Testing the claim rather than accepting or dismissing it is
+what separated the two — and dismissing it on the correct grounds ("`parse_entries`
+returns a dict, so this cannot happen") would have closed the ticket and left the
+silent overwrite in place.
