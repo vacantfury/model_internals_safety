@@ -1329,6 +1329,75 @@ not the same as knowing what it is a number for.** Every previous instance of
 this class was caught by a run dying; this one had to be caught by a reviewer,
 because a leaky probe produces a beautiful result and no error.
 
+## 4l. ✅ THE SURVEY RAN AND IT RESHAPES THE PREMISE — the founding paper HAD the control and the field dropped it (2026-08-21)
+
+Full record and every quote: **`text_docs/as5/arm_survey.md`**. Instruments
+`scripts/survey_frame.py` + `scripts/survey_adjudicate.py`, both keyless, no GPU,
+no model, seconds; 15 papers adjudicated against their own full text.
+
+**Why it was run.** After §4k removed the internals leg, the paper's remaining
+claim is that the effect lives in a cell the field does not evaluate: benign
+content in attack form. That is a claim of ABSENCE, and this repo has already
+made the absence mistake twice — the 2026-08-06 coverage sweep measured absence
+against a narrow index, and the model-slate sweep read an aggregator and called a
+published paper unpublished. Asserting it a third time without a survey was not
+available.
+
+**⚠️ The clean version of the claim is FALSE, and the counterexample is the
+founding paper of the attack class.** Wei et al., *Jailbroken* (NeurIPS 2023,
+arXiv 2307.02483) ran a harmless control through every attack — *"we test each
+jailbreak for each model against the curated dataset and an additional harmless
+control prompt"* — and **observed this paper's effect**: *"(Claude even refuses a
+harmless control prompt under these roleplay attacks; see Appendix D.)"* Any
+framing that says nobody has done this will be correctly rejected, and it would
+have been rejected on the single most famous paper in the area.
+
+**What is true is narrower, and it is a better motivation than an empty cell.**
+Three parts, all verified: the control is **n = 1** (singular, so it yields an
+anecdote and not a rate); it is scored as **capability, not refusal** (Appendix D:
+marked successful "if the model correctly answered the question (with answer
+'unicorn')"); and it **did not propagate** — not one successor paper carries it.
+So AS-5 is not claiming virgin territory. It is **restoring a control the founding
+paper had, and turning it into a rate.** That reframing survives the reviewer
+objection that would otherwise kill the paper.
+
+**The counts, over the adjudicated frame and never over "the literature":**
+
+- **11 input-transformation attack papers, 0 reporting a refusal rate on benign
+  content through their own transformation.** Two at B2 (benign transformed but
+  scored for capability), nine with no benign-transformed arm at all.
+- **The sharpest exhibit is Handa et al. (Novel Ciphers, 2025).** They build
+  **CipherBench** — *"a benchmark designed to evaluate LLMs' accuracy in decoding
+  encrypted benign text"* — and ACE/LACE, which sends harmful queries through the
+  same ten ciphers. Both corpora exist, both are transformed, the benign one is
+  scored for decoding accuracy and the harmful one for ASR. The cell was one
+  column away.
+- **The over-refusal side never uses attack form at all.** XSTest (NAACL 2024) and
+  OR-Bench (ICML 2025) contain **zero** occurrences of `encod`/`cipher`/`base64`/
+  `obfusc`/`ascii art` anywhere in their full text — 0 in 96,637 and 0 in 108,688
+  characters, against 72 and 102 benign-mentioning sentences respectively.
+- **The defense side calibrates on the wrong distribution, and this row is
+  AS-6's.** DecipherGuard sets its threshold so that FPR *"remains within an
+  acceptable limit, such as 1%"* — computed *"from a set of safe prompts"*, plain
+  ones. A defense against encoded attacks whose false-positive rate is calibrated
+  on untransformed benign content has not measured its FPR under the condition it
+  is deployed against.
+
+**⚠️ Two instrument facts not to re-derive.** The keyword screen **missed
+`wei2023jailbroken` on its first run**, because that paper's title and abstract
+carry no transformation vocabulary — so the frame is *screen UNION a named
+canonical seed set*, and a screen returning nothing is a failed lookup. And the
+adjudicator carries a **positive control** by construction: XSTest must return a
+large benign-sentence count, because an instrument that reports absence has to be
+shown capable of reporting presence. Both properties are the repo's own standing
+rules, applied one estate over.
+
+**The lesson, and it is the third time in two days.** §4j fell because a number
+was trusted without an audit. This survey was the same shape of risk pointed at
+the literature instead of at our own data, and running it changed the paper's
+premise rather than confirming it. **The survey was worth more as a check than it
+would have been as a citation.**
+
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
 Jobs `9010897` (Mistral-7B-Instruct-v0.3, 1:15:12) and `9011034` (Tulu-3-8B,
