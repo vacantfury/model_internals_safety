@@ -1198,6 +1198,66 @@ obfuscated in that arm, and the harm signal is present at 0.98 and unread.
 it: its wrapper term is not distinguishable from zero and its character term does
 all the work. Which term dominates is a model property spanning the full range.
 
+### ✅ THE SPLIT QUESTION IS SETTLED — ONE PAPER (owner go, 2026-08-21)
+
+Asked directly and ruled: AS-5 stays **one paper**. Three splits were weighed and
+all three rejected. **Do not re-open this without new evidence of the kind named
+under each.**
+
+- **Split the INTERNALS out.** Rejected, and it is the one that looks most
+  tempting because internals are what this repo is for. *A dissociation is a
+  two-term quantity.* Leg 1 without the internals is a metrology complaint; the
+  internals without leg 1 is a probe reading whose obvious answer is *linear
+  probes find harm everywhere* — and `zhao2025llmsencode` (NeurIPS 2025) already
+  established harmfulness is linearly encoded at the instruction-final token, so
+  our delta exists **only** because the behavioural collapse sits beside it.
+  Second reason, from the data rather than from taste: the internals evidence is
+  **right-sized for a section and under-powered as a paper** — one instrument,
+  correlational, intervals conditional on a selected cell, three of four models.
+- **Split the INSTRUMENT out as a methods paper.** Rejected, though parts
+  genuinely travel (the binary judge firing on 0.61–0.70 of *plaintext benign*
+  prompts is a finding about a widely used judge, not about encoding). Alone it
+  needs the same experiments as evidence, so the overlap is near total, and the
+  claim binding the eight — every behaviour-axis defect inflates apparent safety
+  — is much weaker without a corrected measurement producing a positive result.
+- **Split the LADDER COLLAPSE out** (10 cipher rungs inert, `tag_block`
+  invertible-but-unreadable, the ability threshold where every rung with a harm
+  gap has ability 1.00 while `math_monospace` decodes 69% and still blanket-
+  refuses). The only genuinely separable one: it is a claim about *other
+  people's benchmarks*, independent of the harm-gap story. Rejected **for now**
+  because it is thin alone, the fertility ordering variable was refuted so there
+  is no mechanism to offer, and it is load-bearing inside AS-5's Scope where it
+  justifies why one encoding carries the cross-model result. ⚠️ **Named trigger
+  to revisit: a mechanism for what makes an encoding readable.** With one, it is
+  a paper.
+
+**Where the second paper actually is: the CAUSAL / INTERVENTION work**, which
+does not exist yet — ablate the direction in the encoded condition where
+behaviour already ignores it (`phase1_design.md` §7), capture the scaffold arm
+internally, attempt a read-out repair. It would **cite** AS-5, not carve it.
+⚠️ That is a **third**-paper decision: the owner settled this line at two on
+2026-08-05 and AS-6 holds the second slot.
+
+### What the ruling changed in the paper (2026-08-21)
+
+The risk a split would have addressed is real but is a WRITING problem: the
+introduction listed four peer contributions, which reads as a paper trying to say
+four things. Replaced with **one thesis and five steps** — *encoded-prompt
+evaluation reports a number that cannot see what it is measuring, because the
+failure is not where the metric looks* — the steps being: the metric is blind ·
+blind to *what* · stays blind through a full remedy and reports its progress
+backwards · because the failure is not in the representation · and why it was not
+caught. **Subordination, not division.**
+
+⚠️ Two precision rules that came out of writing it, both binding on any future
+draft. Step 4's heading is the **negative** claim (*not in the representation*),
+never "the failure is at the read-out" — a dissociation licenses placing the
+failure downstream of the representation, and nothing stronger, until the causal
+arm runs. And the intro now carries a **note on the title**, because *refusal
+without discrimination* can be misread as *the model cannot discriminate*, which
+our own internals result refutes: the title names the behavioural state, and the
+last measurement shows the discrimination is still there, unused.
+
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
 Jobs `9010897` (Mistral-7B-Instruct-v0.3, 1:15:12) and `9011034` (Tulu-3-8B,
