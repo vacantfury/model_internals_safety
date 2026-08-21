@@ -555,14 +555,17 @@ Benign refusal rises 2–10× over plaintext on four models, and on Llama-3.1-8B
 the harm gap goes **+0.82 → 0.00**: benign and harmful `homoglyph` prompts
 refused at an identical 0.99. No probe required.
 
-> ⚠️ **THE SUBJECT OF THIS LEG IS WRONG AND THE CORRECTION IS UNAPPLIED
-> (2026-08-09, §4h).** The scaffold control separates the attack *wrapper* from
+> ✅ **THE SUBJECT CORRECTION IS APPLIED (2026-08-21).** Both kits now carry the
+> three-arm table and the wrapper/character split as a measured result inside
+> the leg-1 section, and say "protocol" where the subject is the deployed
+> condition. What follows is the finding as §4h stated it, kept as the record.
+>
+> ⚠️ **THE SUBJECT OF THIS LEG WAS WRONG (2026-08-09, §4h).** The scaffold control separates the attack *wrapper* from
 > the *characters*, and on 2 of 4 models the wrapper alone causes most of the
 > loss — Llama +0.67 of +0.84, Tülu +0.28 of +0.37 — while on Qwen it causes
 > none of it. The numbers above all stand; what does not stand is "encoding" as
 > the subject. The supported subject is the **encoded-prompt protocol**.
-> **Rewriting the leg is a framing change to an owner-approved story, so it is
-> flagged here rather than applied.** Substance, decomposition and CIs: §4h.
+> Substance, decomposition and CIs: §4h; the argument it joins is §4j.
 
 **State it as the measurement claim, not the utility claim.** "Encoding causes
 false positives" invites the reviewer answer *refusing homoglyph text is correct
@@ -657,6 +660,12 @@ goes *inside* the model, and the story of record did not.
 
 **Design of record: `text_docs/as5/phase1_design.md`.** Read it before planning
 any internals work; this block is the pointer, not a second home.
+
+✅ **AND IT IS NOW IN THE PAPER (2026-08-21).** Both kits carry
+`\section{The discrimination is present and unread}` between leg 2 and the
+instrument section, with Table `tab:internals`. The argument the three legs make
+together is §4j. AS-5 is no longer a paper that could be written without an
+activation capture.
 
 The one-line answer, computed from the §4h run records rather than from a new
 run: **a harm direction fit on plaintext separates encoded harmful from encoded
@@ -1100,6 +1109,94 @@ every rung, so it could never gate anything. The screen is now the echo
 **displacement**, and on `homoglyph` it clears on all four models at 0.001–0.029.
 The prose argument above is retained for provenance; the machinery has replaced
 it. Detail: `instrument_layer.md` §3.11.
+
+
+## 4j. ✅ THE STORY RESOLVES — the internals turn two findings and a null into one argument (2026-08-21)
+
+**This section does not replace §4e. It states what §4e's three legs become once
+the internals leg (`phase1_design.md`) and the scaffold decomposition (§4h) are
+both in the paper, and it is the ordering of record.** §4e's title, thesis
+clauses and every number stand. What changes is that leg 2 stops being a bare
+null and becomes a *predicted* one.
+
+### The argument in three beats, each measured
+
+**Beat 1 — the reported metric is uninformative, and the informative one
+collapses.** Four independently post-trained models refuse encoded harmful
+prompts within a spread of 0.08, inside the n=100 noise ceiling, while spanning
+0.57 on the same requests in plaintext. The quantity that survives is the harm
+gap, and under the encoded-prompt protocol it loses 27–101% of its plaintext
+value. (§4d, §4g; unchanged.)
+
+**Beat 2 — the signal is still there.** A harm direction **fit on plaintext**
+transfers into the encoded condition at AUROC **0.938–0.995 on all four
+models**, at a late-mid layer at the end of the instruction in every case
+(L21 / L18 / L19 / L27, `instruction_final` throughout). On Llama-3.1-8B the
+pair is **0.981 internal against 0.00 behavioural**. Screens: length null
++0.284 to +0.341, echo displacement clears on all four, black-box baseline
++0.326 to +0.383, and since 2026-08-21 a real control floor via witness
+(+0.281 to +0.329, `instrument_layer.md` §2.10).
+
+**Beat 3 — so the remedy was aimed at the wrong place.** Tülu 3's complete
+SFT → DPO → RLVR moves plaintext harm discrimination +0.55 → +0.80 and leaves
+the encoding-induced loss unchanged at 0.34–0.50. Under beat 2 that null stops
+being surprising and becomes the prediction: a pipeline that improves the harm
+*representation* cannot repair a failure that is not in the representation.
+
+**The one-sentence form:** *encoded prompts do not destroy a model's
+representation of harm; they stop refusal from reading it, which is why more
+safety post-training does not help.*
+
+### Why this ordering, and why the internals section goes LAST of the three
+
+Beats 1 and 3 are refusal rates on paired arms and need no probe. §4e values
+that property explicitly, so they stay contiguous and stay first: **a reviewer
+who rejects the probe still has the paper.** The internals section is then the
+interpretive layer that explains both, and its removal costs the paper its
+explanation rather than its result.
+
+Section order of record: leg 1 → leg 2 → **internals** → instrument.
+
+### ⚠️ What the internals leg may NOT say
+
+- **Not "the model knows and chooses not to act."** The reading is a linear
+  probe transfer, i.e. correlational. The causal arm (stage 2, `phase1_design.md`
+  §7) has not run, and **its null is pre-declared as weak**: Kwon 2026
+  (2607.14147) reports the harm direction is a read-out but not a selective
+  write handle. That prior is *concordant* with a read-out failure and must be
+  cited as such, never as a result of ours.
+- **Not a gap number.** `harmless_rate` is 0.250 by construction, so quote the
+  AUROC and never the probe's own gap.
+- **Not an unconditional interval.** Every interval is conditional on the
+  selected (layer × position) cell (§4.9). Say so.
+- **Not four dissociations.** `internal_survives` is true on all four, but the
+  dissociation verdict needs behaviour to fail too, and **Mistral's
+  destroyed-fraction interval straddles zero** (26.8% [−9.4, +63.0]). Mistral is
+  not an internals failure; it is a model whose behaviour does not
+  demonstrably collapse, because its plaintext gap is only +0.36. **Three of
+  four, named individually — never the four-model table as a point estimate.**
+
+### ⚠️ And the paper's own Method paragraph is now a defect
+
+`paper/as-5/*/paper.tex` explains that the plaintext arm carries no template
+"since running plaintext through an identity encoder would still wrap it in the
+encoded condition's instruction scaffold, and that scaffold is part of what the
+encoded condition is being blamed for." That paragraph **names the confound and
+keeps it**, while the cell resolving it ran on 2026-08-09 with CIs (§4h) and was
+never written in. *A declared gap is not a mitigation*, the same lesson as I7
+and the kit-parity incident, now inside the paper itself.
+
+So reporting the three-arm decomposition is a **missing measured result**, not a
+framing choice, and it lands the subject correction of TODO 66 with it. The
+combined effect is not a retreat: the wrapper arm carries **plaintext content**
+in an encoding-announcing template, and Llama refuses **0.83 of it on the benign
+side**. With beat 2 beside it, the reviewer objection §4e anticipates ("refusing
+homoglyph text is correct behaviour") loses its purchase entirely — nothing is
+obfuscated in that arm, and the harm signal is present at 0.98 and unread.
+
+⚠️ **Do not restate this as "the wrapper is the real cause"** (§4h). Qwen refutes
+it: its wrapper term is not distinguishable from zero and its character term does
+all the work. Which term dominates is a model property spanning the full range.
 
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
