@@ -185,3 +185,137 @@ decode".
   the policy failure we report). Enforcement question filed as TODO 72 rather
   than settled here: three candidate guards were weighed and none is clean, so
   the form is a design decision, not a mechanical follow-on.
+
+---
+
+## 5. Related work — the positioning of record
+
+*Written 2026-08-21, after the scoop check TODO 73 named as its blocker. This
+section is the SOURCE; the `Related Work` section in both LaTeX kits renders it.
+A positioning claim appearing in the `.tex` first has no provenance, same rule
+as a number.*
+
+### 5.0 ✅ The scoop check ran — arXiv 2608.03201 is NOT a scoop, and it helps
+
+**"When Refusal Looks Safe: The Refusal-Cue Shortcut in Safety Guard Models"**
+(Yu Feng et al., Sydney + Alibaba, 2026-08-04, no venue, tier (C)). Filed
+2026-08-05 as *"squarely on the AS-6 guard-internals line — scoop-check it
+before AS-6 scopes further"* and open for sixteen days. Digest and bundle now
+live in science: `literature/model-internals/notes/refusal-cue-shortcut-2608.03201.md`.
+
+**Three separations, each checked against the full text rather than the
+abstract** (the abstract alone would have supported the first two but not the
+third):
+
+| axis | 2608.03201 | AS-6 |
+|---|---|---|
+| what is classified | prompt–**response** pairs; the perturbation is in the response | **prompts** |
+| what breaks the guard | a **training-data label imbalance** — refusal expressions co-occur almost only with unharmful labels | an **encoding** the guard may or may not decode |
+| internals method | learned **sparse gates** over attention heads and MLP neurons (SafeSeek, 2603.23268) | **linear probes** on the residual stream, asking what is *represented* |
+
+Zero encoded or obfuscated inputs anywhere in it; zero linear probing of
+residual streams. The decode axis — *did the guard recover the payload at all* —
+is untouched, which is the axis AS-6's Level-3 delta was always argued on. **The
+scoop floor is unchanged and still set by SIREN alone.**
+
+**It strengthens AS-6 in three specific ways, and all three belong in the
+paper.** (a) It is independent evidence that **a guard's verdict can ride on a
+surface cue rather than on content** — the exact worry that made us build the
+wrapper arm, arrived at on a different cue, on the response side. (b) Its
+contribution 4 — shortcut reliance is *partly separable* from legitimate refusal
+recognition — is a **functional-separability result inside a guard**, the same
+shape as represent-vs-enforce on a different axis; a neighbour to position
+against, not a threat. (c) Its audit finds the imbalance **in WildGuardMix**,
+which is one of our two guards' training data, so it is a citable caveat on our
+WildGuard results specifically — and it compounds a caveat `model_slate.md` §2.3
+already carries, that Tülu 3's safety mix contains 50k WildGuardMix prompts.
+
+**The check also surfaced a prior we did not have, and it is closer to us than
+2608.03201 is:** its reference [21], **Tasawong et al., LLMSEC 2025** (ACL
+Anthology `2025.llmsec-1.14`) — safeguards leaning on **prompt-side** keywords
+spuriously correlated with training labels rather than on input semantics,
+degrading under keyword-distribution shift. That is the wrapper screen's
+motivation, published, on our side of the prompt/response line. **Our delta over
+it is a control-design one and 2608.03201 states it for us:** their keyword
+manipulations use word-level associations that *may alter prompt semantics*,
+whereas our wrapper arm holds the content fixed as plaintext and varies only the
+wrapper — a clean factorial cell rather than a correlational shift.
+
+### 5.1 The four paragraphs, and what each is for
+
+1. **Guards and how they are evaluated.** Llama Guard `inan2023…`, Llama Guard 3
+   `grattafiori2024llama3herd`, WildGuard `NEURIPS2024_0f69b4b9`. The framing
+   move: prior evaluation reports an end-to-end block rate, which cannot say
+   *why* a prompt got through.
+2. **Encoded prompts against guards.** `wei2023jailbroken` (mismatched
+   generalization) and DecipherGuard `yang2025decipherguard…` — the latter owns
+   the behavioural result *guards fail on encoded prompts and decoding repairs
+   them*, which is **never claimable here** and must be cited as the prior it is.
+   Our delta is the decomposition, not the phenomenon.
+3. **Guard internals.** SIREN `jiao2026siren` (the scoop floor — builds a
+   detector from internal representations, never encoded inputs), Gamma-Guard
+   `lv-etal-2025-gamma` (qualitative, zero encoding rungs, no decode-vs-flag
+   distinction), and the two surface-cue papers above,
+   `feng2026refusalcueshortcut` and `tasawong-etal-2025-shortcut`.
+4. **Reading content out of activations.** `arditi2024refusal` (the estimator we
+   ported) and `zhao2025llmsencode` (harmfulness at the instruction-final token
+   vs refusal at the post-instruction token — the published interpretation of
+   our two capture positions, and it must be attributed rather than re-derived).
+   `youstra2025cifr` sits here too: ciphers plus probe monitors on internal
+   activations, the nearest prior to the whole AS-5/AS-6 thesis.
+
+### 5.2 ⚠️ Four of the seven entries were ALREADY in the corpus — under keys I would have duplicated
+
+The intake sweep first reported seven missing bib entries. **Four already
+existed** in science's `model-internals/references.bib`: `arditi2024refusal`,
+`zhao2025llmsencode`, `youstra2025cifr`, `jiao2026siren`. The first check had
+grepped only `llm-security/references.bib` — **the corpus has one master bib per
+DIRECTION, not one master bib** — and adding the four under fresh keys would
+have produced exactly the failure `paper/literature/README.md` names: a citation
+key that drifts between two bibs and compiles cleanly while pointing somewhere
+else. Third instance in this repo of *absence measured against a narrow index,
+reported as absence in general*; the first two are recorded in `CLAUDE.md`
+(the 494/119 coverage-sweep correction) and in the venue-tier sweep. **Genuinely
+added: three** — `grattafiori2024llama3herd` and `tasawong-etal-2025-shortcut`
+to `llm-security`, `feng2026refusalcueshortcut` to `model-internals`.
+
+`zhao2025llmsencode` also turned out to already carry **NeurIPS 2025**, which
+this session verified independently (OpenReview `zLkpt30ngy`, NeurIPS virtual
+poster 115056) — and which shows 2608.03201's own citation of it, "Advances in
+NeurIPS 38:140283–140318, **2026**", to be mis-yeared. TODO 63 closes with
+`grattafiori2024llama3herd`: **the trap it predicted was real** — the Herd
+paper's first author differs by arXiv version (v1 Dubey, v3 Grattafiori), so the
+entry records both and cites the current one.
+
+### 5.3 The venue bib is now GENERATED — and generating it found AS-5's bib is not
+
+`paper/literature/README.md` has always said the venue bib is *"the CITED SUBSET
+of science's `references.bib` … build output rather than a source of truth"*.
+Nothing generated it, so both papers' bibs were hand-written. `scripts/build_venue_bib.py`
+now does (keyless, no network, seconds; `uv run python scripts/build_venue_bib.py as-6`),
+and it **fails loudly on an unresolved key** — a cited key with no entry renders
+as a bare `?` and compiles, which is the failure a silent generator would ship.
+
+Running it on AS-6 resolved 12 of 12. Pointing its check at **AS-5** returned
+**eight keys that exist in no direction bib** — `souly2024strongreject`,
+`jiang2023mistral`, `yuan2024cipherchat`, `rottger2024xstest`,
+`grattafiori2024llama3`, `chao2024jailbreakbench`, `lambert2025tulu3`,
+`qwen2024qwen25` — so AS-5's `paper.bib` is a second source of truth for eight
+citations of an arXiv-published paper. Filed as **TODO 74**; it is not a
+rename-and-go, since each entry needs its venue verified at the primary source
+(the Tülu 3 COLM miss is the standing example).
+
+**One of the eight collided with this session's own work, which is the part
+worth keeping.** AS-5 already cites the Llama 3 Herd paper as
+`grattafiori2024llama3`; TODO 63 was closed by minting `grattafiori2024llama3herd`
+in the corpus — a **second key for one paper**, created by the very rule that
+exists to prevent it, and invisible until the generator's cross-check ran. The
+corpus entry was renamed onto the in-use key before anything was committed:
+**keys are stable, and the published one wins over the one minutes old.**
+
+Two guards, both mutation-verified: every key a kit cites must resolve in the
+corpus, and regenerating a kit's bib must be a **no-op** (a one-character edit to
+a generated entry fails it). Coverage is scoped by the generator's own header
+marker, so a kit still on a hand-written bib is visibly *out* of coverage rather
+than silently passing, and joins it the moment it is migrated — AS-5's kits are
+out today. `tests/test_build_venue_bib.py`.
