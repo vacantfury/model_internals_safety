@@ -642,3 +642,114 @@ run predates it.
 cost 25.5pt of overhang that neither `\tabcolsep` nor `\footnotesize` absorbs
 (the overhang is font-independent). They are computed and stored; they belong in
 TODO 78's appendix of full per-condition rates, not wedged into the main table.
+
+## 9. ⛔ AS-6's DECODE AXIS RUNS ON THE PROCEDURE THAT WAS REFUTED FOR AS-5 THE SAME DAY (2026-08-21)
+
+**Do not write TODO 78's specification block until this is settled.** 78 asks the
+paper to state its method precisely, and the method's central measurement is
+under an unresolved defect. Specifying it now would produce a careful, citable
+description of something that may not survive the week — and a reviewer reading
+a precise method is a reviewer equipped to find the leak faster than we did.
+
+### What is CONFIRMED, by reading the code, not by measurement
+
+AS-5's internals leg was withdrawn (`as5/evidence_and_story.md` §4k) because
+`probe_transfer` fits on **all 100 plaintext harmful + all 100 plaintext benign**
+and evaluates on the encoded versions of **those same 200 items**. The condition
+is held out; the ITEMS are not. Leakage at fixed *n* measured **+0.19 to +0.38**.
+
+AS-6's decode axis is the same call. `scripts/as6_guard_probe.py` builds
+`encoded_harmful` from the same `harmful` prompt list that produced
+`plain_harmful_batch`, hands both to `measure_deployment`, which loops the
+layer × position grid calling `probe_transfer` — the identical function. There is
+no guard-side variant and no item split anywhere in that path.
+
+The false belief is in AS-6's path too, in writing: `TransferScores`' docstring
+says *"The scores are out-of-sample by construction: the probe never sees the
+test condition, so every encoded example is held out without needing a split."*
+The first clause is true and the second does not follow from it.
+
+### The free evidence, which is suggestive and not decisive
+
+Llama Guard's 19 transfer AUROCs from `scores-b10` fall into two groups:
+
+| group | rungs | transfer AUROC |
+|---|---|---|
+| the four the paper reports | homoglyph, zero_width, fullwidth, reverse_words | 0.796 – **0.985** |
+| the base model cannot decode | 13 rungs, base64 … morse | **0.592 – 0.678** |
+
+Three things line up, and none of them is a measurement of AS-6:
+
+1. **The reported band matches the refuted band.** AS-5's withdrawn readings were
+   0.938–0.995; AS-6's top two are 0.985 and 0.969, on the same encoders, the
+   same 200 items, the same probe function.
+2. **The floor cluster matches where AS-5 landed after the split.** AS-5's Llama
+   homoglyph went 0.981 → **0.618** with items held out. AS-6's can't-decode
+   cluster sits at 0.592–0.678. If the guard's probe leaks like the model's, the
+   reported rungs land in that cluster.
+3. **Llama Guard 3 8B is a Llama-3.1-8B fine-tune**, and Llama was AS-5's *worst*
+   case (0.618, band floor 0.524) while Qwen held at 0.811. The relevant prior is
+   the bad one.
+
+### ⚠️ The control floor does NOT neutralise this, and the reason is structural
+
+The floor (0.7098, 12 controls) is derived from rungs whose **base-model ability
+is 0.00**. That is the right control for surface and length confounds, which are
+present at zero ability — and it is the wrong control for item memory, because
+**item memory is ability-dependent by mechanism**: the encoded activation of item
+*i* sits near its plaintext activation *because the model decoded it*. The
+control rungs, chosen precisely for being undecodable, carry the least of exactly
+the confound the reported rungs carry the most of.
+
+So the screen subtracts a floor built where the confound is weakest and applies
+it where the confound is strongest. **The margin over floor is inflated by an
+unknown amount in a known direction.** This is an argument from mechanism, not a
+measurement; it is stated here so that nobody re-derives it, and it is the reason
+the test below is worth a queue slot.
+
+Note that this is a *different* failure from the two already recorded on this
+screen. §0.6's `caesar3` demotion was *significance is not sufficiency*, and the
+sigma-window violation was *the calibration constant does not port*. Both were
+caught by the floor. This one is invisible to the floor by construction.
+
+### What is NOT known
+
+The magnitude for guards. It could be smaller than AS-5's: a guard's template
+puts ~55 tokens of classification task after the payload, so its representation
+at `instruction_final` may be less item-specific than a chat model's. It could
+also be larger. **Nothing here licenses a claim in either direction** — and the
+free diagnostic AS-5 used (transfer beating a directly-fitted in-condition probe)
+is unavailable for AS-6, because a guard cannot be asked to restate a payload, so
+there is no in-condition reading to compare against.
+
+### The test, and the instrument is BUILT
+
+`scripts/split_half_transfer.py` now reads **both run schemas** — AS-5's single
+`readings` cell and AS-6's per-family `summaries` cell — so the test that settled
+AS-5 runs on the guard records unchanged. `--family` restricts it to the cells the
+paper reports. `tests/test_split_half_transfer.py` (17 tests, mutation-verified)
+pins the instrument in both directions: it fires when the labels carry only item
+identity (A 0.997 → B 0.460) and stays quiet on a direction that genuinely
+transfers (A 0.923 → B 0.883). Without the second half the screen would be a
+verdict with a script attached.
+
+**Cost: 0 GPU, $0, CPU on `short`.** The guard activations are already cached on
+the cluster (`.../activations/llama_guard_3_8b/`, `.../wildguard/`) and every path
+is recorded in the run records, so nothing is captured and nothing is downloaded.
+The plain-condition pair is resolved by glob because AS-6's schema records only
+the encoded paths; an ambiguous match is a refusal, not a pick.
+
+**It cannot run locally.** Only `llama3_1_8b_instruct` activations are cached on
+this machine; the guard captures live on `/scratch`. The script fails loud off
+the cluster rather than substituting anything.
+
+### What it gates — the run is a GATE, not a measurement
+
+- **B holds above the floor** → the decode axis is real, the map stands, TODO 78
+  specifies a sound method, and the paper gains a control it currently lacks.
+- **B collapses into the 0.59–0.68 cluster** → every `decoded_not_blocked` cell is
+  unmeasured, the results table is withdrawn, and the paper is re-planned around
+  what survives (block rates are untouched — they never consult the decode read).
+
+Both branches change what gets built next, which is the test this repo requires
+before a run is allowed to exist.

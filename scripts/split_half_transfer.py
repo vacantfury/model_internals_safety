@@ -34,6 +34,7 @@ split.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import gc
 import json
 import sys
@@ -184,74 +185,191 @@ def analyse(
     return out
 
 
-def load_record(path: Path) -> tuple[dict, int, str, str]:
+@dataclasses.dataclass(frozen=True)
+class Target:
+    """One (record, family) cell to re-test, with its four activation files."""
+
+    model: str
+    family: str
+    layer: int
+    position: str
+    plain_harmful: str
+    plain_harmless: str
+    encoded_harmful: str
+    encoded_harmless: str
+
+
+def _model_name(value: object) -> str:
+    """The model's NAME, whether the record stored a name or the whole config.
+
+    AS-5's phase-0 schema stores `config.model` as the full model block, so the
+    original single-schema reader printed a 400-character dict where a name
+    belonged. Harmless in a header line, not harmless in `--out`: the artifact is
+    keyed by model, and a dict key that changes whenever an unrelated capture
+    knob changes will not join back to the run it came from.
+    """
+    if isinstance(value, dict):
+        return str(value.get("name") or value.get("hf_id") or "unknown")
+    return str(value)
+
+
+def _sole(directory: Path, stem: str) -> str:
+    """The one cached capture named `stem`, or a refusal.
+
+    AS-5's schema records the plain-condition paths; AS-6's records only the
+    per-family encoded ones, so for a guard record the plain pair is resolved by
+    glob in the same directory. An ambiguous match is an ERROR rather than a
+    pick: two `plain-harmful-*.pt` files mean two different corpora were captured
+    into one directory, and silently taking either would fit the probe on prompts
+    the encoded set was not derived from -- which is a subtler version of exactly
+    the alignment defect this script exists to measure.
+    """
+    matches = sorted(directory.glob(f"{stem}-*.pt"))
+    if len(matches) != 1:
+        found = ", ".join(m.name for m in matches) if matches else "none"
+        raise SystemExit(f"{directory}: expected exactly one {stem}-*.pt, found {len(matches)}: {found}")
+    return str(matches[0])
+
+
+def targets_from_record(path: Path) -> list[Target]:
+    """Read either run schema and return every cell it selected.
+
+    AS-5's phase-0 record carries ONE deployment reading under `readings`; AS-6's
+    guard record carries one `decode` cell per family under `summaries`. Both are
+    the same measurement -- a probe fit on plaintext and read on an encoded
+    condition -- so both are exposed to the item-identity leakage this script
+    tests, and both must be re-testable by the same instrument.
+    """
     record = json.loads(path.read_text())
-    deployment = next(
-        (
-            r
-            for r in record["readings"]
-            if isinstance(r.get("detail"), dict)
-            and "layer" in r["detail"]
-            and "position" in r["detail"]
-        ),
-        None,
-    )
-    if deployment is None:
-        raise SystemExit(f"{path}: no reading carries a (layer, position) cell")
-    detail = deployment["detail"]
-    return record, int(detail["layer"]), str(detail["position"]), str(detail["family"])
+
+    if "readings" in record:  # AS-5 phase-0
+        deployment = next(
+            (
+                r
+                for r in record["readings"]
+                if isinstance(r.get("detail"), dict)
+                and "layer" in r["detail"]
+                and "position" in r["detail"]
+            ),
+            None,
+        )
+        if deployment is None:
+            raise SystemExit(f"{path}: no reading carries a (layer, position) cell")
+        detail = deployment["detail"]
+        family = str(detail["family"])
+        paths = record["activations_path"]
+        per_family = paths["per_family"][family]
+        return [
+            Target(
+                model=_model_name(record.get("model") or record.get("config", {}).get("model")),
+                family=family,
+                layer=int(detail["layer"]),
+                position=str(detail["position"]),
+                plain_harmful=paths["plain_harmful"],
+                plain_harmless=paths["plain_harmless"],
+                encoded_harmful=per_family["encoded_harmful"],
+                encoded_harmless=per_family["encoded_harmless"],
+            )
+        ]
+
+    if "summaries" in record:  # AS-6 phase-1 guard run
+        guard = str(record.get("config", {}).get("guard", {}).get("name") or path.parent.name)
+        targets = []
+        for summary in record["summaries"]:
+            decode = summary.get("decode") or {}
+            if decode.get("layer") is None or decode.get("position") is None:
+                continue  # no cell was selected, so there is nothing to re-test
+            activations = summary["activations"]
+            directory = Path(activations["encoded_harmful"]).parent
+            targets.append(
+                Target(
+                    model=guard,
+                    family=str(summary["family"]),
+                    layer=int(decode["layer"]),
+                    position=str(decode["position"]),
+                    plain_harmful=_sole(directory, "plain-harmful"),
+                    plain_harmless=_sole(directory, "plain-harmless"),
+                    encoded_harmful=activations["encoded_harmful"],
+                    encoded_harmless=activations["encoded_harmless"],
+                )
+            )
+        if not targets:
+            raise SystemExit(f"{path}: no summary carries a (layer, position) cell")
+        return targets
+
+    raise SystemExit(f"{path}: unrecognised run schema (neither `readings` nor `summaries`)")
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("runs", nargs="+", type=Path, help="results.json files to re-read")
     ap.add_argument("--splits", type=int, default=200)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument(
+        "--family",
+        action="append",
+        help="restrict to these families (repeatable); default is every cell the record selected",
+    )
     ap.add_argument("--out", type=Path)
     args = ap.parse_args()
 
+    wanted = set(args.family) if args.family else None
     rows = []
     for run in args.runs:
-        record, layer, position, family = load_record(run)
-        paths = record["activations_path"]
-        per_family = paths["per_family"][family]
+        for target in targets_from_record(run):
+            if wanted is not None and target.family not in wanted:
+                continue
 
-        cells = {
-            name: _cell(path, layer, position)
-            for name, path in (
-                ("plain_h", paths["plain_harmful"]),
-                ("plain_b", paths["plain_harmless"]),
-                ("enc_h", per_family["encoded_harmful"]),
-                ("enc_b", per_family["encoded_harmless"]),
+            cells = {
+                name: _cell(path, target.layer, target.position)
+                for name, path in (
+                    ("plain_h", target.plain_harmful),
+                    ("plain_b", target.plain_harmless),
+                    ("enc_h", target.encoded_harmful),
+                    ("enc_b", target.encoded_harmless),
+                )
+            }
+
+            result = analyse(
+                cells["plain_h"],
+                cells["plain_b"],
+                cells["enc_h"],
+                cells["enc_b"],
+                n_splits=args.splits,
+                seed=args.seed,
             )
-        }
+            del cells
+            gc.collect()
+            result |= {
+                "run": run.parent.name,
+                "model": target.model,
+                "family": target.family,
+                "layer": target.layer,
+                "position": target.position,
+            }
+            rows.append(result)
 
-        result = analyse(
-            cells["plain_h"], cells["plain_b"], cells["enc_h"], cells["enc_b"],
-            n_splits=args.splits, seed=args.seed,
-        )
-        result |= {
-            "run": run.parent.name,
-            "model": record.get("model") or record.get("config", {}).get("model"),
-            "family": family,
-            "layer": layer,
-            "position": position,
-        }
-        rows.append(result)
-
-        print(f"\n=== {result['model']}  {family}  L{layer} {position} ===")
-        print(f"  A reproduce (no split, logistic) : {result['A_reproduce_no_split']:.4f}")
-        print(f"  B item-split     (logistic)      : {result['B_split_logistic']['mean']:.4f}"
-              f"  [{result['B_split_logistic']['p2_5']:.4f}, {result['B_split_logistic']['p97_5']:.4f}]")
-        print(f"  C item-split     (diff-in-means) : {result['C_split_dim']['mean']:.4f}"
-              f"  [{result['C_split_dim']['p2_5']:.4f}, {result['C_split_dim']['p97_5']:.4f}]")
-        print(f"  D no split       (diff-in-means) : {result['D_dim_no_split']:.4f}")
-        print(f"  E plaintext cross-validated      : {result['E_plain_crossval']:.4f}")
-        print(f"  F seen items     (logistic, n/2) : {result['F_seen_logistic']['mean']:.4f}")
-        print(f"  G seen items     (dim, n/2)      : {result['G_seen_dim']['mean']:.4f}")
-        print(f"  --> leakage at FIXED n (F - B)   : {result['leakage_at_fixed_n_logistic']:+.4f}"
-              f"   (dim, G - C: {result['leakage_at_fixed_n_dim']:+.4f})")
-        print(f"  --> leakage gap A - B            : {result['leakage_gap_A_minus_B']:+.4f}")
+            print(f"\n=== {result['model']}  {target.family}  L{target.layer} {target.position} ===")
+            print(f"  A reproduce (no split, logistic) : {result['A_reproduce_no_split']:.4f}")
+            print(
+                f"  B item-split     (logistic)      : {result['B_split_logistic']['mean']:.4f}"
+                f"  [{result['B_split_logistic']['p2_5']:.4f}, {result['B_split_logistic']['p97_5']:.4f}]"
+            )
+            print(
+                f"  C item-split     (diff-in-means) : {result['C_split_dim']['mean']:.4f}"
+                f"  [{result['C_split_dim']['p2_5']:.4f}, {result['C_split_dim']['p97_5']:.4f}]"
+            )
+            print(f"  D no split       (diff-in-means) : {result['D_dim_no_split']:.4f}")
+            print(f"  E plaintext cross-validated      : {result['E_plain_crossval']:.4f}")
+            print(f"  F seen items     (logistic, n/2) : {result['F_seen_logistic']['mean']:.4f}")
+            print(f"  G seen items     (dim, n/2)      : {result['G_seen_dim']['mean']:.4f}")
+            print(
+                f"  --> leakage at FIXED n (F - B)   : {result['leakage_at_fixed_n_logistic']:+.4f}"
+                f"   (dim, G - C: {result['leakage_at_fixed_n_dim']:+.4f})"
+            )
+            print(f"  --> leakage gap A - B            : {result['leakage_gap_A_minus_B']:+.4f}")
 
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
