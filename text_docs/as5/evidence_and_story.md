@@ -1398,6 +1398,54 @@ the literature instead of at our own data, and running it changed the paper's
 premise rather than confirming it. **The survey was worth more as a check than it
 would have been as a citation.**
 
+### What the rebuild changed in the kits (2026-08-21, owner go)
+
+⚠️ `paper/` is gitignored, so this is the ONLY versioned record of the kit state.
+Both AS-5 kits edited identically; parity, skeleton and hygiene guards green;
+arXiv kit rebuilds at **7 pages, zero LaTeX warnings, no undefined references**.
+
+**Out — the refuted internals leg, everywhere it reached (seven sites).** The
+`\section{The discrimination is present and unread}` section with its table, the
+abstract sentence quoting AUROC 0.938--0.995, intro contribution 4 (so *five
+steps* became *four*), the title-note paragraph that defended the title with the
+probe, the Scope claim that harm "remains linearly decodable throughout", the
+Method `\paragraph{The harm probe.}` (false twice: it described difference-in-
+means when the estimator is `LogisticRegression`, and selection on the plaintext
+fit when the cell is the argmax of the reported statistic), and the Conclusion's
+mechanism sentence. Verified afterwards: zero dangling `sec:internals` /
+`tab:internals`, zero surviving `0.938`/`0.995`.
+
+**In — one Limitations paragraph that keeps the failure.** The refutation is
+reported rather than deleted: the leak, the held-out 0.618--0.811, the below-
+baseline direction, the +0.19 to +0.38 leakage at matched training size, and the
+general form — *a cross-condition probe transfer is exposed to this whenever the
+second condition is a transformation of the same items, which is the usual
+design*. It is the same class as the eight instrument defects the paper already
+reports, with the difference that this one is ours. Keeping it makes the
+instrument leg self-consistent instead of a paper that audits others only.
+
+**Fixed — two confirmed factual errors, both in the first two sentences.**
+(a) *"four independently post-trained models"* implied four independent BASES;
+Tülu-3-8B is post-trained from `meta-llama/Llama-3.1-8B`, the same base as the
+Llama-3.1-8B-Instruct arm — a fact leg 2 **depends** on, so the abstract was
+contradicting itself two sentences later. Now *"three base families and four
+post-training recipes"* (verified against `model_slate.md`, not memory).
+(b) *"carries almost no information"* / *"indistinguishable"* overstated an
+OMNIBUS result. The bootstrap on the spread of four is sound and stays; but the
+two extremes, 0.99 and 0.91, differ at **Fisher p = 0.0185**, so the blanket
+claim is false. The intro now discloses the pair and states the magnitude claim
+instead — the spread is ~7.6× smaller than the harm gap's, and a benchmark that
+ranks models depends on the spread, not on one surviving pair. **Turning the
+reviewer's kill shot into a stated limit is stronger than leaving it to be
+found.**
+
+⚠️ **Still open in the kits, not done here:** the defect count still reads
+*eight* and the probe leak would make it nine, which needs a written entry in
+§instrument, not just the Limitations paragraph. `zhao2025llmsencode` is now
+uncited (it entered the bib for the deleted section) and is still the closest
+prior on the harmfulness/refusal split, so Related Work is the place it should
+return. Neither blocks anything.
+
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
 Jobs `9010897` (Mistral-7B-Instruct-v0.3, 1:15:12) and `9011034` (Tulu-3-8B,
