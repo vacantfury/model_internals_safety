@@ -23,6 +23,13 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# definitional: the longest run of text still treated as ONE claim. Above this a
+# "sentence" is a reference block or a flattened table, which carries no argument
+# and drowns the output. Tuning path: raise it until no adjudicated verdict in
+# arm_survey.md changes; it is a --flag so a disputed row can be re-checked
+# without editing code.
+MAX_CLAIM_CHARS = 600
+
 # Sentences mentioning a benign corpus AT ALL. Recall-first: the adjudicator
 # reads them and decides whether the benign content went through the transform.
 BENIGN = re.compile(
@@ -47,8 +54,9 @@ class Paper:
     path: Path
     hits_both: list[str] = field(default_factory=list)
     hits_benign_only: list[str] = field(default_factory=list)
+    # plumbing: counter seeds. Nothing reported depends on their starting value.
     n_sentences: int = 0
-    n_chars: int = 0
+    n_chars: int = 0  # plumbing: counter seed
 
 
 def extract(pdf: Path) -> str:
@@ -70,11 +78,11 @@ def sentences(text: str) -> list[str]:
     return [s.strip() for s in re.split(r"(?<=[.!?])\s+(?=[A-Z(])", text) if s.strip()]
 
 
-def adjudicate(pdf: Path) -> Paper:
+def adjudicate(pdf: Path, max_claim_chars: int = MAX_CLAIM_CHARS) -> Paper:
     text = extract(pdf)
     paper = Paper(path=pdf, n_chars=len(text))
     for s in sentences(text):
-        if len(s) > 600:  # a reference block or a table dump, not a claim
+        if len(s) > max_claim_chars:
             continue
         if not BENIGN.search(s):
             continue
@@ -89,6 +97,8 @@ def main() -> int:
     ap.add_argument("--show-benign-only", action="store_true",
                     help="also print benign sentences with no transform term")
     ap.add_argument("--out", type=Path)
+    ap.add_argument("--max-claim-chars", type=int, default=MAX_CLAIM_CHARS,
+                    help="longest run of text still treated as one claim")
     args = ap.parse_args()
 
     results = []
@@ -96,7 +106,7 @@ def main() -> int:
         if not pdf.exists():
             print(f"MISSING  {pdf}", file=sys.stderr)
             continue
-        paper = adjudicate(pdf)
+        paper = adjudicate(pdf, args.max_claim_chars)
         results.append(paper)
         print("=" * 100)
         print(f"{pdf.name}")
