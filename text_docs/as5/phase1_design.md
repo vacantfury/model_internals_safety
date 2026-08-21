@@ -104,6 +104,12 @@ can't-decode rungs to build a floor from, and licensing is therefore
 **permutation-only**. That is precisely §2.5's open defect ("significance is not
 sufficiency"), live in the run that carries this result.
 
+✅ **CLOSED 2026-08-21, offline and with no job — see §5.2.** The limit is true
+of those RUNS and does not follow for the MEASUREMENT: the identical reading
+sits in runs that carried control rungs, and it clears every one of their
+floors. Llama's witness is a `distribution` floor at n=6. The paragraph below
+still binds and is what made the closure legitimate rather than a shortcut.
+
 **Do not paper over it by importing a floor from another run** — §2.4 settled
 that the floor statistic is n-dependent and cross-run floors are not comparable.
 The honest position: the three screens above are *better targeted* than the floor
@@ -204,12 +210,55 @@ version of this table.**
 scope narrows to the three models where plaintext discrimination is large enough
 to lose, which does not touch §6(a)'s contrast — Llama and Qwen are both in.
 
-⚠️ **The two limits are unchanged and still travel with every number here:** the
-control floor is UNUSABLE on all four runs (permutation-only licensing, §2.5),
-which is stage 1(b)'s job; and the AUROC intervals are conditional on the
+⚠️ **Of the two limits recorded here, the FIRST is now closed (§5.2, 2026-08-21)
+and the second is not.** As written that day: the control floor is UNUSABLE on
+all four runs (permutation-only licensing, §2.5) — closed offline, every model
+screened against a witness run's own floor; and the AUROC intervals are conditional on the
 selected (layer × position) cell, so they are narrower than the truth by an
 amount stage 0 cannot estimate (`instrument_layer.md` §4.9). Neither is closed
 by this run and neither may be dropped from a quotation of it.
+
+---
+
+### ✅ 5.2 STAGE 1(b) IS CLOSED — offline, no job, $0 (2026-08-21)
+
+**It was never a GPU job.** §5.1, TODO 71 and the board all carried *the control
+floor is UNUSABLE on all four runs, permutation-only licensing, stage 1(b)'s
+job*. True of the runs; not true of the measurement. `deployment` is
+deterministic given (model, family, corpus, cached activations, probe config),
+and the identical reading — verified on twelve fields, not assumed — sits in
+runs that carried can't-decode rungs:
+
+| model | witness run | floor | grade | n | leg AUROC | margin |
+|---|---|---|---|---|---|---|
+| Llama-3.1-8B | `lens-floor` (9010530) | 0.6765 | **distribution** | 6 | 0.9808 | **+0.304** |
+| Qwen2.5-7B | `band2-20260805` | 0.6708 | bound | 2 | 0.9952 | +0.324 |
+| Tülu-3-8B | `dissociation-tulu3` | 0.6417 | bound | 4 | 0.9711 | +0.329 |
+| Mistral-7B-v0.3 | `dissociation-mistral` | 0.6569 | bound | 4 | 0.9383 | +0.281 |
+
+`scripts/internals_floor_screen.py` (keyless, no GPU, seconds); artifact
+`outputs/analysis/internals_floor_screen_20260821.json`; rule and full
+derivation `instrument_layer.md` §2.10. **Llama's is the adopted
+`mean + sigma*SD` floor at n=6 with its sigma window recomputed to
+[1.285, 27.817) against the configured 2.0** — the strongest screening this repo
+has applied to any number.
+
+⚠️ **A witness never upgrades a grade.** Three floors are `bound`; a bound stays
+a bound (§2.4) and must be quoted as one. What the margins say is that the
+distinction is not load-bearing here — all four clear by +0.28 to +0.33 against
+an n-dependence never observed above 0.018.
+
+**What stage 1 still is.** Only §6(a): the scaffold arm was never captured, so
+the wrapper-vs-characters split cannot be done internally. §6(b) shrinks from
+"make the floor usable" to the optional "raise three models from `bound` to
+`distribution`", which changes a grade and no verdict — fold it into 6(a)'s
+preset, never cost a job for it alone.
+
+**The lesson, and it is the reason this section exists rather than a run
+record:** a limitation was scoped to a *run* when it belonged to a
+*measurement*, and the mis-scoping held an offline check as a filed GPU job for
+nine days. Before costing a run to close a gap, ask whether the quantity the gap
+is about already exists elsewhere on disk.
 
 ---
 

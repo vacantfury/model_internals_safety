@@ -154,6 +154,16 @@ NOT_ROSTER: dict[str, str] = {
     "regimes": "combination logic: per-prompt axes -> a four-regime cell",
     "guard_regimes": "combination logic, AS-6 side",
     "control_floor": "the control-calibrated floor DERIVATION shared by the screens — a calibration rule every instrument is judged against, not an instrument itself",
+    "floor_witness": (
+        "control_floor's sibling, and the same category: not an instrument but the rule "
+        "deciding WHICH run's floor may legitimately judge a reading. A measurement "
+        "present in two runs is one measurement, so a run carrying control rungs can "
+        "screen a reading taken in a run that carries none — which is how AS-5's "
+        "internals leg cleared §2.5's permutation-only gap with no job. It is listed "
+        "here rather than as a control because it defeats no confound of its own; it "
+        "gates the pairing that lets a real control floor reach a number "
+        "(instrument_layer.md §2.10)"
+    ),
 }
 
 # The mandatory control battery, `instrument_build_plan.md` §4.

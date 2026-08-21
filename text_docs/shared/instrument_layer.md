@@ -2345,6 +2345,78 @@ across four layers, let alone across a fine-tune.
 
 ---
 
+### 2.10 ✅ A FLOOR MAY BE SUPPLIED BY A WITNESS RUN — and it closes AS-5's permutation-only gap offline (2026-08-21)
+
+§2.5 recorded that the adopted floor never reaches `phase0_regime_map.py`, so
+live-run deployment licensing is permutation-only. AS-5's internals leg inherited
+that: its number comes from the single-family `scaffold-control` runs, where
+`control_floor.usable` is false with `n_controls = 0` — a run carrying one rung
+has no can't-decode rung to build a floor from. Three surfaces carried it as a
+live limit requiring a GPU job.
+
+**It was not a GPU job. The limit is true of those RUNS and does not follow for
+the MEASUREMENT.** `deployment` is deterministic given (model, family, corpus,
+cached activations, probe config): it fits on the plain contrast and transfers
+to the encoded arm with no sampling anywhere. The identical reading also sits in
+runs that carried control rungs — verified, not assumed, on twelve fields at
+once (corpus digests, all four cached activation paths, selected layer and
+position, and the value to full precision):
+
+| model | witness run | floor | grade | n | leg AUROC | margin |
+|---|---|---|---|---|---|---|
+| Llama-3.1-8B | `lens-floor` (9010530) | 0.6765 | **distribution** | 6 | 0.9808 | **+0.304** |
+| Qwen2.5-7B | `band2-20260805` | 0.6708 | bound | 2 | 0.9952 | +0.324 |
+| Tülu-3-8B | `dissociation-tulu3` | 0.6417 | bound | 4 | 0.9711 | +0.329 |
+| Mistral-7B-v0.3 | `dissociation-mistral` | 0.6569 | bound | 4 | 0.9383 | +0.281 |
+
+**Llama's is the strongest floor this repo has derived** — the adopted
+`mean + sigma*SD` rule at n=6, not the max-statistic fallback — and its sigma
+window recomputes to **[1.285, 27.817)** against the configured 2.0, so the knob
+is valid there rather than assumed. The floor is visibly working in that run:
+`morse` licenses by permutation at 0.6638 and the floor correctly refuses it,
+which is *significance is not sufficiency* being caught rather than described.
+
+**Why this is not the cross-run import §2.4 forbids.** §2.4 bars carrying a
+floor derived at one n to a number measured *somewhere else*, because the max
+statistic moves with n. Nothing here does that. The witness run's floor screens
+the witness run's own reading; the leg's claim to that verdict is that the two
+readings are the same measurement, not that they resemble each other.
+
+**The identity check is the entire safety property, so it is not a caller's
+boolean.** `measurements/floor_witness.py` takes two `Provenance` records and
+computes the match itself; a mismatch yields `None`, never a verdict, and a
+`None` on either side is missing evidence rather than a wildcard. A
+`same_measurement=True` flag is the shape that has failed here repeatedly, and
+the fix each time was to make the omission inexpressible. Pinned by
+`tests/test_floor_witness.py`, which mutates **every one of the twelve identity
+fields in turn** and requires a refusal; both the wildcard-`None` and
+skip-the-check mutations were verified to turn the suite red.
+
+⚠️ **A witness never upgrades a grade.** Three of the four floors are `bound`
+(n = 2/4/4, below the 5-control minimum), and a bound stays a bound — quoting
+one as a distribution is precisely the error §2.2's table caused. What the
+margins say is that the distinction is not load-bearing here: all four clear by
++0.28 to +0.33, against an n-dependence never observed above 0.018 (§2.4).
+
+**Reproduce:** `uv run python scripts/internals_floor_screen.py` (keyless, no
+GPU, seconds). The floor is **re-derived** from each witness's own rungs with
+ability recomputed from `cells.jsonl` under the settled cuts, never read from
+`results.json` — same discipline as `control_floor.py` and
+`guard_control_floor.py`. Recomputed and recorded agree on all three runs that
+recorded one; `band2-20260805` predates the floor and records none, which the
+script reports as *nothing to compare* rather than as a divergence. Artifact:
+`outputs/analysis/internals_floor_screen_20260821.json`.
+
+**Still open, and not touched by any of this:** the AUROC interval is
+conditional on the selected cell (§4.9), and the reading is corroborated by one
+instrument rather than two (`deployment.py`'s own docstring).
+
+**The general lesson, and it is the third time this repo has paid for it:** a
+limitation was scoped to a *run* when it belonged to a *measurement*, and the
+mis-scoping turned an offline check into a filed GPU job for nine days. Before
+costing a run to close a gap, ask whether the quantity the gap is about exists
+anywhere else on disk.
+
 ### 4.9 ✅ THE AUROC NOW CARRIES AN INTERVAL, and the interval is what decides (2026-08-12)
 
 `measurements/dissociation.py` adds the estimator the run records never carried:
