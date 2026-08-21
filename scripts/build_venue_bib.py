@@ -12,6 +12,13 @@ Two properties are deliberate:
 * **It fails loudly on an unresolved key.** A cited key with no entry renders as
   a bare ``?`` in the PDF, which is the failure mode a silent generator would
   ship. Missing keys are an error, never a warning.
+* **It strips corpus-curation fields.** The masters are a CURATION record and
+  their ``note`` fields say things like ``CANDIDATE -- verify+download`` or
+  ``was ABSENT from this bib until 2026-08-07``. natbib's styles RENDER
+  ``note``, so those sentences were typeset into the bibliography of a built
+  PDF, where an automated desk check found them before we did. A venue bib is a
+  citation artifact and carries no curation metadata: the master keeps the note,
+  the generated subset never does.
 * **It reads EVERY direction bib, not one.** The corpus has one master per
   direction and a paper cites across them; measuring a key's absence against a
   single index and reporting it as absence in general is a recorded defect in
@@ -127,6 +134,72 @@ def entry_keys(bib: str) -> list[str]:
     return [match.group(2) for match in ENTRY_PATTERN.finditer(bib)]
 
 
+#: Fields that belong to the CURATION corpus and never to a venue bib. ``note``
+#: is rendered by natbib's styles; ``abstract`` is dead weight that some styles
+#: also emit. Both are properties of how WE track a reference, not of the
+#: reference.
+CURATION_FIELDS = ("note", "abstract")
+
+
+def _depth_at(entry: str, index: int) -> int:
+    """Brace depth just before *index*, counted from the start of *entry*."""
+    return entry.count("{", 0, index) - entry.count("}", 0, index)
+
+
+def strip_curation_fields(entry: str, fields: tuple[str, ...] = CURATION_FIELDS) -> str:
+    """Remove each of *fields* from ONE bib entry, value and trailing comma.
+
+    Three properties are load-bearing.
+
+    * **Only at top level.** A field is stripped only when it sits directly
+      inside the entry's own brace group (depth 1), so a ``title`` whose text
+      happens to contain ``, note = ...`` is untouched.
+    * **Brace-aware and quote-aware.** Values appear as ``{...}`` with nested
+      braces and as ``"..."``; a line-anchored regex truncates the first kind
+      silently, which is the same failure ``parse_entries`` documents.
+    * **It does not reflow anything else.** Only the matched span leaves; the
+      surrounding whitespace and field order are the master's.
+    """
+    for name in fields:
+        pattern = re.compile(r"([{,])\s*" + re.escape(name) + r"\s*=\s*", re.IGNORECASE)
+        position = 0
+        while True:
+            match = pattern.search(entry, position)
+            if match is None:
+                break
+            if _depth_at(entry, match.start()) != 1:
+                position = match.end()
+                continue
+            start = match.end()
+            character = entry[start]
+            if character == "{":
+                depth = 0
+                end = -1
+                for index in range(start, len(entry)):
+                    if entry[index] == "{":
+                        depth += 1
+                    elif entry[index] == "}":
+                        depth -= 1
+                        if depth == 0:
+                            end = index + 1
+                            break
+                if end < 0:
+                    raise SystemExit(f"unterminated {name} field in entry:\n{entry[:80]}")
+            elif character == '"':
+                end = entry.index('"', start + 1) + 1
+            else:
+                end = start
+                while end < len(entry) and entry[end] not in ",}":
+                    end += 1
+            tail = entry[end:]
+            without_space = tail.lstrip()
+            if without_space.startswith(","):
+                end += len(tail) - len(without_space) + 1
+            entry = entry[: match.start()] + match.group(1) + entry[end:]
+            position = match.start()
+    return entry
+
+
 def resolve_corpus(bibs: list[Path]) -> tuple[dict[str, str], dict[str, list[str]]]:
     """Merge every direction bib into one key map, reporting cross-direction clashes.
 
@@ -148,6 +221,27 @@ def resolve_corpus(bibs: list[Path]) -> tuple[dict[str, str], dict[str, list[str
             seen_in.setdefault(key, []).append(direction)
     duplicated = {key: names for key, names in seen_in.items() if len(names) > 1}
     return available, duplicated
+
+
+def render(available: dict[str, str], keys: set[str], sources: list[Path]) -> str:
+    """The exact bytes a kit's ``paper.bib`` should contain.
+
+    Split out of ``build`` so that "is this kit stale?" can be answered by
+    calling the renderer rather than by re-deriving what it does. A staleness
+    check that reimplements the generator only tests the generator it was
+    written against: this one asserted the verbatim master entry appeared on
+    disk, and went red the first time the generator legitimately transformed an
+    entry (curation-field stripping, 2026-08-21).
+    """
+    header = (
+        f"{GENERATED_MARKER} -- do not edit.\n"
+        "% The cited subset of science's literature/*/references.bib, keys unchanged.\n"
+        f"% Sources: {', '.join(path.parent.name for path in sources)}\n"
+    )
+    # Curation metadata stops here: the master keeps its note, the venue bib
+    # never carries one. See CURATION_FIELDS.
+    body = "\n\n".join(strip_curation_fields(available[key]) for key in sorted(keys))
+    return header + "\n" + body + "\n"
 
 
 def build(paper_id: str, *, corpus: Path) -> tuple[int, list[Path]]:
@@ -192,17 +286,12 @@ def build(paper_id: str, *, corpus: Path) -> tuple[int, list[Path]]:
             + "\n  ".join(missing)
         )
 
-    header = (
-        f"{GENERATED_MARKER} -- do not edit.\n"
-        "% The cited subset of science's literature/*/references.bib, keys unchanged.\n"
-        f"% Sources: {', '.join(path.parent.name for path in bibs)}\n"
-    )
-    body = "\n\n".join(available[key] for key in sorted(keys))
+    text = render(available, keys, bibs)
 
     written = []
     for tex in tex_files:
         out = tex.with_name("paper.bib")
-        out.write_text(header + "\n" + body + "\n", encoding="utf-8")
+        out.write_text(text, encoding="utf-8")
         written.append(out)
     return len(keys), written
 

@@ -467,3 +467,53 @@ rather than by eye, since a 0.9pt overhang is invisible on screen.
 (third guard, METHOD claim) vs item 77 (second corpus, EMPIRICAL claim). Neither is
 authorised and neither has an approval-gate triple yet; the first deliverable for either
 is a committed `conf/experiment/` preset plus `scripts/cost_model.py --preset`.
+
+---
+
+## 7. ⚠️ An external automated desk check failed the paper on MINIMUM QUALITY, and the internal self-review had missed it (2026-08-21)
+
+The draft was run through an external automated desk check. Length passed, topic
+passed, **minimum quality failed: the paper had no Discussion and no Conclusion
+section.** It ran Introduction → Scope → Related work → Method → Results →
+Limitations → bibliography and stopped. The science was never reached.
+
+**The lesson is about the review, not the section.** §6's reviewer-lens pass had
+run the same day, graded every section, and never asked whether the SET of
+sections was complete — because it took *structurally complete* from this repo's
+own status line, which enumerates those same six. That is the lit-search rule one
+level up: **a failed lookup is not evidence of absence, and neither is an index
+that was never built to answer the question being asked of it.** The estate has
+now committed this shape three times (the coverage sweep measured against a
+narrow index; the paper asserting the absence of its own table; this). So the fix
+is mechanical rather than another instruction to reviewers: **`tests/test_paper_skeleton.py`**
+asserts every kit has an opening and a concluding section, discovers kits by glob
+so a new paper is covered without editing it, and matches the concluding section
+by INTENT rather than by one title (AS-5 says `Conclusion`, AS-6 says `Discussion
+and conclusion`; a guard pinned to one spelling would fail the wrong paper).
+Verified by mutation: removing the section reddens exactly that kit's case.
+
+**⚠️ AND THE SAME BUILD SURFACED A WORSE DEFECT THE SELF-REVIEW ALSO MISSED,
+BECAUSE BOTH READ THE `.tex` AND NEITHER READ THE PDF.** Seven of the twelve
+entries in AS-6's generated bib carried `note` fields, and natbib's styles
+**render `note`** — so the typeset bibliography contained our internal curation
+sentences: *"CANDIDATE — verify+download"*, *"was ABSENT from this bib until
+2026-08-07"*, *"Entry taken verbatim from the ACL Anthology .bib"*. AS-5's
+hand-written bib leaked one the same way. The masters are a curation record and
+their notes are the point; **a venue bib is a citation artifact and carries no
+curation metadata.** Fixed at the generator, not at the output:
+`build_venue_bib.py` now strips `note` and `abstract`, top-level only (a `title`
+containing `, note = …` is untouched), brace- and quote-aware, with ten tests.
+AS-5's bib was stripped directly, since it is hand-written and the generator's
+protections do not reach it — which makes TODO 74's migration more urgent, not
+less.
+
+**One more thing that fix broke, and the break was informative.**
+`test_a_generated_bib_is_not_stale` asserted that the *verbatim master entry*
+appears in the kit's `paper.bib`. True while the generator was a pure copy; red
+the first time it legitimately transformed an entry. **A staleness check that
+re-derives what a generator does only tests the generator it was written
+against.** `render()` is now split out of `build()` and the test calls it, so the
+check follows the generator by construction.
+
+**State: all four kits (AS-5 and AS-6, both kits each) build with 0 errors, 0
+undefined references, and 0 curation text in the rendered PDF. Suite 2219 green.**

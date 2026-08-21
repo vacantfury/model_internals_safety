@@ -247,17 +247,21 @@ class TestAgainstTheRealCorpus:
         kits = _generated_kits()
         if not kits or not bvb.master_bibs(corpus):
             pytest.skip("no generated kit, or the shared corpus is not present here")
-        available, _ = bvb.resolve_corpus(bvb.master_bibs(corpus))
+        sources = bvb.master_bibs(corpus)
+        available, _ = bvb.resolve_corpus(sources)
         for kit in kits:
-            keys = sorted(
-                bvb.cited_keys((kit / "paper.tex").read_text(encoding="utf-8"))
-            )
+            keys = bvb.cited_keys((kit / "paper.tex").read_text(encoding="utf-8"))
             on_disk = (kit / "paper.bib").read_text(encoding="utf-8")
-            for key in keys:
-                assert available[key] in on_disk, (
-                    f"{kit.name}: entry for {key} differs from the corpus -- "
-                    "re-run scripts/build_venue_bib.py"
-                )
+            # Compare against what the RENDERER produces, not against the raw
+            # master entries. The earlier form asserted the verbatim master
+            # entry appeared on disk, which held only while the generator was a
+            # pure copy; it went red the first time the generator legitimately
+            # transformed an entry (curation-field stripping, 2026-08-21). A
+            # staleness check must follow the generator, never re-derive it.
+            assert on_disk == bvb.render(available, keys, sources), (
+                f"{kit.name}: paper.bib differs from what the corpus renders -- "
+                "re-run scripts/build_venue_bib.py <paper-id>"
+            )
 
 
 class TestDuplicateKeys:
@@ -321,3 +325,77 @@ class TestDuplicateKeys:
             pytest.skip("the shared corpus is not present in this checkout")
         _, duplicated = bvb.resolve_corpus(bibs)
         assert not duplicated, f"keys defined in two direction bibs: {duplicated}"
+
+
+class TestCurationFieldsNeverReachTheVenueBib:
+    """The masters are a curation record; a venue bib is a citation artifact.
+
+    natbib RENDERS ``note``, so entries carrying ``CANDIDATE -- verify+download``
+    typeset that sentence into the bibliography of a built PDF. An automated desk
+    check found it in AS-6 before the suite did, which is why these tests exist at
+    the GENERATOR rather than as a lint over the output: a stripped field cannot
+    be forgotten, an output lint can be.
+    """
+
+    def test_a_braced_note_is_stripped(self) -> None:
+        entry = '@misc{k,\n  author = {A},\n  note = {CANDIDATE -- verify},\n  year = {2026}\n}'
+        out = bvb.strip_curation_fields(entry)
+        assert "note" not in out and "CANDIDATE" not in out
+        assert "author" in out and "year" in out
+
+    def test_a_QUOTED_note_is_stripped(self) -> None:
+        entry = '@misc{k,\n  author = {A},\n  note = "taken verbatim from the anthology",\n  year = {2026}\n}'
+        out = bvb.strip_curation_fields(entry)
+        assert "note" not in out and "verbatim" not in out
+
+    def test_a_note_with_NESTED_BRACES_is_stripped_whole(self) -> None:
+        entry = '@misc{k,\n  note = {see {Foo} and {Bar}},\n  year = {2026}\n}'
+        out = bvb.strip_curation_fields(entry)
+        assert "Foo" not in out and "Bar" not in out and "year" in out
+
+    def test_a_MULTILINE_note_is_stripped_whole(self) -> None:
+        entry = '@misc{k,\n  note = {THE paper: two failure\n modes, and it was ABSENT\n until 2026-08-07},\n  year = {2026}\n}'
+        out = bvb.strip_curation_fields(entry)
+        assert "ABSENT" not in out and "failure" not in out and "year" in out
+
+    def test_a_note_as_the_LAST_field_still_parses(self) -> None:
+        entry = '@misc{k,\n  year = {2026},\n  note = {trailing}\n}'
+        out = bvb.strip_curation_fields(entry)
+        assert "trailing" not in out
+        assert list(bvb.parse_entries(out)) == ["k"]
+
+    def test_a_note_as_the_FIRST_field_still_parses(self) -> None:
+        entry = '@misc{k,\n  note = {leading},\n  year = {2026}\n}'
+        out = bvb.strip_curation_fields(entry)
+        assert "leading" not in out
+        assert list(bvb.parse_entries(out)) == ["k"]
+
+    def test_abstract_is_stripped_too(self) -> None:
+        entry = '@misc{k,\n  abstract = {We show that...},\n  year = {2026}\n}'
+        assert "We show" not in bvb.strip_curation_fields(entry)
+
+    def test_a_TITLE_containing_the_word_note_is_NOT_touched(self) -> None:
+        """The strip is top-level-only. A value that merely looks like a field
+        is a value, and a stripper that reads inside one silently truncates a
+        title -- worse than the leak it fixes."""
+        entry = '@misc{k,\n  title = {On {A}, note = the second movement},\n  year = {2026}\n}'
+        out = bvb.strip_curation_fields(entry)
+        assert "second movement" in out and "title" in out
+
+    def test_a_field_named_ANNOTE_is_not_mistaken_for_note(self) -> None:
+        entry = '@misc{k,\n  annote = {keep me},\n  year = {2026}\n}'
+        assert "keep me" in bvb.strip_curation_fields(entry)
+
+    def test_the_REAL_corpus_generates_a_bib_with_no_curation_fields(self) -> None:
+        """The end-to-end property: whatever the masters carry, the kit does not."""
+        bibs = bvb.master_bibs(bvb.corpus_dir())
+        if not bibs:
+            pytest.skip("the shared corpus is not present in this checkout")
+        available, _ = bvb.resolve_corpus(bibs)
+        assert available, "corpus resolved empty"
+        leaked = [
+            key for key, entry in available.items()
+            if any(f"{name}" in bvb.strip_curation_fields(entry).lower()
+                   for name in ("candidate — verify", "candidate --- verify", "candidate -- verify"))
+        ]
+        assert not leaked, f"curation text survived the strip: {leaked}"
