@@ -426,7 +426,44 @@ time. And the abstract is 403 words with **17 numerals** against a house rule of
 the structural problem is ordering, since ~250 words of attrition precede the positive
 finding, which risks reading as instrument fragility rather than as rigor.
 
-**Recommended sequence, all free and none contingent on a run:** state the null-corrected
-selection → intervals in `tab:map` → fix or cut the 80-per-cent figure → rewrite the
-abstract → say the surviving band is one encoding family. *Then* re-put the run question
-with the paper in its repaired state.
+**✅ ALL FIVE APPLIED 2026-08-21 (owner go), both kits, TODO 76 closed.** What landed:
+
+- **Method now states the selection correction and the held-out fit.** Two sentences:
+  the maximum transfer AUROC over the grid is compared against a null of maxima drawn
+  under shuffled TRAIN labels, so licensing is one test rather than one per cell; and
+  each probe is fitted on a held-out split with its shuffled-label control refitted on
+  the SAME split. Both were already true in code and absent from the paper.
+- **`tab:map` carries 95% Wilson intervals** (7 [3–14], 17 [11–26], 10 [6–17],
+  8 [4–15], 23 [16–32], 23 [16–32], 9 [5–16]) and the caption says what they mean:
+  *the table establishes that the cell is populated on every surviving condition and
+  does not order them.* `Limitations` ¶3's ordering claim is rewritten to match.
+- **The uncited "80 per cent for a target model" is CUT from both the abstract and the
+  body.** What replaces it is self-contained: the wrapper accounts for 8–16% and 7–33%
+  of the two guards' plaintext discrimination, *the remainder is a response to
+  content*, and whether a generating model behaves the same under the identical control
+  is named as a question this design can ask and this paper does not answer.
+- **Abstract rewritten: 403 words / 17 numerals → 347 / 4**, decomposition first. Two
+  things were cut rather than shortened and should not come back — the target-model
+  figure above, and the per-screen attrition counts (they are the first result and they
+  live in Table 1, where they have controls). ⚠️ n is now stated in Method (one hundred
+  harmful and one hundred benign per condition), which the intervals need.
+- **`Scope` says what `tab:map` implied.** After the decode screens the band is four
+  conditions per guard, one of WildGuard's is then removed by the block-axis screen, and
+  the two that replicate across both guards belong to one family: *demonstrated on
+  surface Unicode substitution, not on encoded prompts in general.*
+
+**Two process notes worth keeping.** The second kit was **DERIVED, not hand-ported** —
+the body from `\begin{abstract}` to `\end{document}` was copied whole, since that is the
+only range the parity guard compares and the only range that legitimately matches. Hand-
+porting is exactly what produced the defect the guard was founded on. And the edit
+matcher was made **whitespace-insensitive** after a literal match failed on a line wrap:
+a wrap-sensitive edit script has its strictness set by line width, which is the same
+defect `test_public_repo_hygiene.py` already paid for. Both kits build clean: 0 errors,
+**0 overfull and 0 underfull boxes**, 6 pages — the intervals widened `tab:map` 10.9pt
+past the margin and `tabcolsep` went 3pt → 1.5pt to absorb it, found in `build.log`
+rather than by eye, since a 0.9pt overhang is invisible on screen.
+
+**The run question is now the live one**, with the paper in its repaired state: item 75
+(third guard, METHOD claim) vs item 77 (second corpus, EMPIRICAL claim). Neither is
+authorised and neither has an approval-gate triple yet; the first deliverable for either
+is a committed `conf/experiment/` preset plus `scripts/cost_model.py --preset`.
