@@ -1419,3 +1419,23 @@ sentence naming it was contradicted by another canonical doc in the same repo,
 and the resolution cost one grep. **Before recording work as blocked on an
 artefact, confirm the artefact is the one the work needs** by reproducing one
 number the work depends on.
+
+## 18. THE HOUSE NAME FOR THE QUANTITY IS THE HARM GAP, IN BOTH PAPERS (2026-08-21)
+
+AS-5 retired the word *discrimination* (peer session, owner go, `8a4fd1c`); its
+quantity is **the harm gap**. AS-6 was using *discrimination* for the identical
+quantity, defined in its own text as harmful block rate minus benign block rate
+(WildGuard 0.99 − 0.45 = 0.54 against Llama Guard's 0.75).
+
+Two occurrences, both AS-6's own measurement rather than a citation, and *gap*
+appeared nowhere else in the paper, so the rename was two lines per kit and
+load-bearing nowhere. Now zero occurrences of `discriminat` in either AS-6 kit.
+
+**Checked and clear: AS-6 does not cite AS-5 at all.** So the sibling's retitle
+and its restructure from three legs to one claim with four demonstrations do not
+reach this paper. The vocabulary was the only coupling, which is the sort of
+coupling that survives precisely because nothing references it.
+
+Standing rule for both papers: **harmful rate minus benign rate is the HARM GAP.**
+*Discrimination* is retired estate-wide, and it was the worse word anyway, since
+it collides with the fairness sense in a safety paper.
