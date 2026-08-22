@@ -2872,6 +2872,87 @@ must derive its GUARDS' spans the same way — Llama Guard and WildGuard render
 through templates that are neither Llama-3.1's nor each other's, and the Mistral
 result shows assuming any single number is a real error, not a theoretical one.
 
+#### 6.3.6 ✅ ITEM 28's FIRST STEP RAN, OFFLINE AND FREE, AND IT NARROWS §6.3.1's OWN HEADLINE (2026-08-22)
+
+§6.3.1 is titled "the causal harness already exists, peer-reviewed, and it would
+have caught our length confound". The first half stands. **The second half needs
+narrowing, because the difference-in-means DIRECTION is not a better reader than
+the correlational probe: on both models it reads LESS signal and, at
+`instruction_final`, it is MORE length-exposed.**
+
+**How it became free.** The item was recorded CLUSTER-BLOCKED. TODO 99's check
+(reproduce one number from the artefact you claim to need) confirmed the block was
+REAL, and this is worth stating because the peer session's four AS-6 instances all
+went the other way: the local cache genuinely held 4 files, all early-pilot, and
+crucially **no plain-arm capture at all**, which is what difference-in-means fits
+on. What was never recorded is the COST. The plain captures are 217MB (Llama) and
+160MB (Qwen), and the whole comparison is CPU-seconds once they land. A blocker
+stated without its size reads like a cluster job and was carried as one for
+sixteen days. **Record the size next to the blocker, or "blocked" silently
+inflates into "expensive".**
+
+**Both estimators are cross-validated on the SAME folds (5, seed 0).** That is
+the direct application of the 2026-08-21 leakage finding: a difference-in-means
+vector is a fitted object exactly like a logistic probe, so scoring the items it
+was built from would repeat the defect inside a script written to investigate
+confounds. Pinned by `tests/test_direction_vs_length.py`, whose no-signal test is
+mutation-verified: point the fit at the full set instead of the training folds and
+two noise clouds separate at AUROC > 0.75, which the test rejects.
+
+**The numbers.** Instrument `scripts/direction_vs_length.py`; artifacts
+`outputs/analysis/direction_vs_length_20260822.json` and `..._qwen_20260822.json`.
+`rho` is the absolute Spearman correlation between a cell's out-of-fold scores and
+raw character length, which is length exposure proper. The margin over the null is
+only its shadow: an estimator can read less total signal without being any more
+length-driven, so both are reported.
+
+| model | position | layer | probe AUROC | direction AUROC | probe rho | direction rho |
+|---|---|---|---|---|---|---|
+| Llama-3.1-8B | `instruction_final` | 13 | 0.8178 | 0.7149 | 0.317 | **0.346** |
+| Llama-3.1-8B | `last` | 13 | 0.9866 | 0.9690 | 0.276 | 0.232 |
+| Qwen2.5-7B | `instruction_final` | 22 | 0.9023 | 0.8225 | 0.270 | **0.369** |
+| Qwen2.5-7B | `last` | 22 | 0.9871 | 0.9755 | 0.234 | 0.171 |
+
+Length null 0.6544 on both, two-sided, computed on the same texts. **It reproduces
+the 0.6544 recorded independently in §2.4, which is a cross-check on the whole
+setup rather than a coincidence:** the null is a property of the corpora, so a
+model-dependent value would have indicted the harness.
+
+**Three things this establishes.**
+
+1. **Swapping the reader does not buy length robustness, it costs it.** At
+   `instruction_final` the direction is more length-correlated than the probe on
+   BOTH models (0.346 against 0.317; 0.369 against 0.270) while peaking 0.08 to
+   0.10 AUROC lower. Arditi et al.'s contribution is the CAUSAL test (ablate the
+   direction and watch refusal bypass; add it and watch refusal appear), not a
+   superior estimator, and item 28's plan is unaffected as long as it is read that
+   way. What it may no longer claim is that adopting difference-in-means as the
+   READING instrument addresses the confound.
+2. **The "near-ceiling on plaintext" assumption written into `ProbeConfig` is not
+   met at `instruction_final`.** The comment on `regularization_c` says the
+   plain-text condition is where "the answer is known to be near-ceiling". Held
+   out, it is 0.8178 on Llama against a length null of 0.6544, a margin of +0.164.
+   Any tuning path that treats the plain condition as a known-ceiling calibration
+   anchor is anchoring on a value that is not near ceiling, and Llama is the model
+   AS-5 reports on.
+3. **The position asymmetry replicates the published one, on our own data.**
+   `last` is near-ceiling on both models (0.9866 / 0.9871) while
+   `instruction_final` is markedly weaker and model-dependent (0.8178 against
+   0.9023). That is arXiv 2507.11878's split reproduced here: the post-instruction
+   position clusters by BEHAVIOUR, which is easy to read once the model has decided
+   to refuse, and the instruction-final position clusters by HARMFULNESS, which is
+   the harder and more interesting quantity. **The consequence for both papers is
+   that `instruction_final` readings carry far less headroom over length than
+   `last` readings, and every encoded condition is weaker than the plaintext one
+   measured here.**
+
+⚠️ **What this is NOT.** It is not a decomposition: AUROC does not split into a
+length part and a content part, so no fraction of the separation may be attributed
+to length from these numbers. It is not the causal gate either, which is §6.3.2
+onward. And the direction here is fit on PLAIN contrast sets at every (layer,
+position), which is the reading instrument's shape, not the model-level causal
+gate's.
+
 #### 6.3.5 ✅ THE GUARDS' SPANS ARE DERIVED — 55 and 25, and Arditi's sweep does NOT port to a guard
 
 *2026-08-21. Tokenizers only, no weights, no GPU, seconds, $0. This is the check
