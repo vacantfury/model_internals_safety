@@ -630,3 +630,57 @@ model, same corpus, same rungs, different card. If the rates match within
 sampling noise, hardware stops being an open variable; if they do not, a rate is
 a property of the machine as well as of the model, and that belongs in the
 paper's defect list before any of these numbers are defended.
+
+## 7. The blind code archive — four traps, all found by the guard (2026-08-22)
+
+`scripts/build_code_artifact.py` stages the shippable tree, vendors the one
+dependency normally resolved from a source-control URL, redacts the site's
+identifying prose, and then **sweeps and refuses**. AS-6 needs the same archive,
+so the traps are recorded here rather than in an AS-5 namespace: every one of
+them was found by the guard firing, not by anyone reading the tree.
+
+**The sweep is fail-closed, and that is the whole design.** A build that prints
+a warning above a finished zip has already shipped the thing it warned about.
+Nobody re-reads a 300-file archive, so the only enforcement that works is one
+that refuses to write the file.
+
+1. **The builder shipped its own pattern list.** `FORBIDDEN` is, by
+   construction, a list of the maintainer's identifying strings — so an archive
+   containing the builder contained exactly what the builder exists to remove.
+   The builder and the manifest tool now exclude themselves. This is the
+   `--dry-run returns before the guard` shape one estate over: the tool that
+   checks a property is itself subject to it.
+2. **A path dependency pointing at a bare package directory has no build
+   metadata.** The files were all present and the archive looked complete; the
+   first `uv sync` a reviewer ran would have failed. The vendored tree is now a
+   project ROOT whose manifest is DERIVED from the installed distribution
+   metadata (version, Python floor, runtime requirements read out of
+   `METADATA`), and the builder proves the claim by building a wheel before it
+   will write the archive. *A hand-written vendored manifest drifts from the
+   package it describes, and the drift only surfaces in someone else's install.*
+3. **The vendored licence carried its copyright holder.** A permissive licence
+   requires its notice to travel with the source, so dropping the file would
+   strip a term we are bound by and shipping it verbatim would defeat the
+   anonymity. The notice stays, the holder is redacted in the open, and the
+   restoration is stated in the archive's README. The builder refuses if the
+   notice count is not exactly one, so a licence whose format changed under us
+   fails rather than shipping a name it silently failed to find.
+4. **Redaction must SUBSTITUTE, never delete.** The first version dropped the
+   comment line naming the institution, which left the following line starting
+   mid-sentence — still anonymous, no longer readable, in an artifact whose
+   entire job is to be read. It also missed a phrase a comment WRAP had split
+   across two lines, which no multi-word key can match; the fix is a
+   longest-first token map plus a re-capitalisation pass that decides sentence
+   start versus wrapped continuation from the previous line's terminal
+   punctuation, because a blanket capitalise is wrong exactly as often as it is
+   right.
+
+**The one deliberate non-match, worth not re-litigating:** cited surnames are
+not identity leaks. A pattern broad enough to catch every surname fires on the
+bibliography in every module docstring, and a screen that always fires is a
+verdict with a script attached. The sweep names handles, the institution, and
+mailboxes. Its case-sensitive half additionally names the cluster's PROSE
+spellings only: the lowercase `nurc` is a registry identifier threaded through
+the cluster config and all 53 presets, and renaming config values in a staged
+copy to remove an acronym that expands to nothing once the prose is redacted
+would risk breaking the archive to buy nothing.
