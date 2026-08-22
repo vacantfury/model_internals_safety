@@ -1952,3 +1952,66 @@ recomputes it from the artifact and raises if the floor stops being a
 distribution. This is the class the ledger exists for: a number that was
 internally consistent, printed for days, and wrong only relative to data already
 sitting on disk.
+
+## 26. TODO 81's TWO "COSTED BASELINES" COST MINUTES, AND ONE OF THEM NEEDS NO GENERATION AT ALL (2026-08-22)
+
+The item said "neither is $0", which was true and read as though these were the
+expensive follow-ups. Costed properly against measured wall clock, they are the
+cheapest substantial work left on this paper.
+
+### The anchor is measurement, not the estimator
+
+Nineteen completed guard runs are on disk with `elapsed_seconds` and a condition
+count. Per condition per guard: **0.42 to 0.60 minutes**, and the spread is
+tight across both guards and every run shape. A full 19-condition sweep is **8
+to 11 minutes**. That is an empirical rate for exactly the job shape in
+question, so it does not need the cost model's fitted token rate, which is
+calibrated on generating runs and would over-predict here.
+
+Money is **$0** for both. Guard verdicts are read from logits, so there is no
+judge call and no API spend, and the partition is free. `as6_guard_probe
+--dry-run` confirms it independently: 15,400 forward passes, 0 generations, 0
+judge calls, $0.00.
+
+### Baseline B is cheaper than filed, because the decode is already on disk
+
+DecipherGuard's pipeline decodes a prompt before classifying it. Ours would need
+a decoder, and the phase-0 cells **already persist `restate_response`** for
+every encoded prompt: the base model's own decode attempt, generated and stored
+back in August. So the pipeline needs **no generation at all**, only guard
+forward passes over cached text.
+
+**~15 minutes per guard, two jobs, $0.**
+
+It is also the more valuable of the two. Con 10 asked whether our licensing
+framework improves validity or only moves our own numbers, and this answers it
+by an **independent external route**: if the external decoder repairs exactly
+the conditions our internal read calls decoded, and fails exactly where we
+report `(U)`, the partition is corroborated by a method that shares none of our
+machinery. If it repairs a condition we call `(U)`, that is a real finding
+against us and worth knowing.
+
+### Baseline A is a refit whose run is not the expensive part
+
+The guard capture is `layers: all` at two positions, so a multi-depth fused
+probe needs **no new forward pass** if the activation cache is warm on the
+cluster; if cold, re-capture is the same ~10 minutes per guard.
+
+⛔ **The run is not what makes it expensive.** The paper already states, in its
+own related-work section, that we adopt the single-cell read because the
+permutation null and the control floor are constructed to correct for a selected
+maximum, and that a fused multi-depth statistic **would need both rebuilt**. So
+baseline A is a screens rebuild with a short job attached, not a job.
+
+⚠️ **It shares its blocker with TODO 96.** Both need the guard activations.
+Measured from the local cache, one `(arm, condition)` file is 100 MB, so ~3.8 GB
+per guard and **~7.6 GB for both**. One transfer unblocks the item-level
+per-prompt recount and the multi-depth baseline together.
+
+### Recommendation
+
+**Do B, defer A.** B is minutes, needs no generation, answers the referee's
+actual question by an independent route, and requires no change to any screen. A
+requires rebuilding the two screens that give this paper its contribution, which
+is a larger decision than its 10-minute job suggests, and it is gated on a
+transfer in any case.
