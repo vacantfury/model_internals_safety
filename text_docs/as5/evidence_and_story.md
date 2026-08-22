@@ -1746,6 +1746,109 @@ correct premises. #11 is the cleanest example yet of the pattern — it verified
 tokenizer fact to two digits and then drew a conclusion the fact does not
 support.
 
+## 4p. ⚠️ #3 CONFIRMED AND IT COST A CLAIM — the noise null was unpaired, and the harmful arm is not inside it (2026-08-21)
+
+The finding: the noise null draws independent binomials, but the four models
+answer the same prompts, so the estimates are paired.
+
+**It is right, and it is the only finding so far to overturn a sentence in the
+paper.** The null asks what spread four *identical* models would show at n=100.
+Drawing each rate as an independent `Binomial(n, p̄)` ignores that item difficulty
+is shared, and shared difficulty makes identical models agree MORE than
+independent draws do. So the implemented null is too wide, and a spread can hide
+inside it that a correct null would reject.
+
+Measured on the encoded homoglyph condition, 20,000 draws each:
+
+| arm | observed spread | independent null (median / 95th) | p | **paired** null (median / 95th) | **p** |
+|---|---|---|---|---|---|
+| harmful | 0.080 | 0.050 / 0.090 | 0.124 | 0.040 / 0.070 | **0.034** |
+| benign | 0.660 | 0.100 / 0.180 | <1e-4 | 0.080 / 0.150 | <1e-4 |
+
+**The paper said of the harmful arm: "the observed spread sits inside what four
+identical models would produce, and we cannot distinguish them." Under the
+correct null it does not, and we can (p = 0.034).**
+
+⚠️ **And the paired null used here is the CONSERVATIVE version**, which makes the
+verdict stronger rather than weaker. Item difficulty is estimated from the same
+four models being tested, so wherever they genuinely disagree an item lands near
+0.5 and contributes maximal Bernoulli variance — inflating the null. The claim
+fails even against the inflated version.
+
+**The pairwise claim fails too, and by the paper's own preferred standard.** §The
+consequence said Llama and Qwen are "indistinguishable on the harmful arm (0.99
+vs 0.91, confidence intervals overlapping)". Overlapping intervals are not a
+test, and the paired one is available: on the same 100 prompts there are **7
+discordant items and all 7 run the same way**, McNemar exact **p = 0.016**.
+
+**What survives, and it is better than what it replaces.** The rewritten claim is
+that the harmful arm *compresses* model differences sevenfold, to a separation
+that is statistically detectable and useless for ranking, while the benign arm
+*expands* them to two-thirds of the range. That is both true and harder to
+attack: "indistinguishable" invites exactly the refutation above, and the
+asymmetry — which is the actual contribution — never depended on it. **The benign
+arm is untouched by the choice of null**, exceeding the 99th percentile under
+both.
+
+**Fixed in code, not only in prose**, because claiming a paired null while
+running an unpaired one would be finding #6 one section over.
+`figure_arm_inversion.paired_noise_null` implements it, `tests/test_noise_null.py`
+pins both directions (perfectly-agreeing models must give a null of exactly zero,
+where the independent null still invents a spread). ⚠️ **The plaintext arm cannot
+be paired from the data on disk** — per-item verdicts were persisted for the
+encoded conditions only — so plaintext spreads stay on the independent null and
+the paper now says which is which. They sit 7× outside either, so nothing there
+turns on it.
+
+**Running verdict: 12 checked, 9 held, 3 refuted.**
+
+## 4q. THE LAST THREE — two were killed by other repairs, one is real and names its own fix (2026-08-21)
+
+The raw review is recoverable (`as5_review_raw.md`, a prior session's scratchpad);
+these three were filed by number only, so the first step was finding the text
+rather than reasoning about a label.
+
+**#23 RESOLVED BY #3's FIX, not separately.** It said the abstract quoted the
+null's 97.5th percentile as if it were the null: *"a spread of 0.08 --- inside the
+0.10 ceiling that sampling noise alone produces"*, where Table 1 reports the null
+as 0.05 and 0.10 is its upper tail. Correct, and moot: the paired-null repair
+removed that sentence's claim altogether. The abstract no longer says the spread
+is inside anything. **Worth noting the pattern — a wrong number and a wrong
+statistic in one sentence, and the deeper repair took both.**
+
+**#24 MOOT FOR THIS DRAFT.** With `n_permutations = 200` the smallest attainable
+p is 1/201 = 0.004975, and all four models reported exactly that, so "p = 0.005"
+was a floor quoted as an estimate. It appears nowhere in either kit: the readings
+that carried permutation p-values belonged to the internals leg, withdrawn in
+§4k. The finding is right about the code and has no target in the paper.
+⚠️ **It becomes live again the moment a permutation p-value is quoted**, which
+AS-6 does — filed there rather than closed here.
+
+**#25 STANDS, and it is the most structural thing this reviewer found.** n=100 is
+the *entire* JailbreakBench harmful set and the whole of its benign counterpart.
+Every threshold (decode similarity 0.75, overlap 0.60/0.80, probe floor 0.70,
+control-floor sigma 2.0, read percentile 50), every rung selection, every layer
+and position selection and every probe fit was set or performed on those same 200
+items. **No number in the paper has been evaluated on data that took no part in
+producing it.** Defect (9) is the sharp instance — a probe reading item identity
+— and the generalisation is that what that probe did with items, the pipeline
+does with knobs.
+
+**The fix is cheaper than it looks and the paper now says so.** `data/` already
+holds `harmbench_prompts.jsonl`, `orbench_benign_1k_prompts.jsonl` and XSTest's
+safe/unsafe sets. A replication that sets the knobs on one corpus and reports on
+another is a run, not a research programme. Limitations names it as the next run
+rather than as a future direction, which is the honest register: we have the
+corpora and have not done it.
+
+**Final verdict on the methods review: 15 checked, 11 held, 3 refuted, 1 moot.**
+Every refutation had a correct premise — #5 verified a cell-count asymmetry, #11
+verified a tokenizer ratio to two digits, #8 verified that replicates exist — and
+then drew a conclusion the fact did not support. **That is a more dangerous
+failure mode than being wrong, because the checkable half checks out.** Of the
+eleven that held, one overturned a claim (#3), two were the same uncaught defect
+(#12/#21), and the rest were prose that did not match the code.
+
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
 Jobs `9010897` (Mistral-7B-Instruct-v0.3, 1:15:12) and `9011034` (Tulu-3-8B,

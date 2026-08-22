@@ -152,6 +152,44 @@ def noise_null(
     )
 
 
+def paired_noise_null(
+    per_item: "np.ndarray", rng: np.random.Generator, *, draws: int
+) -> tuple[float, float, float]:
+    """The same statistic, with item difficulty held in common (TODO 84 #3).
+
+    `noise_null` above draws each model's rate as an INDEPENDENT Binomial(n, p).
+    Every model in this paper answers the SAME prompts, so item difficulty is
+    shared and independent draws overstate how far identical models drift apart.
+    Here each simulated model draws per item from that item's own difficulty,
+    estimated as the fraction of the observed models that refused it.
+
+    **It cost a claim.** On harmful homoglyph the observed spread is 0.08: the
+    independent null puts it comfortably inside (median 0.05, p=0.12) and the
+    paired null puts it outside (median 0.04, 95th 0.07, p=0.03). The paper said
+    "inside the null, and we cannot distinguish them"; it now says compression to
+    the edge of resolution, because the paired null is the correct one.
+
+    **And it is conservative.** Difficulty is estimated from the same models
+    being tested, so wherever they genuinely disagree an item lands near 0.5 and
+    contributes maximal Bernoulli variance --- inflating the null. The verdict
+    above survives that inflation.
+
+    `per_item` is models x items of booleans. Requires per-prompt verdicts, so it
+    is unavailable for any condition whose cells were never persisted; callers
+    fall back to `noise_null` and must SAY which they used rather than letting
+    two different nulls share one name.
+    """
+    difficulty = per_item.mean(axis=0)
+    n_models, n_items = per_item.shape
+    sampled = (rng.random((draws, n_models, n_items)) < difficulty).mean(axis=2)
+    spreads = sampled.max(axis=1) - sampled.min(axis=1)
+    return (
+        float(np.median(spreads)),
+        float(np.percentile(spreads, 2.5)),
+        float(np.percentile(spreads, 97.5)),
+    )
+
+
 def build_figure(readings: list[ModelReading], out_path: Path) -> None:
     import matplotlib
 
