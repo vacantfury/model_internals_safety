@@ -1,5 +1,17 @@
 # AS-5 phase 1 — where the internals enter
 
+> ⛔ **STALE AS OF 2026-08-21 — READ THIS BEFORE USING ANY NUMBER BELOW.** This
+> design is built on a harm probe reading **AUROC 0.938–0.995** on encoded
+> activations. §4k of `evidence_and_story.md` refuted that: `probe_transfer` fits
+> on all 200 plaintext items and scores the encoded versions of THOSE SAME items,
+> so the condition is held out and the items are not. Held out properly the
+> values are **0.618–0.811**, below each model's within-plaintext CV. The
+> internals leg is OUT of both AS-5 kits and stays out (§4e, owner go
+> 2026-08-22). **The DESIGN QUESTION this doc poses is still live** — where the
+> harm information goes between representation and behaviour — but every
+> quantity in it must be re-measured with items held out before it can motivate
+> anything.
+
 *Founded 2026-08-10. Settles the open question `evidence_and_story.md` §4e names
 and deliberately leaves open ("⚠️ The open question this story does not answer:
 where the internals enter"). That section becomes a pointer to this file; this
@@ -27,9 +39,10 @@ On Llama-3.1-8B the two numbers are **0.981 and −0.01**. The harm is linearly
 present in the residual stream at near-ceiling, and the refusal decision reads
 none of it.
 
-That is leg 1 with a location. "Refusal without discrimination" stops being a
-behavioural state and becomes a *dissociation between two measurable quantities
-in the same forward pass*.
+That is leg 1 with a location: the behavioural state would stop being a state and
+become a *dissociation between two measurable quantities in the same forward
+pass*. ⛔ **Conditional, not established** — see the banner; the AUROC above is
+the leaked number.
 
 ---
 

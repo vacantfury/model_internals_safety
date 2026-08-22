@@ -6,8 +6,10 @@
 > stages, so post-training does not restore what encoding destroys. It is
 > replaced by a stronger negative: **the encoding penalty is invariant to
 > post-training**. Leg 1 and the title are unaffected.
-> Title: *"Refusal without discrimination: what encoded prompts do to
-> safety-trained models."* Sections §4a–§4d are the derivation that produced it
+> Title: *"Refusing everything looks safe: restoring the benign arm to
+> encoded-prompt evaluation"* (retitled 2026-08-22; the previous title named a
+> quantity that misreads as demographic bias and a subject §4h refutes on half
+> the models). Sections §4a–§4d are the derivation that produced it
 > and are kept for their evidence, not as live proposals; §5 is superseded.
 > `proposal.md`'s 2026-08-02 scope and the old title "Can't, didn't, or
 > wouldn't?" are both retired.
@@ -499,189 +501,201 @@ map is unaffected by the paragraph above.
   on benign encoded content has the same defect with none of the visibility: a
   perfect block rate and no benign arm reads as a perfect guard.
 
-## 4e. ✅ THE STORY OF RECORD — title settled, three legs, restructured (owner go, 2026-08-08)
+## 4e. ✅ THE STORY OF RECORD — one claim, four demonstrations, retitled (owner go, 2026-08-22)
 
 **This section is the story of record. §4a–§4d are kept as the derivation, not as
-live proposals.** §4d had the phenomenon right; §4e retires the title and states
-the three legs.
+live proposals.**
 
-⚠️ **RESTRUCTURED 2026-08-08 (owner go), and the restructure is the second one in
-a day.** The version settled that morning had a *mechanism* as leg 2 — the Tülu
-ladder read as post-training restoring the discrimination encoding destroys — and
-the re-run with a plaintext arm refuted it hours later (§4f). Leg 2 below is the
-replacement, and §4g then generalised leg 1 from one encoder to a class. The
-withdrawn mechanism is **not** restated here; §4f is its home. What survives the
-churn untouched is the title, for the reason given directly below.
+⚠️ **RESTRUCTURED 2026-08-22 (owner go). This is the third restructure and the
+pattern across all three is the finding.** Each time, a *mechanism* clause died
+and the *phenomenon* clause did not: "Can't, didn't, or wouldn't" and its
+four-regime frame, leg 2's recovery mechanism (§4f), and the internals leg (§4k)
+are all gone; the paired-arm refusal rates that carry legs 1 and 2 have never
+been touched. **A session tempted to pin the story to a mechanism should read
+that list first.**
 
-### The title, and why the old one had to go
+Two clauses of the previous version had gone stale before this rewrite, and both
+had been withdrawn by our own runs while §4e still asserted them:
 
-**"Can't, didn't, or wouldn't?" is RETIRED.** It titles the four-regime
-decomposition, and §2 already recorded that the frame no longer carries the
-paper: the ladder collapsed to essentially one substantive rung, (C) is empty,
-(B)/(D) rests on an operating point and may not be given as a point estimate, and
-recognition is unreportable. A title promising a three-way diagnosis the evidence
-cannot deliver is the kind reviewers check first.
+- **"The metric points the wrong way along a published pipeline"** was called
+  "the sharpest sentence the evidence supports". §4s retired it on 2026-08-22:
+  on the only echo-clean rung the harmful arm moves five items at exact McNemar
+  `p=0.06`. The wrong-sign direction survives only on cells the echo screen
+  rejects. **Say BLIND, never wrong-way.**
+- **The internals leg was described as in the paper**, with a green block quoting
+  AUROC 0.938–0.995. §4k removed it from seven sites on 2026-08-21 because the
+  probe was reading item identity. ⛔ **Never quote those numbers again**; the
+  held-out values are 0.618–0.811, below each model's within-plaintext CV.
 
-**Title of record: "Refusal without discrimination: what encoded prompts do to
-safety-trained models."** It names the finding and covers both the collapse and
-the false-positive axis.
+### The title, and why this one had to go too
 
-⚠️ **Its stated justification is corrected (2026-08-08).** This paragraph read
-"it survives the Mistral inversion in §4d, where encoding *raises* refusal."
-§4d's statistical pass withdrew that inversion — Mistral's harm-gap change is
-**+0.09 [−0.06, +0.24]**, not distinguishable from zero, and its rise on the
-harmful arm is the *same* mechanism as every other model rather than a
-counter-direction. **The title stands, and the corrected reading supports it
-better than the old one did:** "refusal without discrimination" is now the
-literal finding, since encoded harmful refusal is model-independent (spread 0.08
-against a 0.10 noise ceiling) while discrimination spans 0.00–0.61. The title
-never asserted a direction, which is why it survived a correction to its own
-rationale.
+⛔ **"Refusal without discrimination: what encoded prompts do to safety-trained
+models" is RETIRED (2026-08-22).** It survived two refutations of its own stated
+rationale, which was a real virtue, and it fell to two things that are not about
+mechanism at all:
+
+1. **"Discrimination" misreads at an alignment venue,** where it means
+   demographic bias. A referee flagged it. The paper means *telling harmful from
+   benign*, and it already has an unambiguous name for that quantity: **the harm
+   gap**. That name is now used throughout; the word "discrimination" appears
+   nowhere in either kit.
+2. **"What encoded prompts do" asserts a subject our own scaffold arm refutes on
+   half the models.** §4h shows the attack *wrapper* carries most of the loss on
+   Llama and Tülu and none of it on Qwen. A title naming the encoding as the
+   cause over-attributes in exactly the way the paper accuses the field of
+   over-attributing.
+
+**Title of record: "Refusing everything looks safe: restoring the benign arm to
+encoded-prompt evaluation."**
+
+Both halves earn their place, and a session must not trim either:
+
+- **"Refusing everything looks safe"** is a claim about the MEASUREMENT, not
+  about the model. That is what disarms the standing reviewer objection *refusing
+  homoglyph text is correct behaviour* — we say the one-armed reading cannot
+  tell, never that the behaviour is unsafe. It also names a state rather than a
+  mechanism, which is the property that let the previous title survive twice.
+- **"Restoring"** pre-empts the objection that would otherwise kill the paper.
+  §4l established that the clean absence claim is FALSE: `wei2023jailbroken` ran
+  a harmless control alongside every attack and saw this effect. It was n=1,
+  scored for capability, and did not propagate. **Never write that nobody has run
+  this control.**
 
 ### The thesis, in one sentence
 
-> Safety evaluation reports refusal. Encoded prompts pull refusal apart from
-> discrimination — and once separated, the reported metric cannot tell four very
-> different models apart, and points the wrong way along a published safety
-> pipeline.
+> An evaluation that sends only harmful inputs cannot tell a model that refused
+> correctly from a model that stopped reading the request. Both report high
+> refusal under attack, and high refusal under attack is the number this
+> literature publishes.
 
-Three clauses, three legs.
+### Four demonstrations of that one claim — NOT three legs
 
-### The three legs, in order
+The previous version had three legs (phenomenon, controlled series, instrument),
+and two referees rejected a paper that says several true things without saying
+which one matters. The evidence is unchanged; what changes is that the fourth
+item stops being a separate contribution and becomes the EXPLANATION of the first
+three.
 
-**1. The phenomenon — encoding defeats discrimination, not refusal (§4d, §4g).**
+**1. It cannot rank (§4d, §4g).** On the harmful arm, four models spanning three
+base families are separated by **0.08** while spanning **0.57** on the same
+requests in plaintext. On Llama-3.1-8B the harm gap goes **+0.82 → 0.00**:
+benign and harmful `homoglyph` prompts refused at an identical 0.99. No probe
+required.
 
-Benign refusal rises 2–10× over plaintext on four models, and on Llama-3.1-8B
-the harm gap goes **+0.82 → 0.00**: benign and harmful `homoglyph` prompts
-refused at an identical 0.99. No probe required.
+> ⚠️ **Never say the harmful arm is "inside the null" or the models are
+> "indistinguishable"** (§4n–§4q). The unpaired null said so; the paired one puts
+> the 0.08 spread OUTSIDE at p=0.034, with Llama-vs-Qwen at McNemar p=0.016. The
+> defensible form is the one in the kits: **statistically detectable and useless
+> for ranking.** The problem is not that the arm reads noise, it is that it reads
+> a real quantity too small to rank on.
 
-> ✅ **THE SUBJECT CORRECTION IS APPLIED (2026-08-21).** Both kits now carry the
-> three-arm table and the wrapper/character split as a measured result inside
-> the leg-1 section, and say "protocol" where the subject is the deployed
-> condition. What follows is the finding as §4h stated it, kept as the record.
->
-> ⚠️ **THE SUBJECT OF THIS LEG WAS WRONG (2026-08-09, §4h).** The scaffold control separates the attack *wrapper* from
-> the *characters*, and on 2 of 4 models the wrapper alone causes most of the
-> loss — Llama +0.67 of +0.84, Tülu +0.28 of +0.37 — while on Qwen it causes
-> none of it. The numbers above all stand; what does not stand is "encoding" as
-> the subject. The supported subject is the **encoded-prompt protocol**.
-> Substance, decomposition and CIs: §4h; the argument it joins is §4j.
+> ⚠️ **Report the FRACTION of harm gap destroyed, never the absolute
+> difference** (§4g). The absolute form compares models on a scale they do not
+> share and already produced one wrong ordering here: §4d called Mistral the most
+> robust model when it is merely the least discriminating one, plaintext gap 0.32
+> against 0.80–0.83.
 
-**State it as the measurement claim, not the utility claim.** "Encoding causes
-false positives" invites the reviewer answer *refusing homoglyph text is correct
-behaviour, no legitimate user sends it*, and there is no good reply. The
-defensible form: **the harmful arm has no discriminative power, and it is the
-only arm the field reports.** Llama and Qwen are indistinguishable on encoded
-harmful prompts (0.99 vs 0.91, CIs overlapping; cross-model spread 0.08 against
-a 0.10 noise ceiling) while discriminating at 0.00 and +0.61 respectively.
-Whether refusing encoded input is *desirable* has no bearing on whether the
-measurement can tell two very different models apart. It cannot.
-
-⚠️ **Report the FRACTION of discrimination destroyed, never the absolute
-difference** (§4g). Absolute gap-lost compares models on a scale they do not
-share, and using it already produced one wrong model ordering in this repo —
-§4d called Mistral the most robust model when it is merely the least
-discriminating one, with a plaintext gap of 0.32 against 0.80–0.83:
-
-| model | fraction of plaintext discrimination destroyed |
+| model | fraction of the plaintext harm gap destroyed |
 |---|---|
 | Qwen2.5-7B | **4–26%** |
 | Mistral-7B-v0.3 | 22–53% |
 | Tülu-3-8B | 41–53% |
 | Llama-3.1-8B | **67–100%** |
 
-**The claim is about a class of encoders, not one** (§4g). Five substrate rungs
-through the same paired design, and the per-model mean gap lost separates the
-models by 0.53 — so the claim generalises beyond `homoglyph`.
+**State it as the measurement claim, not the utility claim.** "Encoding causes
+false positives" invites *refusing homoglyph text is correct behaviour, no
+legitimate user sends it*, and there is no good reply. Whether refusing encoded
+input is desirable has no bearing on whether the measurement can tell two very
+different models apart. It cannot.
 
-> ⚠️ **The QUANTITATIVE form of this leg is corrected (2026-08-10).** It read
-> "within-model spread 0.10–0.27 against a between-model range of 0.56 — the
-> model term dominates by 2–5×, so *gap lost* is primarily a model property."
-> On echo-clean cells the spread is **0.07–0.48** and the dominance **1.1×–7.7×**
-> (§4g, `instrument_layer.md` §3.11.1). **Do not write "primarily a model
-> property" and do not quote 2–5×.** The generalisation itself is unaffected;
-> only the claim that the encoding term is a minor one falls.
+**The claim is about a class of encoders, not one** (§4g): five substrate rungs
+through the same paired design, per-model mean gap lost separating the models by
+0.53.
 
-**2. The controlled series — the remedy does not work, and the metric reports
-its progress backwards (§4f).**
+> ⚠️ **Do not write "primarily a model property" and do not quote 2–5×**
+> (corrected 2026-08-10). On echo-clean cells the within-model spread is
+> 0.07–0.48 and the dominance 1.1×–7.7×. The generalisation is unaffected; only
+> the claim that the encoding term is minor falls.
 
-Tülu 3's SFT → DPO → RLVR on **identical base weights** along a **published**
-recipe with public data. It says two things, and they belong together because
-they come from one series:
+**2. It cannot say WHAT (§4h).** A third arm, the attack template around
+untransformed content, splits the protocol into a template term and a character
+term. On Llama the template alone accounts for **+0.67 of +0.84** and on Tülu
+**+0.28 of +0.37**, while on Qwen it accounts for none of it. What the literature
+attributes to obfuscation is, on half our models, caused by a prompt containing
+nothing obfuscated. **The supported subject is the encoded-prompt PROTOCOL, never
+"encoding".**
 
-*(a) You cannot post-train your way out of it.* The complete pipeline moves
-plaintext harm discrimination **+0.55 → +0.80** and leaves the encoding-induced
-loss unchanged at **0.34–0.50** at every stage and on every rung — non-monotone,
-every endpoint within 0.11 of its start. General over-refusal genuinely improves
-(plaintext benign refusal 0.45 → 0.16). The encoding penalty does not move. A
-dose-response *null* along a recipe whose every stage is documented.
+> ⚠️ **Do not restate this as "the wrapper is the real cause."** That is the same
+> over-attribution one level over, and Qwen refutes it directly.
 
-*(b) The field's metric has the wrong sign on that pipeline.* SFT → RLVR, all
-three rungs — no rung is selected, and it holds on every one:
+**3. It cannot see a repair (§4f, §4s).** Tülu 3's SFT → DPO → RLVR on
+**identical base weights** along a **published** recipe with public data.
 
-| rung | plaintext harmful | **encoded harmful — the reported metric** | encoded harm discrimination |
-|---|---|---|---|
-| `fullwidth` | 1.00 → 0.96 | **0.94 → 0.73** (−0.21) | +0.12 → +0.42 (**+0.30**) |
-| `zero_width` | 1.00 → 0.96 | **1.00 → 0.83** (−0.17) | +0.10 → +0.46 (**+0.36**) |
-| `homoglyph` | 1.00 → 0.96 | **0.99 → 0.94** (−0.05) | +0.20 → +0.46 (**+0.26**) |
+*(a) You cannot post-train your way out of it.* The complete pipeline moves the
+plaintext harm gap **+0.55 → +0.80** and leaves the encoding-induced loss
+unchanged at **0.34–0.50** at every stage and on every rung. General over-refusal
+genuinely improves (plaintext benign refusal 0.45 → 0.16). The shortfall does
+not move.
 
-Plaintext harmful refusal is flat across the whole pipeline. Encoded harmful
-refusal *falls* on all three rungs. Encoded discrimination *rises* on all three.
-**Three quantities, and the one the field reports is the only one pointing the
-wrong way.** A reviewer can dismiss "your metric is noisy"; they cannot dismiss
-"your metric inverts on a published safety pipeline." This is the sharpest
-sentence the evidence supports and it belongs in the abstract.
+*(b) ⚠️ REVISED 2026-08-22 — the flat shortfall is a measured CANCELLATION, not
+an underpowered null, and this is strictly stronger than what it replaced.* On
+homoglyph the encoded harm gap rises **+0.20 → +0.46**, a paired 20,000-draw
+bootstrap over the shared items giving **+0.26 [+0.14, +0.38]**, excluding zero;
+the other two rungs rise +0.30 and +0.36, also excluding. The plaintext gap rises
++0.25. Two large resolved movements cancel to within 0.01.
 
-**3. The instrument.** None of the above is measurable without controls the field
-does not run — the benign arm, the echo screen, the length null, the control
-floor, the plaintext baseline. Every defect found on the behaviour axis inflated
-apparent safety, which is structural rather than coincidental: "no attack
-succeeded" is what a broken safety evaluation returns by default.
+*(c) ⛔ And the reported metric is BLIND to all of it.* Over the identical
+prompts and checkpoints, encoded harmful refusal moves 0.99 → 0.94: five items
+of 100, all one way, exact McNemar **p=0.06**. It does not resolve. **The
+previous wording — "the field's metric has the wrong sign" — is RETIRED.** The
+fall on `fullwidth` (0.94 → 0.73) and `zero_width` (1.00 → 0.83) is real but
+lands on cells the echo screen rejects, so it is reported as a direction and not
+as an effect. Blindness argues the thesis better than inversion anyway: the
+thesis is that one arm cannot see what the other one contains.
 
-**Demotion recorded:** `CLAUDE.md` recommended leading with the measurement
-contribution (leg 3) from 2026-08-07. That was correct when the ladder had
-collapsed and nothing positive had replaced it. It is the third leg now — still
-in the paper, no longer the lead.
+**4. And why none of it was caught (§7 of the kits).** Ten instrument defects,
+each with the control that exposed it. **Six inflate apparent safety**, one is a
+judge artefact running the other way (the binary judge fires on 0.61–0.70 of
+plaintext benign prompts, so it overstates attack success), and three sit on the
+probe axis. The direction is structural rather than coincidental: *no attack
+succeeded* is what a broken safety evaluation returns by default, and nobody
+audits a flattering result. **This is why the demotion recorded in the previous
+version is now moot** — leg 3 is not a third contribution competing with the
+others, it is the answer to "why has nobody seen this", which every reviewer
+asks.
 
-### Why the legs were reordered rather than the title rewritten
+### The sharpest exhibit, and it belongs in the abstract
 
-The title names a *state* of the model. Legs 1 and 2 name a phenomenon and a
-mechanism, and mechanisms are what got refuted — twice in two days. A title
-pinned to a mechanism would have had to be retired with it; this one did not,
-and that is the argument for leaving it alone through the next revision too.
+`handa2025when` build a benchmark of benign text through ten ciphers scored for
+**decoding accuracy**, and evaluate harmful queries through those same ten
+ciphers scored for **attack success**. Both corpora exist, both are transformed,
+and the refusal rate on the benign one is not reported. **The cell was one column
+away.** That converts "we ran a control nobody runs" into "the control was
+already built and scored for the wrong thing", which is far harder to dismiss,
+and it is now in the abstract as well as in related work.
 
-### ✅ The open question is ANSWERED, and the answer was already on disk (2026-08-10)
+### The internals question — ANSWERED, and the answer is that they stay out
 
-**As framed, every number in legs 1 and 2 is a refusal rate on a paired arm. AS-5
-could be written without a single activation capture.** That is not a weakness in
-the result — a phenomenon that needs no probe is harder to attack, and leg 1 says
-so explicitly. But this repo's defining property against its siblings is that it
-goes *inside* the model, and the story of record did not.
+⛔ **AS-5 carries no activation capture, and that is the settled decision (owner
+go, 2026-08-22).** The previous version of this block said the opposite and
+quoted AUROC 0.938–0.995; §4k refuted it as item-identity leakage and §4l records
+the seven-site removal from both kits.
 
-**Design of record: `text_docs/as5/phase1_design.md`.** Read it before planning
-any internals work; this block is the pointer, not a second home.
+Three reasons the decision is not a retreat:
 
-✅ **AND IT IS NOW IN THE PAPER (2026-08-21).** Both kits carry
-`\section{The discrimination is present and unread}` between leg 2 and the
-instrument section, with Table `tab:internals`. The argument the three legs make
-together is §4j. AS-5 is no longer a paper that could be written without an
-activation capture.
+1. Every claim in demonstrations 1–3 is a refusal rate on a paired arm, so there
+   is no probe methodology for a reviewer to attack.
+2. The removed leg became the paper's best self-instance: defect (9) is our own
+   probe reading item identity, found by a control we had not run. A paper about
+   uncontrolled evaluation that reports its own uncontrolled result is more
+   credible, not less.
+3. Putting internals back before phase 1 holds items out properly would repeat
+   the exact failure the paper documents.
 
-The one-line answer, computed from the §4h run records rather than from a new
-run: **a harm direction fit on plaintext separates encoded harmful from encoded
-benign activations at AUROC 0.938–0.995 on all four models, while the
-behavioural harm gap in the same condition spans −0.01 to +0.55.** On
-Llama-3.1-8B that is **0.981 against −0.01**. The discrimination is not lost in
-the representation; it is lost between representation and behaviour. It clears
-the length null (+0.28 to +0.34), a black-box surface baseline (+0.33 to +0.38)
-and XSTest lexical decorrelation — the three screens that have killed previous
-claims here.
-
-⚠️ **Two limits that travel with the number, always:** the control floor is
-UNUSABLE on those runs (`n_controls = 0`, single-family), so licensing is
-permutation-only — §2.5's live defect; and the reading is corroborated by one
-instrument, which is what `deployment.py`'s docstring already required be said.
-Both are stage-1/stage-2 line items in the design doc, not footnotes.
+⚠️ **`text_docs/as5/phase1_design.md` is built on the refuted AUROC and carries a
+warning banner as of 2026-08-22.** Read the banner before using it. The repo's
+inside-the-model identity is carried by AS-6 and by phase 1, not by forcing a leg
+into this paper.
 
 ### The withdrawn leg 2, and where its derivation lives
 
@@ -1016,12 +1030,20 @@ at all.
 ⚠️ **Do not restate the decomposition as "the wrapper is the real cause."** That
 is the same over-attribution one level over, and Qwen refutes it directly.
 
-### Why the title survives, for the third time
+### Why the title survived three times, and what finally retired it
 
-**"Refusal without discrimination" names a state, not a mechanism.** §4f
-withdrew leg 2's mechanism, §4g reversed the model ordering, and §4h now
-reassigns leg 1's subject — and none of the three touched the title, because a
-title pinned to a mechanism would have been retired with it. Leave it alone.
+**"Refusal without discrimination" named a state, not a mechanism**, and that is
+why §4f's withdrawal of leg 2's mechanism, §4g's reversal of the model ordering
+and §4h's reassignment of leg 1's subject all left it standing.
+
+⛔ **It was retired anyway on 2026-08-22, and NOT by a fourth mechanism
+refutation.** Two reasons, both outside the state-vs-mechanism argument:
+"discrimination" misreads as demographic bias at an alignment venue (a referee
+flagged it), and "what encoded prompts do" names a subject THIS SECTION refutes
+on half the models. The state-vs-mechanism lesson stands and is carried into the
+replacement, which also names a state: **"Refusing everything looks safe:
+restoring the benign arm to encoded-prompt evaluation."** Rationale of record:
+§4e.
 
 ### Three caveats a session must not lose
 
