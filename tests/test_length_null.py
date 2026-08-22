@@ -264,3 +264,147 @@ def test_strata_length_mismatch_is_an_error_not_a_silent_misalignment():
         permutation_null_max_transfer_auroc(
             batch(10), batch(10), batch(10), batch(10), config, strata=np.zeros(5, dtype=int)
         )
+
+
+# ---------------------------------------------------------------------------
+# The RATE-scale null (TODO 84 #12/#21, 2026-08-21).
+# ---------------------------------------------------------------------------
+
+from internals_safety.measurements.length_null import (  # noqa: E402
+    RateLengthNull,
+    measure_rate_length_null,
+    stratified_rate_gap,
+)
+
+NULL_KNOBS = dict(n_bins=4, n_permutations=200, quantile=0.95, seed=0)
+
+
+def _texts(lengths):
+    return ["x" * n for n in lengths]
+
+
+class TestTheRateNullSeparatesLengthFromTheEffect:
+    """Both directions. A control that only ever passes is not a control."""
+
+    def test_a_gap_MADE_of_length_does_not_survive_matching(self):
+        """Refusal decided by length alone; the arms differ only in how long they run.
+
+        Overlapping ranges on purpose --- disjoint ones cannot be matched at all,
+        and the instrument correctly returns NaN there rather than a verdict.
+        """
+        harmful_lengths, benign_lengths = list(range(30, 130)), list(range(10, 110))
+        refuses = lambda n: n >= 70  # noqa: E731  # definitional: the fixture's rule
+        null = measure_rate_length_null(
+            "synthetic",
+            _texts(harmful_lengths),
+            _texts(benign_lengths),
+            [refuses(n) for n in harmful_lengths],
+            [refuses(n) for n in benign_lengths],
+            **NULL_KNOBS,
+        )
+        assert null.observed_gap == pytest.approx(0.20)
+        assert abs(null.stratified_gap) < abs(null.observed_gap) / 2
+        # Exactly 0.0, not negative, and that is the point: where the effect is
+        # WHOLLY length, the matched gap and the matched null both collapse to
+        # zero together. The contract's `clears_length_null` requires a strictly
+        # positive margin, so the boundary case fails closed. Asserting the
+        # predicate rather than the sign keeps this test pinned to the rule.
+        assert not null.margin > 0.0
+
+    def test_a_gap_INDEPENDENT_of_length_survives_matching(self):
+        """Identical length distributions, refusal decided by the arm alone."""
+        lengths = _texts(range(20, 120))
+        null = measure_rate_length_null(
+            "synthetic",
+            lengths,
+            list(lengths),
+            [True] * 100,
+            [False] * 100,
+            **NULL_KNOBS,
+        )
+        assert null.observed_gap == pytest.approx(1.0)
+        assert null.stratified_gap == pytest.approx(1.0)
+        assert null.matching_shift == pytest.approx(0.0)
+        assert null.margin > 0.0
+
+    def test_the_shift_is_reported_and_not_gated_on(self):
+        """A gap that moves under matching but survives is still a pass."""
+        harmful_lengths, benign_lengths = list(range(30, 130)), list(range(10, 110))
+        null = measure_rate_length_null(
+            "synthetic",
+            _texts(harmful_lengths),
+            _texts(benign_lengths),
+            [True] * len(harmful_lengths),
+            [n >= 70 for n in benign_lengths],
+            **NULL_KNOBS,
+        )
+        assert null.observed_gap == pytest.approx(0.60)
+        assert null.matching_shift != pytest.approx(0.0)
+        assert null.margin > 0.0
+
+
+class TestStratification:
+    def test_a_bin_with_only_one_arm_contributes_nothing(self):
+        """A stratum with no benign item cannot speak to a difference."""
+        gap, used = stratified_rate_gap(
+            _texts([10, 11, 12, 900]),
+            _texts([10, 11, 12]),
+            [False, False, False, True],
+            [False, False, False],
+            n_bins=4,
+        )
+        assert used < 4
+        assert gap == pytest.approx(0.0)
+
+    def test_no_usable_stratum_is_NaN_never_zero(self):
+        gap, used = stratified_rate_gap(_texts([10]), [], [True], [], n_bins=4)
+        assert used == 0
+        assert gap != gap
+
+    def test_empty_input_is_NaN_never_zero(self):
+        gap, used = stratified_rate_gap([], [], [], [], n_bins=4)
+        assert used == 0
+        assert gap != gap
+
+
+class TestItFailsClosed:
+    def test_a_NaN_stratified_gap_propagates_to_the_margin(self):
+        null = RateLengthNull(
+            family="f",
+            observed_gap=0.5,
+            stratified_gap=float("nan"),
+            null_quantile=0.1,
+            n_bins=4,
+            n_strata_used=0,
+            n_positive=0,
+            n_negative=0,
+        )
+        assert null.margin != null.margin
+
+    def test_the_margin_is_two_sided(self):
+        """A negative gap of the same size clears identically.
+
+        Direction is the `claim`'s business; a control that only recognised
+        positive gaps would silently pass every reading asserting a reversal.
+        """
+        forward = RateLengthNull("f", 0.4, 0.4, 0.1, 4, 4, 50, 50)
+        reverse = RateLengthNull("f", -0.4, -0.4, 0.1, 4, 4, 50, 50)
+        assert forward.margin == pytest.approx(reverse.margin)
+
+
+def test_the_same_seed_gives_the_same_null():
+    args = ("synthetic", _texts(range(20, 70)), _texts(range(20, 70)), [True] * 50, [False] * 50)
+    first = measure_rate_length_null(*args, **NULL_KNOBS)
+    second = measure_rate_length_null(*args, **NULL_KNOBS)
+    assert first.null_quantile == pytest.approx(second.null_quantile)
+
+
+def test_every_knob_is_keyword_only_and_has_no_default():
+    """The sibling defect was a caller silently getting a passing value."""
+    import inspect
+
+    signature = inspect.signature(measure_rate_length_null)
+    for name in ("n_bins", "n_permutations", "quantile", "seed"):
+        parameter = signature.parameters[name]
+        assert parameter.kind is inspect.Parameter.KEYWORD_ONLY, name
+        assert parameter.default is inspect.Parameter.empty, name

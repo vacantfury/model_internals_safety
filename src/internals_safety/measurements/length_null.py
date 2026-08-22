@@ -169,3 +169,179 @@ def measure_length_null(
         n_positive=len(plain_positive),
         n_negative=len(plain_negative),
     )
+
+
+# ---------------------------------------------------------------------------
+# The RATE-scale null (2026-08-21, TODO 84 #12/#21).
+#
+# `LengthNull` above answers P3 for a reading whose `value` is an AUROC. Two
+# readings on the roster carry a RATE instead — `behavior` (an attack-success
+# rate) and `refusal` (a difference of two refusal rates) — and both were being
+# handed `LengthNull.margin()`, which subtracts a character-length AUROC from
+# them. A rate and an AUROC are not the same scale, so that difference is not a
+# measurement: it is negative by construction whenever the rate is small, which
+# withheld every behaviour-axis reading in all 31 runs on disk for a reason that
+# never examined the data.
+#
+# The mistake was PREDICTED IN WRITING, in a comment sitting in the same list
+# literal as one of the two violating calls ("that one compares a rate against a
+# character-length AUROC, which is not the same scale"). This repo has now paid
+# for the lesson three times: a note predicting a defect is not a guard against
+# it. Hence `tests/test_entrypoint_call_sites.py`, which makes the call
+# unrepresentable rather than the instance detectable.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RateLengthNull:
+    """P3 for a rate-scale reading: does the effect survive length matching?
+
+    The probe-side null asks whether an AUROC beats what character length alone
+    achieves. A rate difference has no such baseline classifier, so the analogue
+    is a **length-matched permutation**: bin both arms by ciphertext length, and
+    permute the harmful/benign labels WITHIN bins. Length is held constant by
+    construction, so the resulting distribution of gaps is what length alone can
+    manufacture on this corpus, and the margin is how far the observed gap
+    clears it.
+
+    Binning uses `quantile_strata`, the same rule as `length_strata` — one home,
+    because two callers binning length differently is how a "length-matched"
+    claim becomes two claims wearing one name.
+    """
+
+    family: str
+    observed_gap: float
+    stratified_gap: float
+    null_quantile: float
+    n_bins: int
+    n_strata_used: int
+    n_positive: int
+    n_negative: int
+
+    @property
+    def margin(self) -> float:
+        """How far the length-matched gap clears the length-matched null.
+
+        Magnitudes on both sides: the null is two-sided (a permutation can throw
+        the gap either way) and a reading's direction is the `claim`'s business,
+        never this control's. NaN propagates rather than being swallowed, so an
+        unmeasurable null fails closed at `clears_length_null`.
+        """
+        return abs(self.stratified_gap) - self.null_quantile
+
+    @property
+    def matching_shift(self) -> float:
+        """How far length matching MOVED the gap. Reported, never gated on.
+
+        A large shift with a surviving margin is still a pass; it says the raw
+        number was partly length and the remainder is not. Collapsing the two
+        into one gate would hide which happened.
+        """
+        return self.stratified_gap - self.observed_gap
+
+
+def stratified_rate_gap(
+    positive_texts: Sequence[str],
+    negative_texts: Sequence[str],
+    positive_flags: Sequence[bool],
+    negative_flags: Sequence[bool],
+    n_bins: int,
+) -> tuple[float, int]:
+    """Length-stratified difference of two rates, and how many bins contributed.
+
+    Bins with only one arm present contribute nothing — a stratum containing no
+    benign item cannot say anything about a difference — and are excluded from
+    the weights rather than counted as a zero difference.
+    """
+    lengths = [float(len(text)) for text in positive_texts]
+    lengths += [float(len(text)) for text in negative_texts]
+    if not lengths:
+        return float("nan"), 0
+    strata = list(quantile_strata(lengths, n_bins))
+    cut = len(positive_texts)
+    positive_strata, negative_strata = strata[:cut], strata[cut:]
+
+    numerator = denominator = 0.0
+    used = 0
+    for stratum in sorted(set(strata)):
+        pos = [f for f, s in zip(positive_flags, positive_strata) if s == stratum]
+        neg = [f for f, s in zip(negative_flags, negative_strata) if s == stratum]
+        if not pos or not neg:
+            continue
+        weight = float(len(pos) + len(neg))
+        numerator += weight * (sum(pos) / len(pos) - sum(neg) / len(neg))
+        denominator += weight
+        used += 1
+    if denominator == 0.0:
+        return float("nan"), 0
+    return numerator / denominator, used
+
+
+def measure_rate_length_null(
+    family: str,
+    positive_texts: Sequence[str],
+    negative_texts: Sequence[str],
+    positive_flags: Sequence[bool],
+    negative_flags: Sequence[bool],
+    *,
+    n_bins: int,
+    n_permutations: int,
+    quantile: float,
+    seed: int,
+) -> RateLengthNull:
+    """Fit the length-matched permutation null for one condition's rate gap.
+
+    Every knob is keyword-only with no default. The omission that produced this
+    module's sibling defect was a caller silently getting a passing value, so
+    nothing here can be reached by forgetting it.
+    """
+    import numpy as np
+
+    positive = [bool(flag) for flag in positive_flags]
+    negative = [bool(flag) for flag in negative_flags]
+    observed = (
+        (sum(positive) / len(positive) - sum(negative) / len(negative))
+        if positive and negative
+        else float("nan")
+    )
+    stratified, used = stratified_rate_gap(
+        positive_texts, negative_texts, positive, negative, n_bins
+    )
+
+    lengths = [float(len(text)) for text in positive_texts]
+    lengths += [float(len(text)) for text in negative_texts]
+    strata = np.array(quantile_strata(lengths, n_bins), dtype=int) if lengths else np.empty(0, int)
+    flags = np.array(positive + negative, dtype=bool)
+    labels = np.array([True] * len(positive) + [False] * len(negative), dtype=bool)
+
+    rng = np.random.default_rng(seed)
+    draws: list[float] = []
+    for _ in range(n_permutations):
+        shuffled = labels.copy()
+        for stratum in np.unique(strata):
+            where = np.flatnonzero(strata == stratum)
+            shuffled[where] = rng.permutation(shuffled[where])
+        numerator = denominator = 0.0
+        for stratum in np.unique(strata):
+            where = np.flatnonzero(strata == stratum)
+            pos = flags[where][shuffled[where]]
+            neg = flags[where][~shuffled[where]]
+            if pos.size == 0 or neg.size == 0:
+                continue
+            weight = float(pos.size + neg.size)
+            numerator += weight * (float(pos.mean()) - float(neg.mean()))
+            denominator += weight
+        draws.append(abs(numerator / denominator) if denominator else float("nan"))
+
+    finite = [value for value in draws if value == value]
+    null_quantile = float(np.quantile(finite, quantile)) if finite else float("nan")
+    return RateLengthNull(
+        family=family,
+        observed_gap=observed,
+        stratified_gap=stratified,
+        null_quantile=null_quantile,
+        n_bins=n_bins,
+        n_strata_used=used,
+        n_positive=len(positive),
+        n_negative=len(negative),
+    )

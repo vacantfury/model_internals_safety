@@ -176,6 +176,66 @@ def test_no_script_constructs_an_EncodedPrompt_by_hand():
     )
 
 
+RATE_SCALE_READINGS = ("refusal", "behavior")
+
+
+def _auroc_null_margin(node: ast.AST) -> bool:
+    """Does this expression read `<something>length_null.margin`, the AUROC one?"""
+    return any(
+        isinstance(child, ast.Attribute)
+        and child.attr == "margin"
+        and isinstance(child.value, ast.Name)
+        and "length_null" in child.value.id
+        for child in ast.walk(node)
+    )
+
+
+def test_no_rate_scale_reading_is_handed_the_AUROC_length_null():
+    """A rate and a character-length AUROC are not the same scale (TODO 84 #12/#21).
+
+    **The defect this makes unrepresentable.** `LengthNull.margin()` answers P3
+    for a reading whose `value` is an AUROC: it subtracts the AUROC that raw
+    character length alone achieves. Two readings on the roster carry a RATE
+    instead --- `behavior` (an attack-success rate) and `refusal` (a difference
+    of refusal rates) --- and both were handed that method. Subtracting 0.654
+    from a rate near zero is negative by construction, so **every behaviour-axis
+    reading in all 31 runs on disk was withheld for a reason that never examined
+    the data**, and P3 on that axis had never once been evaluated.
+
+    **What could not have caught it.** `WATCHED` binds signatures, and this call
+    bound perfectly: `margin(self, observed_auroc: float)` accepts any float. The
+    scale lives in the parameter's NAME, which no signature check reads.
+
+    **And a comment already said so.** The list literal holding one of the two
+    violating calls opens with *"P3 comes from the control's length-matched arm,
+    NOT from the shared `length_null` object: that one compares a rate against a
+    character-length AUROC, which is not the same scale."* Then two of the three
+    readings below it did exactly that. Third time this repo has paid for the
+    same lesson: a note predicting a defect is not a guard against it.
+
+    Rate readings take `measure_rate_length_null`, which permutes the arms'
+    labels WITHIN length strata and is on the rate's own scale.
+    """
+    offenders = []
+    for path in script_paths():
+        for node in ast.walk(ast.parse(path.read_text())):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                continue
+            if node.func.attr != "reading" or not isinstance(node.func.value, ast.Name):
+                continue
+            if not any(kind in node.func.value.id for kind in RATE_SCALE_READINGS):
+                continue
+            for keyword in node.keywords:
+                if keyword.arg == "length_null_margin" and _auroc_null_margin(keyword.value):
+                    offenders.append(f"{path.name}:{node.lineno}")
+    assert not offenders, (
+        f"{offenders} hand the AUROC-scale length null to a rate-scale reading. "
+        "Use `measure_rate_length_null` — subtracting a character-length AUROC "
+        "from a rate withholds every reading for a reason that never looked at "
+        "the data."
+    )
+
+
 def second_device() -> str | None:
     """A real device that is not CPU, or None.
 

@@ -103,7 +103,11 @@ from internals_safety.measurements.ability_control import measure_ability_contro
 from internals_safety.measurements.behavior import measure_behavior
 from internals_safety.measurements.deployment import measure_deployment, read_deployment_per_prompt
 from internals_safety.measurements.black_box_baseline import measure_black_box_baseline
-from internals_safety.measurements.length_null import length_strata, measure_length_null
+from internals_safety.measurements.length_null import (
+    length_strata,
+    measure_length_null,
+    measure_rate_length_null,
+)
 from internals_safety.measurements.recognition import (
     HARMFULNESS_POSITION,
     measure_recognition,
@@ -1263,8 +1267,36 @@ def run_family(
                 benign_echoed=[record.echoed_ciphertext for record in benign_records],
             ).screen()
 
+        # P3 for a RATE reading (TODO 84 #12/#21). NOT `length_null.margin()` —
+        # that subtracts a character-length AUROC from a rate, which is not the
+        # same scale and is negative by construction for any small rate. The
+        # comment twenty lines below this one said exactly that and two of the
+        # three readings in that list did it anyway; `test_entrypoint_call_sites`
+        # now forbids the call instead of warning about it.
+        #
+        # Knobs are the probe layer's, deliberately reused rather than minted:
+        # the binning rule is literally the same function, and a second set of
+        # untuned numbers is what the config-discipline law exists to prevent.
+        def rate_null_margin(harmful_records, benign_records, condition_family: str):
+            null = measure_rate_length_null(
+                condition_family,
+                [record.ciphertext for record in harmful_records],
+                [record.ciphertext for record in benign_records],
+                [record.refused for record in harmful_records],
+                [record.refused for record in benign_records],
+                n_bins=measurements.probes.length_strata_bins,
+                n_permutations=measurements.probes.n_permutations,
+                quantile=1.0 - measurements.probes.alpha,
+                seed=measurements.probes.seed,
+            )
+            return null.margin
+
         conditions = [
-            (encoded_gap, exposure_screen(behavior_records, benign_behavior_records, family))
+            (
+                encoded_gap,
+                exposure_screen(behavior_records, benign_behavior_records, family),
+                rate_null_margin(behavior_records, benign_behavior_records, family),
+            )
         ]
         if scaffold_detail and scaffold_behavior_records and scaffold_benign_behavior_records:
             conditions.append(
@@ -1277,6 +1309,11 @@ def run_family(
                         benign_refusal_rate=scaffold_detail["scaffold_benign_refusal_rate"],
                     ),
                     exposure_screen(
+                        scaffold_behavior_records,
+                        scaffold_benign_behavior_records,
+                        f"scaffold:{family}",
+                    ),
+                    rate_null_margin(
                         scaffold_behavior_records,
                         scaffold_benign_behavior_records,
                         f"scaffold:{family}",
@@ -1298,9 +1335,9 @@ def run_family(
                 plain_gap=plain_harm_gap,
                 sensitivity_floor=measurements.refusal.min_plain_gap,
                 echo_screen=screen,
-                length_null_margin=length_null.margin(condition.gap),
+                length_null_margin=rate_margin,
             )
-            for condition, screen in conditions
+            for condition, screen, rate_margin in conditions
         ]
 
     # The XSTest lexical control, read at the cell this rung's deployment claim
@@ -1389,7 +1426,24 @@ def run_family(
         # benign-encoded arm, so there is no ASR control to pass.
         behavior_module.reading(
             behavior_summary,
-            length_null_margin=length_null.margin(behavior_summary.attack_success_rate),
+            # ASR is a rate, so P3 is the length-matched permutation null, not
+            # the probe-side AUROC baseline. `None` without a benign arm, which
+            # the contract treats as disqualifying — never a passing 0.0.
+            length_null_margin=(
+                measure_rate_length_null(
+                    family,
+                    [record.ciphertext for record in behavior_records],
+                    [record.ciphertext for record in benign_behavior_records],
+                    [record.jailbroken for record in behavior_records],
+                    [record.jailbroken for record in benign_behavior_records],
+                    n_bins=measurements.probes.length_strata_bins,
+                    n_permutations=measurements.probes.n_permutations,
+                    quantile=1.0 - measurements.probes.alpha,
+                    seed=measurements.probes.seed,
+                ).margin
+                if benign_behavior_records
+                else None
+            ),
             controls=behavior_screens,
             detail={**behavior_control_detail, **scaffold_detail},
         ),

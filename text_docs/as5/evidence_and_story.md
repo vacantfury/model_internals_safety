@@ -1625,6 +1625,127 @@ refutations had correct premises and wrong conclusions, which is a different
 failure from being wrong, and it is why the remaining eight are still worth
 checking rather than assuming.
 
+## 4o. THE NEXT FOUR FINDINGS — #12 and #21 are the same defect from two sides, and the correct control had never been run (2026-08-21)
+
+### 4o.1 ⛔ #11 REFUTED — a 4x token inflation is not a 4x confound
+
+The finding: homoglyph multiplies token count about fourfold, so the length
+confound is amplified in tokens while BOTH length controls measure characters.
+
+**Its premise is exactly right and independently confirmed.** `length_null.py`
+measures `len(text)` in characters at every site, and
+`outputs/analysis/alphabet_fertility.json` puts homoglyph's tokens-per-character
+at **4.12x plaintext on Llama and 4.15x on Qwen** — the finding's number to two
+digits.
+
+**The conclusion does not follow, because both statistics are RANK-based.** The
+inflation is near-uniform across items, so token and character length are
+Spearman-correlated at **0.980**, and a near-monotone transform leaves an AUROC
+and a quantile stratification almost unchanged. Measured on the tokenizers
+themselves, offline:
+
+| | length AUROC (chars) | length AUROC (tokens) | stratified gap (chars) | (tokens) |
+|---|---|---|---|---|
+| Llama-3.1-8B-It | 0.6544 | 0.6512 | +0.002 | +0.005 |
+| Qwen2.5-7B-It | 0.6544 | 0.6469 | +0.566 | +0.589 |
+
+Switching to tokens would if anything WEAKEN the control: the token-stratified
+gap sits closer to the raw gap than the character-stratified one does. **The
+general form: fertility measures how much an encoding inflates length on
+average; a confound is how much length VARIES BETWEEN THE ARMS. A uniform
+multiplier moves the first and not the second.** Homoglyph is character-preserving,
+so the arms' 86.0-vs-73.8 character difference is the corpus's own and the
+encoder does not touch it — which is precisely the case the length null was built
+for.
+
+### 4o.2 ⚠️ #12 AND #21 CONFIRMED — and they are one defect seen from two sides
+
+**#21's letter is wrong and its spirit is right.** It said the contract marks
+every `behavior` reading `reportable = False` and the paper's prose may
+contradict it. The withheld verdict is real — all 31 runs — but it is about the
+ASR, and the paper reports no ASR by an explicit scope statement. **No published
+number is disowned by its own record.** What is true is worse in a different
+direction: **no run on disk carries a `refusal` reading at all.** The instrument
+for the quantity legs 1 and 2 are made of was wired into the entrypoint on
+2026-08-09, after every run that produced a paper number, and it is guarded by
+`if benign_behavior_records:` — so the paper's headline has never received a
+contract verdict of any kind.
+
+**#12 explains why it would have been withheld anyway, and it is a category
+error.** `LengthNull.margin()` returns `observed_auroc - encoded_auroc`. Two
+readings on the roster carry a RATE — `behavior` (an ASR) and `refusal` (a
+difference of refusal rates) — and both were handed that method. Subtracting a
+character-length AUROC of 0.654 from a rate near zero is negative by
+construction. That is the whole of `withheld[behavior]`'s *"inside the length
+null by 0.634"*: a number that never examined the data. **P3 on the behaviour
+axis had never once been evaluated.**
+
+⚠️ **And the defect was predicted in writing, in the same list literal as one of
+the two violating calls.** `phase0_regime_map.py`'s readings list opens with
+*"P3 comes from the control's length-matched arm, NOT from the shared
+`length_null` object: that one compares a rate against a character-length AUROC,
+which is not the same scale. Passing it here would satisfy P3 with a number that
+never examined this measurement."* Two of the three readings below it did exactly
+that. **Third time this estate has paid for the same lesson: a note predicting a
+defect is not a guard against it.** `WATCHED` could not have caught it either —
+the call binds perfectly, because the scale lives in the parameter's NAME.
+
+### 4o.3 ✅ THE CORRECT CONTROL, RUN FOR THE FIRST TIME, PASSES
+
+`measure_rate_length_null` permutes the harmful/benign labels WITHIN
+quantile bins of ciphertext length, using `quantile_strata` — the same binning
+function as the probe side, because two callers binning length differently is how
+one "length-matched" claim becomes two. On the headline condition:
+
+| model | raw gap | length-matched | shift | null 95% | margin | clears |
+|---|---|---|---|---|---|---|
+| Llama-3.1-8B-It | +0.000 | +0.002 | +0.002 | 0.022 | −0.021 | no |
+| Qwen2.5-7B-It | +0.590 | +0.566 | −0.024 | 0.139 | **+0.427** | yes |
+| Tülu-3-8B | +0.420 | +0.406 | −0.014 | 0.137 | **+0.269** | yes |
+| Mistral-7B-v0.3 | +0.250 | +0.253 | +0.003 | 0.120 | **+0.133** | yes |
+
+**The harm gap is not a length artefact**, and the largest shift under matching
+is 0.024, inside the run-to-run replicate spread from §4n. Llama's "no" is the
+correct verdict rather than a failure: its gap IS zero, and a null cannot be
+cleared by nothing. ⚠️ **That exposes a real design question, named rather than
+silently fixed:** `phase0_regime_map.py` declares `claim="null" if cant_decode
+else "positive"`, so Llama's collapse-to-zero would be declared POSITIVE and
+withheld for failing an inflation control it structurally cannot pass. The two
+nulls being conflated are *"this rung cannot be decoded"* and *"discrimination is
+absent under this condition"*. Deriving the claim from the number instead is
+exactly the dodge `contract.py`'s docstring forbids, so this is a decision to
+make deliberately, not a line to change.
+
+**Fixed structurally, not by threading the rule to its callers.** Both call sites
+now take the rate null, and `tests/test_entrypoint_call_sites.py` forbids any
+script from handing `length_null.margin(...)` to a rate-scale reading —
+mutation-verified: reverting one call site reddens exactly that test.
+
+### 4o.4 ⚠️ #17 CONFIRMED, WITH A NUMBER — one screen reads the outcome
+
+The paper says homoglyph is "the rung on which every screen passes". Three of
+those screens are properties of the ENCODING and cannot see a refusal rate:
+readability, invertible-but-unreadable by construction, lexical transparency. The
+**echo screen can** — it is a stability criterion on the reported gap itself.
+
+Measured over the 27 model-by-rung cells with both arms on disk: passing
+correlates with the gap's magnitude at **r = −0.486 (p = 0.010)**, against
+**r = −0.589 (p = 0.0012)** with the echo rate that drives it. So the screen is
+mostly doing what it says, and it is **not outcome-blind**. Direction matters and
+runs against us: rungs with LARGER encoded gaps are discarded more often, and a
+large encoded gap is evidence *against* the collapse leg 1 reports.
+
+The right response is disclosure, not correction. The screen is required for
+validity — dropping it admits rungs whose refusal verdicts are majority artefact
+— and the residual bias is a fraction of a correlation on 27 cells. Both kits now
+say which screens are blind and which is not, and Limitations carries the
+numbers.
+
+**Running verdict: 11 checked, 8 held, 3 refuted.** All three refutations had
+correct premises. #11 is the cleanest example yet of the pattern — it verified a
+tokenizer fact to two digits and then drew a conclusion the fact does not
+support.
+
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
 Jobs `9010897` (Mistral-7B-Instruct-v0.3, 1:15:12) and `9011034` (Tulu-3-8B,
