@@ -1273,3 +1273,71 @@ sentence three subsections later which still ranges over it.
 "across all N" claim in a paper, recompute N from the artifact and confirm the
 set matches the set the screens produce.** Both of this section's defects are
 visible in one pass over `results.json`, and neither is visible from the prose.
+
+## 16. THE TWO-SCREEN CONVERGENCE WAS TRUE AND MISDESCRIBED: ONE SCREEN'S VERDICT IS LARGELY FIXED BY ABILITY (2026-08-21)
+
+Found by the peer session's method (`paper_claims.py` / `claim_sets.py`, `dadbe6a`):
+recompute a counted claim's SET from the record rather than tracing the number
+forward. Applied to AS-6's `\subsection{Two independent screens converge}`. The
+counts survive; what the agreement means does not.
+
+### The claim as it stood
+
+> On WildGuard, the conditions whose licensing is unstable under the number of
+> length strata (5, 10, 20) are exactly the three the control floor rejects, and
+> the conditions that are stable are exactly the four it keeps. The two screens
+> share no input [...] so the agreement is evidence rather than construction.
+
+### Three defects, none of which moves a number
+
+**(a) The universe was unstated.** "The three the control floor rejects" is true
+only inside the set WildGuard licenses at ten strata, which is seven conditions.
+Over all 19 the floor rejects 15. A referee recomputing the set from the record
+gets 15 and reads a contradiction. Now stated as "of the seven conditions
+WildGuard licenses at ten strata". Same shape as §15's "all 38 pairs".
+
+**(b) ⛔ The floor's verdict on those three is largely fixed once ability is
+known, so the surprise value is entirely on the other screen.** The three are
+`base64`, `rot13`, `caesar7`. All three have Mistral-7B-v0.3 ability 0.00, and
+**two of them are inputs to the floor itself** (the floor of record is 11
+controls = the ability-0.00 rungs of job `9031680`; `rot13` and `caesar7` are
+both in it), where `clears()`'s control special-case makes clearing impossible
+by construction. `base64` is ability-0.00 too and is outside the 11 only by the
+bookkeeping accident §0.6 records (measured in an earlier Mistral run the floor
+job did not read).
+
+Arithmetic that pins it, and it closes exactly: the 19-condition ladder minus
+the five rungs Mistral decodes (`homoglyph`, `zero_width`, `reverse_words`,
+`combining_marks`, `fullwidth`) is 14 ability-0.00 rungs; minus the three
+excluded (`base64`, `reverse_characters`, `tag_block`) is **11**, and `rot13`
+and `caesar7` are in that eleven while `base64` is not.
+
+So "the two screens share no input" is TRUE as stated about inputs and
+MISLEADING as an argument, because one screen's output on the disputed
+conditions is near-deterministic in ability. The claim that survives is the
+better one and is now what the paper says: **bin-stability never consults
+ability and recovers the ability partition anyway**, so instability under the
+null tracks the base model's inability to decode.
+
+**(c) The fourth "keep" is the paper's own unresolvable cell.** WildGuard
+`combining_marks` clears the post-holdout floor by **+0.003** (0.6644 against
+0.6617) with a 95% band [0.574, 0.751] that straddles the floor completely. §9
+point 1 uses exactly that cell to argue that Llama Guard `fullwidth` at −0.0009
+must be `(U)` and never "demoted by 0.0009", because "a cell that fails by a
+thousandth is not distinguishable from one that passes by a thousandth". **The
+paper applied that symmetry to `fullwidth` and not to `combining_marks`**, and a
+counted claim depended on which way it went. Now stated: the partition is exact
+on six of the seven and unresolved on the seventh.
+
+### The lesson, which is the peer's with one more turn on it
+
+§15 found a bound whose SET had gone stale. This is the same check finding a
+claim whose set is exactly right and whose **warrant** is not: every count in the
+sentence recomputes correctly, and the inference the sentence draws from those
+counts does not hold. A set-recomputation guard catches (a) and cannot catch (b),
+because (b) is about where a verdict comes from rather than what it is. The
+mechanical half of the peer's design is not weakened by this; it is the reason
+to keep a human read on the warrant after the counts reconcile.
+
+No number in Table 1, Table 2 or Table 3 moves. Both kits patched and rebuilt,
+0 overfull / 0 undefined, 588 paper guards green.
