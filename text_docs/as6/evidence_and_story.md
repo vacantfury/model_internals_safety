@@ -1341,3 +1341,81 @@ to keep a human read on the warrant after the counts reconcile.
 
 No number in Table 1, Table 2 or Table 3 moves. Both kits patched and rebuilt,
 0 overfull / 0 undefined, 588 paper guards green.
+
+## 17. ⛔ FIVE ITEMS WERE BLOCKED ON A MISIDENTIFIED JOB ID, AND THE DATA WAS LOCAL THE WHOLE TIME (2026-08-21)
+
+The down-sync ran. Five artifacts landed (`as6_split_half_transfer.json` and the
+four `as6_floor_*`). **Run `9033528` was not among them, because it is not the
+run anyone was waiting for.**
+
+### The misidentification
+
+`instrument_layer.md` §6.3.2 records `9033528` as the **causal-intervention run**
+on Llama Guard 3 8B, 2026-08-09, the one that returned `n_eligible: 0`. Its row
+in that section's table reads `9033528 | Llama Guard 3 8B | 0.974 | +0.023 | 0`.
+
+`evidence_and_story.md` §8.1 recorded the same id as *"the paper's run `9033528`
+at 75, whose records are not local"*, and TODO items 78, 79, 88, 89 and 96
+inherited that sentence. Both statements could not be true. The causal run is the
+correct reading, and every AS-6 run record on disk carries
+`reading_percentile = 50.0`, so there is no percentile-75 run to sync.
+
+### Where Table 2 actually comes from, verified rather than inferred
+
+`outputs/analysis/operating_point_{llama_guard_3_8b,wildguard}_20260808.json`,
+**local since 2026-08-08**, carry a per-condition sweep over six operating
+points (50, 75, 90, 95, 99, 99.5) with `decoded_not_blocked`,
+`blocked_without_decoding`, `blocked_on_content`, `never_decoded` and
+`unmeasured` at each. All six of Table 2's `D&¬B` counts reproduce **exactly** at
+percentile 75:
+
+| guard | condition | paper | artefact p75 | p50 |
+|---|---|---|---|---|
+| Llama Guard | homoglyph | 7 | **7** | 8 |
+| Llama Guard | zero_width | 17 | **17** | 17 |
+| Llama Guard | reverse_words | 8 | **8** | 25 |
+| WildGuard | homoglyph | 23 | **23** | 23 |
+| WildGuard | zero_width | 23 | **23** | 28 |
+| WildGuard | reverse_words | 9 | **9** | 16 |
+
+So the numbers were never unprovenanced; the pointer to them was wrong.
+
+### The sweep, which is external review con 5, computed at $0
+
+| guard | condition | 50 | 75 | 90 | 95 | 99 | 99.5 |
+|---|---|---|---|---|---|---|---|
+| Llama Guard | homoglyph | 8 | 7 | 6 | 5 | 3 | 3 |
+| Llama Guard | zero_width | 17 | 17 | 17 | 13 | 8 | 1 |
+| Llama Guard | reverse_words | 25 | 8 | 1 | 0 | 0 | 0 |
+| WildGuard | homoglyph | 23 | 23 | 13 | 10 | 3 | 0 |
+| WildGuard | zero_width | 28 | 23 | 21 | 13 | 7 | 7 |
+| WildGuard | reverse_words | 16 | 9 | 2 | 0 | 0 | 0 |
+
+**The two substantive cells are robust and the control is not.** `homoglyph` and
+`zero_width` stay populated on both guards out to the 99th percentile;
+`reverse_words` collapses to 0 by the 95th on both. That is the expected
+signature for a condition whose signal is lexical surface rather than decoding,
+so the sweep independently supports its `\dagger` control label.
+
+**And it confirms §5.8's operating-point reasoning as a measurement.** Max
+`blocked_without_decoding` across all conditions climbs 8 → 31 → 54 → 56 → 71 →
+72 (Llama Guard) and 1 → 4 → 16 → 39 → 46 → 46 (WildGuard) as the read tightens.
+§5.8 asserts that the permissive point is the conservative choice for that
+particular claim, on the argument that tightening moves prompts out of
+*decoded*. The sweep shows exactly that, by a factor of nine.
+
+### What is genuinely still gated, stated precisely this time
+
+Only the wrapper/benign factorial (con 8). WildGuard's benign arm is local
+(`guard-benign-wildguard_…9010639`); Llama Guard's is not, and no local run
+record contains a wrapper arm at all. That is a real gap and it needs its own
+job id identified rather than a guessed one.
+
+### The lesson
+
+This is §15 and §16's check pointed at a POINTER instead of a count: a blocking
+claim is a claim, and it recomputes. Five items sat behind one id for a day, the
+sentence naming it was contradicted by another canonical doc in the same repo,
+and the resolution cost one grep. **Before recording work as blocked on an
+artefact, confirm the artefact is the one the work needs** by reproducing one
+number the work depends on.
