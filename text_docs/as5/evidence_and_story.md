@@ -2196,6 +2196,105 @@ say something different ("every read is per-prompt") and were left alone, but th
 justification is about *attribution* rather than *numerical invariance* and is
 unmeasured. Filed, not swept.
 
+## 4u. THE THIRD REFEREE: same 4/reject, but it CONFIRMS two repairs and lands one objection we cannot answer from disk (2026-08-21)
+
+A third report arrived against the restructured, retitled draft. Rating **4,
+confidence 4**, same as the other two. The score is the least informative thing
+in it. Three results, in descending order of how much they should change what we
+do next.
+
+**(1) Two of §4r's five surviving objections are now CLOSED, and the referee
+lists both as PROS.** §4r's intersection list read: (a) no uncertainty or raw
+arms on the pipeline table, (b) no human-annotated judge validation, (c) no
+reproducibility appendix, (d) nothing held out, (e) verbal claims outrun the
+corpus. Items 91 and 92 fixed (a) and (c). This referee's pro #7 is "the
+reproduction section is detailed in several useful respects", naming pages 9
+through 11 by content, and its pro #2 calls the scaffold arm "much stronger than
+the usual plaintext-versus-encoded comparison" and works through Table 2's
+numbers unprompted. **A fix landing as a stated pro is the strongest evidence a
+referee objection was real and is now answered**, and it is worth recording that
+both were closed offline, at zero spend.
+
+⚠️ **Nothing in the report attacks the story, the thesis, or the title.** The
+restructure of §4e is not mentioned as a weakness anywhere; the four
+demonstrations appear as pros 1, 2, 3 and 5. The one framing hit is narrow and
+cheap: con #11 objects to "a model that has learned to refuse a font" as
+rhetoric that blurs a failed metric with failed safety behaviour. That is a
+phrase, not a structure.
+
+**(2) The remaining blockers are the SAME two, now named by all three referees
+independently.** This report's own "why not one level up" names exactly:
+a held-out confirmatory evaluation, independent or human validation of the
+refusal labels, and evidence across multiple clean encodings. Cons #1 and #9
+both press the selection problem, con #3 presses the judge. That three referees
+reading three different drafts converge on the same two is worth more than any
+one of them saying it: **the repo's own triage was right, and the gap is
+executional rather than conceptual.**
+
+**(3) ⛔ THE NEW OBJECTION IS CON #4, AND WE CANNOT ANSWER IT FROM CACHED DATA
+BECAUSE THE BENIGN ARM HAS NO ABILITY MEASUREMENT.** The referee's confidence
+statement names it as the unresolved core: whether the harm gap reflects
+selective safety or merely differential comprehension. Its Q#4 asks for the
+direct test, and the test is the right one: measure decode accuracy on BOTH
+arms, then condition the refusal analysis on prompts demonstrably decoded in
+both. **Checked against the artifacts, not from memory: `benign_cells.jsonl`
+carries `refused`, `jailbroken` and `echoed_ciphertext` and no ability column,
+on every both-arm run on disk** (`spread-*`, `ladder-plain-*`,
+`scaffold-control-*`). This is deliberate and the code says so at
+`scripts/phase0_regime_map.py:1032`: "ability is a decode-and-restate
+measurement taken on the harmful arm only, and writing a null where a
+measurement never happened is the defect this repo has now fixed four times."
+The refusal to fake it was correct. The consequence was not foreseen.
+
+⚠️ **The asymmetry is the paper's own thesis, one level in.** AS-5's claim is
+that the field measures only the harmful arm and therefore cannot tell
+discrimination from blanket refusal. Our instrument measures ability only on the
+harmful arm and therefore cannot tell harm-sensitivity from differential
+comprehension. Same shape, our side of the glass. It belongs in §7 as a defect
+whether or not the run happens.
+
+**(4) A SECOND CLEAN ENCODING IS ALREADY ON DISK: `math_bold` clears the echo
+screen on all four models.** Run `scripts/echo_displacement.py
+outputs/runs/phase0/*/spread-*` (keyless, GPU-free, seconds) and the screen
+verdicts are:
+
+| rung | Llama | Qwen | Tülu | Mistral | clean gaps (L/Q/T/M) |
+|---|---|---|---|---|---|
+| homoglyph | CLEARS | CLEARS | CLEARS | CLEARS | +0.00 / +0.62 / +0.41 / +0.24 |
+| math_bold | CLEARS | CLEARS | CLEARS | CLEARS | +0.21 / +0.74 / +0.31 / +0.00 |
+| fullwidth | FAILS | FAILS | FAILS | CLEARS | displacement 0.16-0.21 over bars 0.07-0.13 |
+| zero_width | FAILS | FAILS | FAILS | CLEARS | displacement 0.12-0.18 over bars 0.07-0.14 |
+| base64, tag_block | degenerate | degenerate | degenerate | degenerate | ability 0.00 everywhere |
+
+Per-model ability on the harmful arm, recomputed from the same runs: `math_bold`
+is **1.00 on Llama, Qwen and Tülu and 0.00 on Mistral**, which is why its
+Mistral gap is +0.00. That is a can't-decode cell, not a discrimination failure,
+and the two must never be collapsed. `homoglyph` is 0.88 to 0.98 on all four.
+
+**So the honest statement is: `math_bold` is a genuine second clean encoding on
+THREE of four models, available offline at $0.** ⚠️ It does not simply
+replicate homoglyph and must not be sold as if it does. On Llama the homoglyph
+gap is +0.00 and the math_bold gap is +0.21, so the "discrimination destroyed"
+headline is encoding-specific on that model. That cuts both ways and the honest
+reading favours the paper's actual claim: a single-arm metric misses both cells
+equally, which is the measurement thesis, while "encoding destroys
+discrimination" as a universal is what the second encoding refutes. Report the
+pair, let the disagreement show.
+
+⚠️ **This supersedes the standing "no sound rung passes both screens" line**,
+which predates both `math_bold` and the `spread-*` runs.
+
+**Ranked by value per dollar, which is what this section exists to settle:**
+1. The `math_bold` write-up. Offline, $0, answers a named "one level up" item.
+2. The offline batch: paired intervals on the scaffold decomposition (con #6),
+   the transformation-survey table (con #10), the "refuse a font" edit (con #11),
+   per-cell intervals in Table 1 and explicit benign refusal in Table 2 (Q#6),
+   and the Fairoze citation (their related work #2), which is already in
+   science's master bib.
+3. The benign-arm ability pass. GPU, no judge spend. Answers con #4.
+4. Held-out corpus and human annotation, which are §4r's (d) and (b) and need an
+   approval-gate package.
+
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
 Jobs `9010897` (Mistral-7B-Instruct-v0.3, 1:15:12) and `9011034` (Tulu-3-8B,
