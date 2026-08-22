@@ -1502,6 +1502,129 @@ once the survey paragraphs moved the float. Found in `build.log`, not by eye.
 `tabcolsep` 4pt → 2.5pt. Both kits now build with **0 overfull, 0 underfull-hbox
 and 0 undefined references**; 2521 tests green.
 
+## 4n. THE FIRST FOUR METHODS-REVIEW FINDINGS ARE ADJUDICATED — two refuted, two confirmed, and the refutation of the loudest one produced a new result (2026-08-21)
+
+TODO 84 held twelve unverified findings from the hostile methods review. The two
+flagged as able to move a reported number were checked first, against cached
+records, offline, `$0`. **Both accusations fail. Both premises are real.** The
+two that fell out alongside them are confirmed and cheap.
+
+### 4n.1 ⛔ #5 REFUTED — the echo asymmetry is real and it does not move the gap
+
+The finding: on Llama the headline condition has `90` clean harmful cells against
+`75` clean benign ones, so the harm gap of exactly `0.00` becomes `+0.14` under a
+clean-cell denominator, making the paper's most-quoted number
+convention-dependent.
+
+**The asymmetry is real and the counts are almost exactly right — 89 and 74.**
+The conclusion does not follow, and the instrument that answers it was already
+built (`measurements/refusal_control.py`, `scripts/echo_displacement.py`):
+
+```
+all cells   harmful 0.9900 (n=100)   benign 0.9900 (n=100)   gap +0.0000
+clean-only  harmful 0.9888 (n= 89)   benign 0.9865 (n= 74)   gap +0.0023
+```
+
+Displacement `0.002` against a bar of `0.028`; the condition CLEARS. Removing
+cells from unequal-sized arms cannot move a difference when both arms sit at
+`0.99` in either denominator, and the finding inferred a displacement from a
+count asymmetry rather than computing one. **The general form is worth keeping:
+an asymmetric filter is a threat to a difference only when the two arms differ
+in RATE, and this one does not.** Homoglyph is the only rung that clears on all
+four models, which is why it is the headline; `fullwidth`, `fullwidth_letters`
+and `zero_width` FAIL the same screen on three of four.
+
+### 4n.2 ⚠️ #6 CONFIRMED — the paper describes an echo procedure the code does not run
+
+Defect (4)'s paragraph says *"Cells whose response echoes are therefore withheld
+rather than counted as refusals, and rates are reported over the surviving
+denominator."* **`behavior.py` computes `refusal_rate` over `len(group)` — every
+cell, echoing or not.** The clean-cell recomputation exists, but as a SCREEN: the
+condition is reportable only if `|reported gap − clean gap|` sits inside the
+gap's own 95% half-width. That is a defensible procedure and arguably the better
+one, since it never silently changes a denominator; it is simply not the
+procedure the paper describes. In a paper whose contribution is measurement
+discipline, a method sentence that does not match the code is the most expensive
+kind of error, and it is exactly the class AS-6's external reviewer spent four of
+ten objections on. Prose corrected; `n=100 per cell throughout` becomes TRUE
+rather than false, because nothing was ever removed.
+
+### 4n.3 ⛔ #8's ACCUSATION REFUTED, its RESIDUE CONFIRMED — one declared run family, never named
+
+The finding: three replicates of the headline condition sit on disk and Table 1
+quotes the most favourable on both statistics.
+
+**The replicate count is understated — there are 4 to 8 per model, not three.**
+The accusation of selection fails on the decisive check: **all eight Table 1
+cells come from the `plain-baseline-*` run family, uniformly, on all four
+models.** That is one declared protocol, not per-cell picking. What survives is
+smaller and still owed: the paper never says which run, and the replicates are
+not identical.
+
+| model | encoded-homoglyph replicates | gap range | spread |
+|---|---|---|---|
+| Llama-3.1-8B-It | 8 | `[-0.010, +0.000]` | 0.010 |
+| Mistral-7B-v0.3 | 4 | `[+0.230, +0.280]` | 0.050 |
+| Qwen2.5-7B-It | 4 | `[+0.550, +0.610]` | 0.060 |
+| Tülu-3-8B | 6 | `[+0.420, +0.460]` | 0.040 |
+
+Directionally the finding is not wrong: Qwen's `+0.61` and Mistral's `+0.28` are
+each the maximum of their replicate set, and both maximise the cross-model
+contrast leg 1 argues. The right fix is not to re-pick a run. **It is to report
+the range**, which turns an accusation into a result.
+
+### 4n.4 ✅ NEW — the pipeline is not reproducible, and measuring how badly is free
+
+Chasing #8 produced something the paper does not have. Generation is greedy
+(`models/generate.py` defaults `do_sample=False`), the corpus digests are
+byte-identical across these runs, and the judge runs at temperature `0`. A naive
+reading predicts identical replicates. **They are not, and the two routes
+separate cleanly by comparing the stored response text:**
+
+| model | byte-identical responses | flips on identical text (judge) | flips on different text (generation) | verdict flip rate |
+|---|---|---|---|---|
+| Llama-3.1-8B-It | 57.6% | 31 | 17 | 1.00% |
+| Mistral-7B-v0.3 | 58.3% | 0 | 11 | 1.83% |
+| Qwen2.5-7B-It | 33.5% | 0 | 32 | 2.67% |
+| Tülu-3-8B | 12.0% | 0 | 65 | 4.33% |
+
+**Between 42% and 88% of greedy responses differ between repeats of the same
+run.** Nothing is sampled: batch composition changes padding and reduction
+order, one argmax flips, and the continuation diverges. Llama is the one model
+where the JUDGE is the larger route — `gpt-5-mini` at temperature 0 returned
+opposite verdicts on 31 byte-identical responses.
+
+**And the reported rates barely move anyway, which is the reassuring half.** The
+flips very nearly cancel: `tulu3_8b/fullwidth` flips 13.17% of cells between runs
+and its gap moves 0.010. *A rate can be stable where none of its cells are.*
+That is why the spreads in 4n.3 are 0.01–0.06 rather than 0.13.
+
+**What it is worth to each leg.** For leg 1 it is a measured resolution floor to
+sit beside the bootstrap noise null, which models sampling noise and is blind to
+both routes above. For leg 2 it is a defence: Table 2's cross-stage variation in
+gap lost is 0.11–0.16 per condition and 0.10 in the mean, and the same-cell
+run-to-run spread on the one stage with repeats is up to 0.05 — so the
+non-monotone wobble is partly noise and the flatness null stands. Every number
+involved is inside the `0.15` resolution the Limitations section already claims,
+so **no reported figure changes**; what changes is that the claim is now
+measured rather than assumed.
+
+Instrument: `scripts/replicate_spread.py` (cached records only, no model, no
+judge, no GPU, `$0`); artifact
+`outputs/analysis/replicate_spread_20260821.json`.
+
+### 4n.5 ✅ #20 CONFIRMED, one line to fix
+
+The judge model appears nowhere in either kit — Method says only *"an LLM judge
+at temperature 0"*. The run records have carried `judges.model = gpt-5-mini`
+throughout. An unnamed judge in a paper whose central instrument is that judge is
+the same objection AS-6's reviewer filed as con 6.
+
+**Running verdict on this reviewer: 7 checked, 5 held, 2 refuted.** Both
+refutations had correct premises and wrong conclusions, which is a different
+failure from being wrong, and it is why the remaining eight are still worth
+checking rather than assuming.
+
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
 Jobs `9010897` (Mistral-7B-Instruct-v0.3, 1:15:12) and `9011034` (Tulu-3-8B,
