@@ -1205,7 +1205,7 @@ being aligned with the claim, because the claim is about the decode read.
 and converting that into a count at a fixed percentile requires refitting the
 per-prompt read on held-out items, not arithmetic. Inventing a correction factor
 here would be the third instance of deriving a number from another number
-because the real one was expensive. Disclosed in Limitations, filed as TODO 90,
+because the real one was expensive. Disclosed in Limitations, filed as TODO 96,
 gated on the same down-sync as 88/89 (the split read needs cached activations,
 and only summaries are local).
 
@@ -1216,3 +1216,60 @@ a table exists will pass its own tests, appear in the Method, be described in
 Limitations as required for validity, and still never have touched the numbers.
 Nothing in the build catches it, because there is no artifact that records which
 screens a table's numbers went through.
+
+## 15. §5.8's FORMAT-DETECTOR BOUND WAS STATED OVER THE WRONG SET, SURVIVES FOR A BETTER REASON, AND HAD AN UNSTATED COUNTEREXAMPLE (2026-08-21)
+
+Second pass of the screen-against-the-table check (§14's method, applied to a
+CLAIM rather than to a table). Local, `$0`, from the runs of record
+`as6_phase1/*/as6p1-full-20260805/results.json` at `reading_percentile = 50`,
+which is the permissive end of the sweep and therefore the read §5.8 says it
+uses.
+
+### 15.1 What the paper said, and what the data says
+
+The claim was: *"Blocked without decoding is at most 5 per 100 across all 38
+guard--condition pairs, and exactly 0 on most of them."*
+
+| | Llama Guard 3 | WildGuard |
+|---|---|---|
+| pairs with a MEASURABLE cell | 17 of 19 | 12 of 19 |
+| unlicensed, cell is `null` | 2 (`base64`, `base32`) | 7 (`base32`, `hex`, `binary`, `ascii_decimal`, `unicode_escape`, `morse`, `tag_block`) |
+| max over the FLOOR-CLEARING set | **0.05** (`fullwidth`) | **0.01** (`reverse_words`) |
+| max over ALL 19 | **0.08** (`combining_marks`) | 0.01 |
+
+**Two defects, opposite in sign.**
+
+⛔ **The bound was quoted over all 38 while 9 of the 38 have a `null` cell.** As
+written it reads exactly like this repo's signature failure, unmeasured folded
+into a negative, which is the defect the `(U)` band exists to prevent and which
+the pilot's `deployment` tri-state fix was the most consequential instance of. A
+referee checking the artifact finds nine nulls and reasonably concludes we
+counted them as zeros.
+
+✅ **But the claim is TRUE, and for a stronger reason than the paper gave.**
+`blocked_without_decoding` is a SUBSET of `blocked`, and **the block rate on
+every one of those nine pairs is 0.00**. So the cell is empty by CONTAINMENT, no
+decode read required. The unmeasured decode axis does not weaken the bound at
+all on those conditions; it is irrelevant to it.
+
+⛔ **And one pair genuinely exceeds the bound: Llama Guard `combining_marks` at
+0.08.** It went unnoticed because it is not in Table 2 (the control floor demotes
+it, 0.7007 against 0.7098) — so the claim's set and the table's set had drifted
+apart, and only the claim's set included it. On a condition where decoding
+cannot be read, the *decoded* / *not decoded* split is exactly what is
+unavailable, so that cell is not evidence for a format detector either way. Now
+stated in the paper rather than dropped along with the condition.
+
+### 15.2 The general lesson, sharper than §14's
+
+§14 found a screen that reached a statistic and not a count. **This is a screen
+that reached a TABLE and not a CLAIM.** The control floor governs Table 2's
+membership, and §5.8's sentence quantifies over all 19 conditions per guard, so
+the floor silently changed one set and not the other. Nothing connects them:
+`combining_marks` is absent from Table 2 for a reason that never propagated to a
+sentence three subsections later which still ranges over it.
+
+**The check that finds this class is cheap and mechanical: for every bound or
+"across all N" claim in a paper, recompute N from the artifact and confirm the
+set matches the set the screens produce.** Both of this section's defects are
+visible in one pass over `results.json`, and neither is visible from the prose.
