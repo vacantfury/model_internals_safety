@@ -191,3 +191,26 @@ claims:
         locate: '→\*\*([\d.]+)\*\* \(Llama Guard\)'
       - file: NOW.md
         locate: '→([\d.]+) Llama Guard'
+
+  # The factorial's two interaction terms. Added 2026-08-22 in the same sweep.
+
+  - id: as6_wrapper_intervals_including_zero
+    paper: as-6
+    recipe: as6_wrapper_intervals_including_zero
+    source: analysis/guard_factorial_20260821.json
+    claim: >-
+      reported cells whose wrapper-alone interval straddles zero. The paper
+      argues the wrapper term is small, so this count falsifies that sentence by
+      falling and merely strengthens it by rising.
+    locate: 'on (\w+) of the \w+ reported cells its interval includes zero'
+
+  - id: as6_encoding_term_separating_cells
+    paper: as-6
+    recipe: as6_encoding_term_separating_cells
+    source: analysis/guard_factorial_20260821.json
+    claim: >-
+      reported cells whose encoding-beyond-wrapper interval excludes zero. The
+      recipe additionally RAISES unless they disagree in sign, because the
+      sentence says "in opposite directions" and a correct count under a false
+      direction is the shape a cardinality check alone would pass.
+    locate: 'it separates on (\w+) cells in opposite directions'

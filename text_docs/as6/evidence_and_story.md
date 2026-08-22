@@ -2003,6 +2003,38 @@ was the thing that drifted. Anchored on the guard name alone, the same mutation
 now reports `CLAUDE.md (mirror): asserts 0.6617`. **A guard that fires is not
 yet a guard that fires for the right reason**, and only mutation separates them.
 
+### The rest of the sweep: two more encoded, one refused, one trap
+
+**Encoded, both from `guard_factorial_20260821.json`.** *Five of the six
+reported cells have a wrapper-alone interval including zero* — a count that
+falsifies the paper's "the wrapper term is small" by falling and merely
+strengthens it by rising. And *the encoding term beyond the wrapper separates on
+two cells in opposite directions*, where the recipe **raises unless the two
+disagree in sign**: a cardinality check alone would pass two same-direction
+cells, leaving a correct number under a false claim. Mutation-verified by
+flipping WildGuard `homoglyph`'s term positive, which holds the count at two and
+makes the sentence false; the guard fires.
+
+⛔ **Refused: "six of the seven conditions we would otherwise have reported still
+clear their re-derived floor."** The set is defined by an EDITORIAL decision, not
+by the artefact. Rebuilding it from disk gives nine unique cells clearing the
+unsplit floor, which becomes eight once `caesar3` is dropped as the control it
+is, and eight is not seven: the ninth-to-eighth step is a screen and the
+eighth-to-seventh step is the judgement that WildGuard `combining_marks`, which
+clears by 0.004 with a band straddling the floor, is reported *as passing rather
+than as established* and therefore is not among the cells we "would otherwise
+have reported". A recipe would have to hard-code that judgement, which is a
+second copy of an editorial choice living where rule 2 forbids a second copy of
+a value. **The count is correct** — the one cell that falls is Llama Guard
+`fullwidth`, 0.7057 against 0.7066 — and it stays checked by hand.
+
+⚠️ **The trap, for whoever writes the next recipe over that artefact.**
+`as6_split_half_transfer.json` holds **53 records over 38 unique (model, family)
+pairs**, from three run sources including a `scores-b10` bin variant. All 15
+duplicated keys agree to six decimals, so nothing there is contradictory — and a
+recipe that counted records rather than distinct cells would still report 53
+where the answer is 38, silently and with every value correct.
+
 ## 26. TODO 81's TWO "COSTED BASELINES" COST MINUTES, AND ONE OF THEM NEEDS NO GENERATION AT ALL (2026-08-22)
 
 The item said "neither is $0", which was true and read as though these were the

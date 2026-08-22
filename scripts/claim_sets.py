@@ -440,6 +440,71 @@ def as6_guard_floor_controls(claim: dict) -> tuple[int, str]:
     return floor["n"], f"{floor['n']} controls at floor {floor['value']:.4f}: {', '.join(floor['controls'])}"
 
 
+def _factorial_reported(claim: dict) -> list[tuple[str, str, list[float], list[float]]]:
+    """Every cell the factorial artefact marks `reported`, with both terms.
+
+    ⚠️ The `reported` flag is read rather than the set being rebuilt here. The
+    factorial run covers 23 conditions across the two guards and only 6 are in
+    Table 2, so a recipe that counted every condition would answer a different
+    question in the same units — which is the failure mode this ledger exists
+    for, one artefact over.
+    """
+    (source,) = _resolve_source(claim)
+    data = json.loads(source.read_text())
+    cells = []
+    for guard, block in sorted(data.items()):
+        for family, cell in sorted(block["conditions"].items()):
+            if not cell.get("reported"):
+                continue
+            interaction = cell["interaction"]
+            cells.append(
+                (guard, family, interaction["wrapper_alone"], interaction["encoding_beyond_wrapper"])
+            )
+    if not cells:
+        raise ValueError(f"{claim['id']}: no cell is marked reported — the flag moved or the run changed")
+    return cells
+
+
+def _includes_zero(term: list[float]) -> bool:
+    """`[point, lo, hi]` straddling zero. Fails CLOSED on a malformed triple."""
+    if len(term) != 3:
+        raise ValueError(f"expected [point, lo, hi], got {term!r}")
+    _, lo, hi = term
+    return lo <= 0.0 <= hi
+
+
+def as6_wrapper_intervals_including_zero(claim: dict) -> tuple[int, str]:
+    """Reported cells whose WRAPPER-alone interval includes zero.
+
+    The paper's point is that the wrapper term is small, so this count moving UP
+    would strengthen its sentence and moving DOWN would falsify it. Either way it
+    is a cardinality over a screened set and it recomputes.
+    """
+    cells = _factorial_reported(claim)
+    hits = [(g, f) for g, f, wrapper, _ in cells if _includes_zero(wrapper)]
+    detail = ", ".join(f"{g}/{f}" for g, f in hits)
+    return len(hits), f"{len(hits)} of {len(cells)} reported cells include zero: {detail}"
+
+
+def as6_encoding_term_separating_cells(claim: dict) -> tuple[int, str]:
+    """Reported cells whose ENCODING-BEYOND-WRAPPER interval excludes zero.
+
+    Also RAISES unless the separating cells disagree in SIGN, because the
+    paper's sentence is "in opposite directions" and a count of two that both
+    pointed the same way would leave a true number under a false claim.
+    """
+    cells = _factorial_reported(claim)
+    hits = [(g, f, term) for g, f, _, term in cells if not _includes_zero(term)]
+    signs = {term[0] > 0 for _, _, term in hits}
+    if len(hits) >= 2 and len(signs) != 2:
+        raise ValueError(
+            f"{claim['id']}: {len(hits)} cells separate but all in the same direction — "
+            "the paper says 'in opposite directions', which would then be false"
+        )
+    detail = ", ".join(f"{g}/{f} {term[0]:+.2f}" for g, f, term in hits)
+    return len(hits), f"{len(hits)} separating, opposite signs: {detail}"
+
+
 RECIPES = {
     "spread_echo_measured_cells": spread_echo_measured_cells,
     "ladder_reported_cells_rejected": ladder_reported_cells_rejected,
@@ -455,6 +520,8 @@ RECIPES = {
     "as6_paired_total_pairs": as6_paired_total_pairs,
     "as6_guard_floor_controls": as6_guard_floor_controls,
     "as6_guard_floor_value": as6_guard_floor_value,
+    "as6_wrapper_intervals_including_zero": as6_wrapper_intervals_including_zero,
+    "as6_encoding_term_separating_cells": as6_encoding_term_separating_cells,
 }
 
 
