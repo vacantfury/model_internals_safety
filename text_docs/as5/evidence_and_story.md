@@ -2295,6 +2295,63 @@ which predates both `math_bold` and the `spread-*` runs.
 4. Held-out corpus and human annotation, which are §4r's (d) and (b) and need an
    approval-gate package.
 
+## 4v. ✅ THE $0 BATCH RAN: six of review 3's objections answered offline, and the guard caught two stale counts mid-edit (2026-08-21)
+
+Owner go on the zero-spend half of §4u's ranked list. Everything below is
+recomputed from cached records: no GPU, no judge, no API call. Both kits build
+0 overfull / 0 undefined; suite 2626 passed.
+
+**(1) The second encoding is IN, as Table 2 (con 1).** New instrument
+`scripts/second_encoding.py` runs both of the paper's own screens over every
+rung with both arms in one job per model. Reportable: `homoglyph` 4/4,
+`math_bold` 3/4, `zero_width` 1/4 (Mistral only). ⛔ **The paper states the
+disagreement rather than hiding it** — on Llama the two clean rungs read +0.00
+and +0.18, so the total-collapse result is a property of model AND encoding
+jointly. Mistral's math_bold cells are marked as a decode failure (ability 0.00),
+never as a zero gap.
+
+**(2) Both arms are now explicit in every condition of Table 3 (Q6),** which
+became a `table*` to fit. The referee's point was reader effort, and it paid off
+immediately: on Llama the entire +0.83 → +0.16 scaffold fall is visible as
+benign refusal moving 0.10 → 0.83, which the harm-gap-only version hid.
+
+**(3) Wilson intervals on all 20 rates, new appendix table (Q6).** Instrument
+`scripts/reported_intervals.py`. Provenance was established BEFORE any interval
+was computed: Table 1 is the four `plain-baseline-*` runs and Table 3 the four
+`scaffold-control-*` runs, each supplying all its conditions from one job. Every
+number reproduces the published table exactly.
+
+**(4) ⛔ CON 6 CANNOT BE ANSWERED OFFLINE, AND THAT IS DEFECT (12).** The
+referee is right that the §5 decomposition is paired: it differences gaps across
+conditions on the same items. `phase0_regime_map` persists per-item verdicts for
+the ENCODED arm only; the plaintext and scaffold arms survive as aggregate rates
+inside `results.json` readings. ⚠️ **A gap interval itself is correctly
+unpaired** (its two arms are different corpora) and conflating the two contrasts
+is the trap here. Unpaired is the conservative direction for the decomposition,
+so no published width is too narrow. **This may be a DOWN-SYNC rather than a
+re-run** — `review_statistics.py` records the same shape on the AS-6 side, where
+the per-prompt records exist on the cluster and only summaries came home.
+
+**(5) The arm survey is a table (con 10),** appendix, 13 rows with the B0–B3
+codebook, no pointer to this repo (a public pointer from an anonymous PDF is the
+hygiene rule's own violation). **(6) Fairoze et al. cited (their related work 2)** as
+the same missing cell on the defence side. **(7) "Refuse a font" is gone (con
+11)**, replaced by the metric-vs-behaviour distinction stated explicitly.
+
+**⚠️ THE CLAIM GUARD BUILT LAST SESSION EARNED ITSELF, on its first real use.**
+Raising the defect count 10 → 12 broke `test_paper_claim_integrity.py`, which
+reported the abstract AND a contributions-list sentence I had not found by
+grepping, because the phrase wrapped across a line ("Ten\ninstrument defects").
+A line-anchored search would have missed it, which is the same
+strictness-is-a-function-of-line-width defect `test_public_repo_hygiene.py` paid
+for. **The set-membership check found a stale count in the very edit that
+created it**, which is the argument for mechanical guards over careful reading in
+one sentence.
+
+⚠️ **What did NOT change, deliberately:** no ASR number became reportable, the
+harm-gap headline is untouched, and the two blockers all three referees name
+(held-out corpus, human label validation) are unaffected by any of this.
+
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
 Jobs `9010897` (Mistral-7B-Instruct-v0.3, 1:15:12) and `9011034` (Tulu-3-8B,
