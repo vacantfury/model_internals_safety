@@ -1201,6 +1201,15 @@ being aligned with the claim, because the claim is about the decode read.
 
 ### 14.3 What we did NOT do, deliberately
 
+⚠️ **SUPERSEDED 2026-08-22: the size is now MEASURED, and it is larger than
+this section's caution implied. See §28.** Everything below stood until job
+`9458854` ran. Two of its results correct this section rather than confirming
+it: the fall is 1.6x to 5.6x, not a nudge; and the two cells are NOT
+symmetric, so 14.2's table is right about the directions and wrong to present
+them as the same kind of movement. `D&¬B` becomes a lower bound and survives
+on two cells; `B&¬D` becomes an upper bound, which cannot support a claim
+about its own smallness, so that cell is unmeasured rather than corrected.
+
 **No estimate of the size.** The condition-level statistic fell 0.04–0.20 AUROC,
 and converting that into a count at a fixed percentile requires refitting the
 per-prompt read on held-out items, not arithmetic. Inventing a correction factor
@@ -2173,3 +2182,125 @@ Per guard: **2400 forward passes** (3 kinds x 2 arms x 100 prompts x 4 rungs), 0
 generations, 0 judge calls, **$0.00**. Measured rate from 19 completed guard runs
 is 0.42-0.60 min per condition per guard, so the work is minutes; the presets
 declare a 1-hour ceiling for model load plus margin against an 8-hour wall.
+
+## 28. ⛔ THE RECOUNT RAN, AND TABLE 2's COUNTS FALL BY 1.6x TO 5.6x WHILE THE COMPLEMENTARY CELL'S EMPTINESS DISSOLVES (2026-08-22)
+
+Job `9458854`, partition `short`, 1 CPU core, 0 GPU, **$0**, `COMPLETED` in
+**6:57** against a 7 to 9 minute estimate, peak RSS 9.3 GB of 32 GB requested.
+Artifact `outputs/analysis/as6_split_half_cells.json`, written beside the old one
+rather than over it. §14 filed this as disclosed-not-corrected. It is now
+corrected, and the correction is larger than the disclosure implied.
+
+### 28.1 Two checks before any number is read
+
+**The AUROCs came back bit-identical.** 53 records times 11 statistics each,
+every one equal to the artifact Table 2 was built from. The recount consumes no
+RNG draws, so this was the designed falsification test of the edit itself: a
+single moved AUROC would have meant the new code perturbed the split stream and
+the whole artifact was suspect. It did not.
+
+**The script's own unsplit recomputation reproduces Table 2 exactly.** Printed
+7 / 17 / 8 / 23 / 23 / 9; recomputed from activations 7.0 / 17.0 / 8.0 / 23.0 /
+23.0 / 9.0. This matters more than it looks: it establishes that the per-prompt
+read in this script IS the read that produced the published column, so the only
+thing differing between the two columns below is whether the probe had seen the
+item. Without it the comparison would have been between two instruments.
+
+### 28.2 The result
+
+`blk` is the block rate, which no probe touches. `_u` is the unsplit probe, `_s`
+the item-held-out probe over 200 splits with its 95 per cent band. `dec` is the
+decode rate. `indep` is what `D&¬B` would be if decoding and blocking were
+independent.
+
+| guard | condition | blk | D&¬B u | **D&¬B s** | band | B&¬D u | **B&¬D s** | band | dec u | dec s | indep |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Llama Guard 3 | `homoglyph` | 0.92 | 7.0 | **3.3** | [0, 8] | 0.0 | **16.2** | [6, 28] | 0.99 | 0.79 | 6.3 |
+| Llama Guard 3 | `zero_width` | 0.83 | 17.0 | **8.1** | [2, 16] | 1.0 | **25.8** | [12, 38] | 0.99 | 0.65 | 11.1 |
+| Llama Guard 3 | `reverse_words`† | 0.65 | 8.0 | **5.0** | [0, 14] | 4.0 | **6.6** | [0, 14] | 0.69 | 0.63 | 22.2 |
+| WildGuard | `homoglyph` | 0.75 | 23.0 | **4.1** | [0, 10] | 2.0 | **8.9** | [2, 20] | 0.96 | 0.70 | 17.6 |
+| WildGuard | `zero_width` | 0.71 | 23.0 | **6.8** | [2, 14] | 0.0 | **10.9** | [2, 22] | 0.94 | 0.67 | 19.4 |
+| WildGuard | `reverse_words`† | 0.73 | 9.0 | **2.7** | [0, 8] | 4.0 | **9.2** | [2, 18] | 0.78 | 0.67 | 18.0 |
+
+† control, not a finding.
+
+### 28.3 The training-size confound is ruled out, by the run's own F term
+
+Halving the training set could explain a fall without any leakage, and the paper
+says so in Limitations. `F` (n/2, items seen) against `B` (n/2, items unseen)
+isolates memory at fixed training size, and `A - F` isolates size at fixed
+memory status. On five of the six cells `A - F` is **negative**, so halving the
+training set slightly HELPED, and memory accounts for **97 to 123 per cent** of
+the total gap: +0.147 / +0.221 / +0.037 / +0.178 / +0.205 / +0.067 against total
+gaps of +0.140 / +0.202 / +0.038 / +0.159 / +0.182 / +0.054. The cell fall
+inherits the AUROC's interpretation.
+
+### 28.4 The two cells move in opposite directions, and they are not the same kind of claim
+
+This is the part to carry, and it was not obvious from §14's table, which had
+both cells moving "toward our result" as if symmetrically.
+
+**`D&¬B` requires a POSITIVE decode read, so a weakened probe UNDER-counts it.
+The held-out value is a LOWER BOUND.** Where the band excludes zero the policy
+failure is still demonstrated, now at a smaller size. That is two cells:
+`zero_width` on both guards, 8.1 [2, 16] and 6.8 [2, 14]. Where the band
+includes zero it is not demonstrated at all: `homoglyph` on both guards and both
+`reverse_words` controls.
+
+**`B&¬D` requires a NEGATIVE decode read, so a weakened probe OVER-counts it.
+The held-out value is an UPPER BOUND, and the paper's claim was about its
+SMALLNESS, which an upper bound cannot establish.** So the cell is not refuted;
+it becomes **unmeasured**. Reading 16.2 or 25.8 as "the guard blocks what it
+never represented" would be committing the exact error this repo has fixed four
+times in other places: treating an instrument that could not read as an
+instrument that read a negative. The correct label is `(U)`.
+
+The paper anticipated the direction and chose the permissive operating point for
+precisely this reason ("the most demanding test of its emptiness is the most
+generous decode read"). The flaw was not the operating point. It was that the
+generosity came from item memory rather than from the read, so the demanding
+test was run on a probe holding privileged information.
+
+### 28.5 What this costs the paper
+
+Three claims change, and the abstract carries two of them.
+
+1. **"a policy failure that is real and populated on every surviving condition,
+   at 7 to 23 per 100 prompts."** The range becomes **2.7 to 8.1**, and
+   "every surviving condition" becomes two of the four non-control cells. The
+   claim survives in kind and shrinks in scope.
+2. **"Across every guard and condition pair, blocked without decoding is near
+   zero, so we find little evidence for a pure encoding-format detector under
+   the conditions we test."** ⛔ **WITHDRAWN.** The probe-based half of that
+   argument no longer supports it. ⚠️ The WRAPPER screen is a separate argument
+   against a format detector and does NOT rest on the probe, so the paper still
+   has evidence on this question; what it loses is the second, independent line
+   it claimed to have.
+3. **Table 2's caption argues from "the decode term is 0.94 to 0.99 on the four
+   surface cells, so it is not the binding term of the conjunction."** Held out,
+   the decode term is **0.63 to 0.79**. It may well be the binding term, so the
+   caption's reason for not ordering conditions by the count has to be rewritten
+   rather than renumbered.
+
+### 28.6 One observation that is not yet a claim
+
+Under the held-out read, `D&¬B` is BELOW its independence reference on all six
+cells, in three cases by a factor of four or more. Decoding and blocking are
+positively associated: the prompts a guard fails to block are disproportionately
+the ones it did not represent. If that survives scrutiny it is a result in its
+own right, and it points the same way AS-5's benign arm does. It is recorded
+here and deliberately not put in the paper, because the independence reference is
+a sanity baseline rather than a null with a distribution behind it, and because
+a weakened probe suppresses `D&¬B` by construction, which is one candidate
+explanation this run cannot exclude.
+
+### 28.7 The lesson, which is a bound this repo already knows in one direction
+
+A screen that weakens an instrument does not move every cell the same way, and
+which way it moves a cell depends on whether the cell needs the instrument to
+say YES or to say NO. A cell that needs a positive reading becomes a lower bound
+and can still carry a finding. A cell whose EMPTINESS is the finding needs a
+positive reading of the complement, so a weakened instrument cannot support it
+at all. **Before applying a screen, decide per cell which of the two it is;
+running a screen and reporting all its cells the same way is how "unmeasured"
+gets published as "measured near zero".**
