@@ -907,6 +907,13 @@ specifications out rather than pointing at code:**
   the four numbers the story needed. Now "no more than 2 per 100", with the
   table to check it against.
 
+**A law found unenforced on both papers, filed as TODO 87:** the no-dash-line
+rule (global, 2026-08-19) binds papers explicitly, and both kits predate it —
+40 `---` in AS-6's body, 51 in AS-5's. New prose written from 2026-08-21
+conforms; the sweep is a register change per paper, not a find-and-replace, so
+it is one deliberate pass with the PDF read afterwards rather than something to
+do incrementally across two kits that must stay identical.
+
 **One gap declared rather than papered over:** the guard checkpoints are pinned
 by repository identifier and not by revision hash, because nothing in
 `provenance.py` records a resolved revision. The appendix says so. Filing the
