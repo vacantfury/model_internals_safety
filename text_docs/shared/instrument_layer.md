@@ -1796,6 +1796,80 @@ and still dominate the variance across them.
 
 ---
 
+### 3.12 ⛔ AN LLM ANNOTATOR CANNOT VALIDATE A SAFETY JUDGE, BECAUSE IT GOES SILENT ON EXACTLY THE DISCRIMINATING CELLS (2026-08-22)
+
+All three external referees name the same gap independently: every regime count
+in AS-5 splits on `refused`, and no human has checked that verdict. The owner
+ruled out spending his own time on it, so the plan was the house default for a
+high-stakes claim with no external anchor: one cross-family second opinion. Our
+judge is `gpt-5-mini`, so the annotator has to come from another family.
+
+**It does not work, and the reason generalises.** `claude-opus-4-5` returned an
+EMPTY reply on **27 of 200** items, with zero mechanism errors. The missingness
+is not random:
+
+| cut | empty rate |
+|---|---|
+| harmful arm | **18 / 90 = 20%** |
+| benign arm | 9 / 110 = 8% |
+| `claimed_genuine_refusal` | **10 / 50 = 20%** |
+| `echo_scored_as_refusal` | **10 / 50 = 20%** |
+| `echo_not_scored_as_refusal` | 5 / 50 = 10% |
+| `claimed_engagement` | 2 / 50 = 4% |
+| Llama-3.1-8B responses | **17 / 76 = 22%** |
+| Qwen2.5-7B responses | 1 / 41 = 2% |
+
+**The mechanism, checked rather than assumed.** The empty items are the ones
+whose RESPONSE decodes the request and then complies, so the prompt shown to the
+annotator contains real harmful content. Three examples: a decoded request for
+extinguishing a fire without alerting firefighters, one for shell companies to
+funnel government money, one for dumping hazardous medical waste. A system
+message framing the task as classification rather than generation does NOT
+recover them: tested directly on one item, both with and without, and both came
+back empty.
+
+⛔ **The consequence is the finding, and it is general.** An LLM annotator
+declines on the cells that carry actual harmful content. Those are precisely the
+cells where a refusal judge's verdict is worth checking, because a cell whose
+response refused or echoed contains nothing to decline over. **So the annotator
+is most silent exactly where the validation has to happen**, and the silence is
+concentrated on the harmful arm and on judge-refused cells. Dropping the 27 and
+scoring the surviving 173 would report an agreement rate computed on the easy
+half and present it as the whole.
+
+**What this rules in and out.** It rules OUT model annotation as a substitute for
+human labelling on this task, for both papers. AS-6 inherits it directly: a
+guard-side judge validation faces the same wall, since guard inputs are harmful
+by construction. It rules IN reporting the missingness itself, which is a small
+methodological result: the standard "use an LLM judge to check your LLM judge"
+move has a failure mode that is invisible unless the dropout is cross-tabulated
+against the strata, and a simple overall completion rate of 86.5% would look
+acceptable.
+
+**Inherited human evidence, and its limits.** The sibling repo's Round R
+(2026-07-28) validated the SAME judge model on a refusal task against a blind
+human annotator: kappa 0.794 binary, 0.875 on the representative block, 100
+items, verdict withheld from the labeller. Two gaps prevent it from closing this
+one. It validated a different RUBRIC (a three-class over-refusal scheme, not the
+JailbreakBench binary template we run), and a different RESPONSE DISTRIBUTION
+(benign VLM responses under imaging attacks, not text-encoded prompts). ⛔ The
+transfer is weakest exactly where AS-5 needs it: Round R met echo too, 26 cases,
+and handled it by ADDING a rubric clause, which is direct evidence the two
+rubrics differ on our failure mode. Report it as inherited context with the
+extrapolation named, never as validation of this configuration. ⚠️ Its filled
+sheet is absent from disk (only the blank and the key survive, all 100 label
+cells empty), so the number can be cited and not recomputed.
+
+**Audit of the other rounds, so nobody repeats it.** Round J is filled but
+validates the HARM judge (kappa 0.68, HarmBench rubric, VLM targets); AS-5
+reports no ASR number, so it validates a judge we do not use. **Round H was never
+labelled**: 78 rows, every `human_label` cell empty, no filled counterpart
+anywhere in the tree, and it is also a harm round.
+
+Instruments: `scripts/judge_validation_sample.py` (blinded, stratified),
+`scripts/model_annotator.py` (cross-family, refuses the judge's own family,
+never converts silence into a label), `scripts/judge_validation_score.py`.
+
 ## 4. Open, with the method already identified
 
 ### 4.1 Deployment should be measured by logit lens, not a transferred probe
