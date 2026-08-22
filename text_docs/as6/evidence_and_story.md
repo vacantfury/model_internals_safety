@@ -783,7 +783,7 @@ the floor down with the candidate and demote nothing.
 | **fullwidth** | 0.8802 | **0.7057** | [0.627, 0.788] | +0.170 → **−0.001** | ⛔ **DEMOTED** |
 | caesar3 *(control)* | 0.7168 | 0.7107 | [0.617, 0.781] | — | stays demoted |
 
-**WildGuard** — floor 0.6852 → **0.6617**:
+**WildGuard** — floor 0.6852 → **0.6617** on the 11 controls this table was computed with; **both values were superseded on 2026-08-22 by the 14-control floor, 0.6803 → 0.6605 (§25)**, which changes no verdict and moves each margin below by about +0.001:
 
 | condition | unsplit | item-split | 95% band | margin before → after | verdict |
 |---|---|---|---|---|---|
@@ -1897,3 +1897,58 @@ goes stale from either end; the first also raises if an independent interval eve
 starts separating, which would make the paper's contrast between the two tests
 false. Paper: Table 2's caption and a new specification subsection with the
 pairwise table, both kits.
+
+## 25. WILDGUARD'S FLOOR WAS BUILT FROM 11 OF ITS 14 CONTROLS, AND THE THREE MISSING ONES WERE ALREADY MEASURED (2026-08-22)
+
+TODO 86, closed, and it turned out to be doable locally rather than on the
+cluster as filed.
+
+### What was wrong
+
+`instrument_layer.md` §2.7.1 recorded 14 controls at 0.6803, while the screen of
+record (`as6_floor_wildguard_split/unsplit`) used **11**, because the cluster
+invocation passed a single `--ability-cells` file. `base64`,
+`reverse_characters` and `tag_block` all have measured Mistral-7B-v0.3 ability
+**0.00** in `dissociation-mistral_…9010897`, which has been on disk since
+2026-08-08. The floor was internally consistent with the controls it was given,
+so nothing in the build could notice.
+
+### The adopted values, and what does not change
+
+| Treatment | 11 controls | 14 controls | Delta |
+|---|---|---|---|
+| unsplit | 0.6852 | **0.6803** | −0.0049 |
+| item-split (screen of record) | 0.6617 | **0.6605** | −0.0011 |
+
+**No verdict differs on either treatment**, and that is verified rather than
+assumed: no rung's AUROC lies in the band between the two floors, and the
+per-condition `clears_floor` maps are identical. The 14-control floor is the
+more permissive one, so the previous screen was the stricter of the two, which
+is why this is bookkeeping and not a correction.
+
+⚠️ **It is not free of consequence for the paper's printed numbers, and three
+had to move**: the caption's WildGuard floor 0.662 → **0.661**; the control
+count 11 → **14**; `combining_marks` clears by 0.003 → **0.004**; and the
+floor's own movement under the holdout, 0.024 → **0.020** on WildGuard. A change
+that "changes no verdict" still changed four figures in two kits.
+
+⚠️ **One thing improves.** WildGuard's sigma window widens from [1.577, 2.082]
+to **[1.580, 2.124]**, so the configured 2.0 sits further inside it. Llama
+Guard's remains [2.113, 3.440] with 2.0 **below the lower bound**, which is the
+pre-existing defect and is untouched by this.
+
+### Llama Guard needed nothing, and that was checked rather than assumed
+
+Its 12 controls are already every condition Llama-3.1-8B decodes at 0.00: the
+ten inert ciphers plus `reverse_characters` and `tag_block`. `hex` and
+`unicode_escape` are Llama-readable (0.84 and 0.54) and are correctly excluded.
+Fixing one guard and leaving the other asymmetric would have been the more
+likely error here.
+
+### The guard against a third occurrence
+
+The control count is now a ledger claim, `as6_wildguard_floor_controls`, which
+recomputes it from the artifact and raises if the floor stops being a
+distribution. This is the class the ledger exists for: a number that was
+internally consistent, printed for days, and wrong only relative to data already
+sitting on disk.

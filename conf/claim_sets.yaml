@@ -130,3 +130,13 @@ claims:
       the number of pairwise comparisons, which is the denominator of that same
       sentence and moves whenever a condition enters or leaves Table 2.
     locate: 'independent intervals overlap on all (\w+)\s+pairs'
+
+  - id: as6_wildguard_floor_controls
+    paper: as-6
+    recipe: as6_wildguard_floor_controls
+    source: analysis/as6_floor_wildguard_split.json
+    claim: >-
+      controls WildGuard's control floor is a distribution over, under the
+      item-split treatment that is the screen of record. Drifted once from 14 to
+      11 because a cluster invocation passed one ability file.
+    locate: 'and (\w+) for WildGuard'

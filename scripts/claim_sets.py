@@ -393,6 +393,26 @@ def as6_paired_total_pairs(claim: dict) -> tuple[int, str]:
     return len(pairs), f"{len(pairs)} pairwise comparisons across both guards"
 
 
+def as6_wildguard_floor_controls(claim: dict) -> tuple[int, str]:
+    """How many controls WildGuard's floor is a distribution over.
+
+    This number drifted once, silently and for a whole paper cycle: the cluster
+    invocation passed a single `--ability-cells` file, so three conditions with
+    measured ability 0.00 never entered the control set, and the paper printed
+    the resulting floor for days. Nothing in the build could catch it, because
+    the floor was internally consistent with the controls it was given. It is a
+    counted claim, so it recomputes.
+    """
+    (source,) = _resolve_source(claim)
+    floor = json.loads(source.read_text())["floor"]
+    if floor["kind"] != "distribution":
+        raise ValueError(
+            f"{claim['id']}: the floor is a {floor['kind']}, not a distribution — "
+            "a bound is reported differently and the paper's sentence would be wrong"
+        )
+    return floor["n"], f"{floor['n']} controls at floor {floor['value']:.4f}: {', '.join(floor['controls'])}"
+
+
 RECIPES = {
     "spread_echo_measured_cells": spread_echo_measured_cells,
     "ladder_reported_cells_rejected": ladder_reported_cells_rejected,
@@ -406,6 +426,7 @@ RECIPES = {
     "as6_length_bound_clearing_cells": as6_length_bound_clearing_cells,
     "as6_paired_separating_pairs": as6_paired_separating_pairs,
     "as6_paired_total_pairs": as6_paired_total_pairs,
+    "as6_wildguard_floor_controls": as6_wildguard_floor_controls,
 }
 
 

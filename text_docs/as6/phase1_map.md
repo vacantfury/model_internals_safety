@@ -355,7 +355,12 @@ numbers must be read through, stated once:
   **0.789**, `zero_width` **0.772**, `reverse_words` **0.764**,
   `combining_marks` **0.664**.
 - **Floors under the same treatment:** Llama Guard **0.7066** (12 controls),
-  WildGuard **0.6617** (11 controls).
+  WildGuard **0.6605** (14 controls). ⚠️ **WildGuard's was 0.6617 on 11 controls
+  until 2026-08-22 (item 86, §25): the cluster invocation passed one
+  `--ability-cells` file, so `base64`, `reverse_characters` and `tag_block` were
+  absent although their Mistral-7B-v0.3 ability 0.00 had been measured. Adopted
+  the 14-control floor; NO verdict differs on either treatment, and the
+  configured sigma 2.0 moved from [1.577, 2.082] to [1.580, 2.124].**
 - ⛔ **Llama Guard `fullwidth` falls** (0.7057 against 0.7066) and is `(U)`,
   never "demoted by 0.0009" — its split band [0.627, 0.788] straddles the floor,
   and under the holdout it reads BELOW `caesar3` (0.7107), a rung on which the
