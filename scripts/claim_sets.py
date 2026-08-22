@@ -318,6 +318,48 @@ def as6_bwd_unlicensed_pairs(claim: dict) -> tuple[int, str]:
     return len(out), f"{len(out)} unlicensed, every block rate 0.00 (containment holds)"
 
 
+def as6_length_bound_clearing_cells(claim: dict) -> tuple[int, str]:
+    """How many REPORTED cells clear the monotone length-only bound.
+
+    The paper says all six do. The set that matters is `reported`, and it has
+    already moved once: the item-level holdout withdrew Llama Guard
+    `fullwidth` to (U), which would have taken a "seven" sentence stale without
+    touching a single number in it. So the count is recomputed from the artifact
+    rather than trusted, and the total is checked too — a claim that six of six
+    clear is wrong in two different ways if the denominator changes.
+    """
+    (source,) = _resolve_source(claim)
+    data = json.loads(source.read_text())
+    reported = [
+        (guard, row)
+        for guard, rows in data["guards"].items()
+        for row in rows
+        if row["reported"]
+    ]
+    if not reported:
+        raise ValueError(
+            f"{claim['id']}: the artifact marks no cell `reported` — the bound would "
+            "vacuously clear on an empty set, which is the shape of a passing check "
+            "that checked nothing"
+        )
+    clearing = [
+        (guard, row)
+        for guard, row in reported
+        if row["observed_gap"] > row["length_only_gap_bound"]
+    ]
+    if len(clearing) != len(reported):
+        missed = ", ".join(f"{g}/{r['family']}" for g, r in reported if (g, r) not in clearing)
+        raise ValueError(
+            f"{claim['id']}: {len(reported) - len(clearing)} reported cell(s) no longer "
+            f"clear the length bound ({missed}); the paper's sentence asserts all of them do"
+        )
+    detail = ", ".join(
+        f"{g}/{r['family']} {r['observed_gap'] - r['length_only_gap_bound']:+.2f}"
+        for g, r in clearing
+    )
+    return len(clearing), f"{len(reported)} reported cells, all clearing: {detail}"
+
+
 RECIPES = {
     "spread_echo_measured_cells": spread_echo_measured_cells,
     "ladder_reported_cells_rejected": ladder_reported_cells_rejected,
@@ -328,6 +370,7 @@ RECIPES = {
     "as6_bwd_zero_pairs": as6_bwd_zero_pairs,
     "as6_bwd_measurable_pairs": as6_bwd_measurable_pairs,
     "as6_bwd_unlicensed_pairs": as6_bwd_unlicensed_pairs,
+    "as6_length_bound_clearing_cells": as6_length_bound_clearing_cells,
 }
 
 

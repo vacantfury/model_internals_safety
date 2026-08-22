@@ -98,3 +98,15 @@ claims:
       RAISES unless every one of their block rates is 0.00, because section 5.8's
       containment argument rests on exactly that.
     locate: 'On the (\w+) pairs whose decode measurement is not licensed'
+
+  - id: as6_length_bound_clearing_cells
+    paper: as-6
+    recipe: as6_length_bound_clearing_cells
+    source: analysis/guard_arm_length_bound_20260821.json
+    claim: >-
+      reported cells whose harm gap exceeds the most a monotone length-only rule
+      could manufacture at the same blocking budget. The recipe RAISES rather
+      than returning a smaller number if any reported cell stops clearing, since
+      the sentence asserts all of them do and a quieter count would read as a
+      different true claim.
+    locate: 'All (\w+) reported cells\s+exceed their bound'

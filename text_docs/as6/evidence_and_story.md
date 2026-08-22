@@ -1678,3 +1678,124 @@ The estimator went to `intervals.py` rather than into the script, per the spine
 rule, and is pinned by four tests including one asserting it is genuinely wider
 than the paired bootstrap on identical data. That property is its whole
 justification, so it is tested rather than claimed.
+
+## 23. THE BLOCK AXIS NOW HAS A LENGTH CONTROL, AND IT HAD TO BE MEASURED IN TOKENS (2026-08-21)
+
+TODO 88, answered without the run it was filed as needing, and the answer is
+clean: **length cannot account for any of the six harm gaps the paper reports.**
+
+### The gap the existing controls left
+
+AS-5 measured raw character length separating the harmful from the benign corpus
+at AUROC 0.6544 (86.0 characters against 73.8) and every encoder in the ladder is
+monotone in length, so the separation survives into every condition. AS-6 reports
+a block-rate gap between the arms and reads it as harm sensitivity. Nothing in
+the paper had constrained that reading for length:
+
+* the **length-matched permutation null** licenses *probes*, and an AUROC is the
+  only quantity it reaches;
+* the **benign arm** holds the encoding fixed and varies harm;
+* the **wrapper arm** holds the content fixed and varies the template.
+
+Every one of those leaves the two arms' lengths free to differ exactly as the
+bare corpora do. This is the same shape as the repo's recurring defect: a rule
+that reaches some callers and not the one that matters.
+
+### ⛔ The filed blocker was wrong, and the first correction of it was also wrong
+
+Item 88 said the fix was gated on a down-sync of run `9033528`. After the scratch
+tree arrived I recorded it as unblocked. **Both were wrong, and the second one
+was written from the file listing rather than from the files.** Opening every
+AS-6 record shows there are **zero per-prompt benign verdicts on disk**: all
+three `benign_cells.jsonl` are 0 bytes, and every `cells.jsonl` in both guards'
+19 run directories is the harmful arm, `guard-benign-*/cells.jsonl` included, so
+the name records the run's PURPOSE and not its file's contents. The benign arm
+survives only as the `benign_arm.benign_block_rate` summary. `measure_rate_length_null`
+needs per-prompt flags on both arms, so it needs a re-run.
+
+**The lesson is item 99's, applied in the direction it was not written for.** Its
+rule is *before recording work as BLOCKED on an artefact, reproduce one number
+from the artefact you claim to need*. The same rule binds in reverse: before
+recording work as UNBLOCKED, open the artefact. A directory listing is a claim
+about names.
+
+### The bound that IS computable, and why it is stronger where it counts
+
+The corpora and the encoders are local and deterministic, so both arms'
+ciphertexts regenerate exactly. That gives the two length distributions for free.
+Fix the blocking budget to the number of prompts the real guard blocked across
+both arms, and hand that budget to the best **monotone** length-only rule (block
+the longest, or the shortest, whichever separates more, ties resolved in favour
+of the bound). Its harm gap is the ceiling on what a guard reacting only to
+length could show at this guard's own operating rate:
+
+* observed gap **above** the bound: length cannot account for it. Conclusive.
+* observed gap **below** the bound: inconclusive, and it needs the re-run.
+
+One-directional on purpose. A control that can only ever fail to reject is a
+verdict with a script attached.
+
+**Monotone is a real restriction and it is stated rather than hidden.** The
+unrestricted optimum over all functions of length fits a 200-item sample almost
+perfectly (lengths are near-unique, so "block the lengths where the harmful
+fraction is highest" separates nearly completely) and would bound near 1.0 on any
+corpus whatsoever. That number would describe the corpus's memorability, not a
+guard. The confound reported in the literature is monotone. A test pins that a
+non-monotone rule CAN beat this bound, so the scope lives in the suite and not
+only in a docstring.
+
+### ⚠️ CHARACTERS WERE THE WRONG UNIT ON HALF THE CELLS
+
+The referee's worry and AS-5's 0.6544 both name character length, but a guard
+processes tokens, and the published confound (arXiv 2605.00269) is stated over
+sequence length. The two come apart precisely where it matters: `fullwidth` has
+the same character count as its plaintext and roughly 2.5x the tokens. So the
+bound is computed in both units and the **larger** is binding.
+
+It changed the answer on three of the six reported cells:
+
+| Guard | Condition | Gap | Char bnd | Token bnd | Margin | Binds |
+|---|---|---|---|---|---|---|
+| Llama Guard 3 | `homoglyph` | 0.53 | 0.21 | 0.21 | **+0.32** | char |
+| Llama Guard 3 | `zero_width` | 0.54 | 0.20 | 0.22 | **+0.32** | token |
+| Llama Guard 3 | `reverse_words` | 0.36 | 0.22 | 0.22 | **+0.14** | char |
+| WildGuard | `homoglyph` | 0.52 | 0.22 | 0.26 | **+0.26** | token |
+| WildGuard | `zero_width` | 0.48 | 0.22 | 0.22 | **+0.26** | char |
+| WildGuard | `reverse_words` | 0.44 | 0.22 | **0.34** | **+0.10** | token |
+
+**All six clear.** WildGuard `reverse_words` is the case that justifies the whole
+token arm: its token bound exceeds its character bound by 0.12, which is *more
+than the 0.10 margin that survives it*, so a character-only control would have
+reported the thinnest cell in the table as comfortable.
+
+⚠️ **The two units disagree because a rate gap at a fixed budget is not a
+monotone function of the separation AUROC.** WildGuard `reverse_words` moves
+0.654 to 0.663 in AUROC between units and 0.22 to 0.34 in bound: what matters is
+the shape of the two distributions *at the cut*, not their overall overlap. This
+is a further reason not to report a length AUROC as the control for a rate, which
+is what the probe-side null does and what this replaces.
+
+### What licenses regenerating an arm at all
+
+"The encoders are deterministic" is a claim about code, and this repo has been
+wrong about such claims before. So the script re-encodes the **harmful** arm too
+and requires it to reproduce the on-disk ciphertext for every prompt byte for
+byte before reporting anything, and it fails closed on a corpus-digest mismatch
+against the run record. The harmful arm is the only arm whose ground truth is on
+disk, so it is the only one that can carry the check, and passing it is what
+makes the benign regeneration trustworthy by the same code path.
+
+### One thin cell worth watching
+
+WildGuard `combining_marks` clears by **+0.02**, the thinnest in the run, and it
+is the same cell that clears the control floor by +0.003. It is not in the
+reported set, and two independent screens agreeing that it is marginal is worth
+more than either.
+
+Instrument: `scripts/guard_arm_length_bound.py` (keyless, GPU-free, seconds),
+artifact `outputs/analysis/guard_arm_length_bound_20260821.json`, pinned by
+`tests/test_guard_arm_length_bound.py` (11 tests, ceiling property checked over
+every threshold rule in both directions) and by the ledger entry
+`as6_length_bound_clearing_cells`, which RAISES rather than quietly returning a
+smaller number if any reported cell stops clearing. Paper: a new Controls
+paragraph and a new specification subsection with the table, both kits.
