@@ -65,6 +65,30 @@ SUBMISSION = (
 # flagged, while the hard-wrapped `proposal.md` passed with the SAME violating
 # sentence, because the venue token and "submitted" sat on different physical
 # lines. A checker whose strictness varies with line width is not a checker.
+# ---------------------------------------------------------------------------
+# A SECOND, SEPARATE RULE, sharing this file only because it needs the same
+# sentence machinery: no committed file states the page count of a draft.
+#
+# Standing owner rule: pages are considered right before submission and at no
+# other time (global law, research-process time blindness -- "page limits ...
+# weighed ONLY when the owner raises them in the current arc"). Reporting a page
+# count invites length to steer content, which is the whole reason the rule
+# exists.
+#
+# ⚠️ This is an ENFORCEMENT-lane fix, not a third statement of the rule. The law
+# already said it; it was violated in two separate paper namespaces on the same
+# day (AS-5's §4m and the session board, AS-6's build note). The improvement
+# loop's escalation rule is explicit that a law violated a second time gets a
+# deterministic assist rather than more prose. Making the omission inexpressible
+# is the fix; remembering it is not.
+PAGE_COUNT = r"\b\d+\s*pages?\b|\bpage (?:limit|count|budget)s?\b"
+# What makes a page count a DRAFT's page count. Bare "pages" in a citation field
+# (`pages = {37830--37838}`) carries no digits-then-"pages" form and is unaffected.
+DRAFT = (
+    r"\bkits?\b|\bpapers?\b|\bdrafts?\b|\bmanuscripts?\b|"
+    r"\bbuilds?\b|\bbuilt\b|compiles?|rebuilds?|\.tex\b|arxiv|camera.ready"
+)
+
 _SENTENCE = re.compile(r"[^.!?]*[.!?]|[^.!?]+$")
 
 
@@ -185,3 +209,65 @@ class TestTheGuardWouldHaveCaughtTheRealOne:
         """Unwrapping must not fuse two paragraphs into one window."""
         text = "Patchscopes is ICML 2024.\n\nThe build has no deadline attached."
         assert not offending_sentences(text)
+
+
+def page_count_sentences(text: str) -> list[str]:
+    """Sentences stating a draft's page count."""
+    return [
+        sentence[:200]
+        for sentence in sentences(text)
+        if re.search(PAGE_COUNT, sentence, re.IGNORECASE)
+        and re.search(DRAFT, sentence, re.IGNORECASE)
+    ]
+
+
+@pytest.mark.parametrize("path", tracked_text_files(), ids=lambda p: str(p.relative_to(ROOT)))
+def test_no_committed_file_states_a_draft_page_count(path: Path):
+    if path.name == SELF:
+        pytest.skip("the guard's fixtures are violations by construction")
+    offenders = page_count_sentences(path.read_text(encoding="utf-8", errors="ignore"))
+    assert not offenders, (
+        f"{path.relative_to(ROOT)} states a draft's page count:\n  "
+        + "\n  ".join(offenders)
+        + "\n\nPages are considered right before submission and at no other time"
+        "\n(global law: research-process time blindness). Report what the build"
+        "\nactually certifies instead: 0 errors, no undefined references, no"
+        "\noverfull boxes."
+    )
+
+
+class TestThePageCountGuardIsCalibrated:
+    """A guard that fires on nothing, or on everything, is not a guard."""
+
+    @pytest.mark.parametrize(
+        "sentence",
+        [
+            "Both kits build clean: 0 errors, 0 overfull boxes, 6 pages.",
+            "arXiv kit rebuilds at 7 pages, zero LaTeX warnings.",
+            "The draft is over the page limit.",
+            "The paper compiles to 8 pages.",
+        ],
+    )
+    def test_a_draft_page_count_is_rejected(self, sentence):
+        assert page_count_sentences(sentence)
+
+    @pytest.mark.parametrize(
+        "sentence",
+        [
+            # A citation's page RANGE is not a page count and must survive.
+            "Prakash et al., Proceedings of AAAI, pages 37830-37838.",
+            # Prose about a PDF page of someone else's paper is not our draft.
+            "Their Appendix D spans several pages of detailed results.",
+            # The word "pages" with no draft in the sentence.
+            "The corpus is 200 pages of scraped text.",
+            # A build report that says what a build actually certifies.
+            "Both kits build clean: 0 errors, no undefined references.",
+        ],
+    )
+    def test_a_legitimate_use_is_NOT_rejected(self, sentence):
+        assert not page_count_sentences(sentence)
+
+    def test_HARD_WRAPPING_DOES_NOT_HIDE_A_VIOLATION(self):
+        """Same lesson the venue guard paid for: unwrap before splitting."""
+        wrapped = "The arXiv kit rebuilds at\n7 pages, zero warnings."
+        assert page_count_sentences(wrapped)

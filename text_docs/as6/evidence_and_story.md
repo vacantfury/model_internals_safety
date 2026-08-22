@@ -459,7 +459,7 @@ porting is exactly what produced the defect the guard was founded on. And the ed
 matcher was made **whitespace-insensitive** after a literal match failed on a line wrap:
 a wrap-sensitive edit script has its strictness set by line width, which is the same
 defect `test_public_repo_hygiene.py` already paid for. Both kits build clean: 0 errors,
-**0 overfull and 0 underfull boxes**, 6 pages — the intervals widened `tab:map` 10.9pt
+**0 overfull and 0 underfull boxes** — the intervals widened `tab:map` 10.9pt
 past the margin and `tabcolsep` went 3pt → 1.5pt to absorb it, found in `build.log`
 rather than by eye, since a 0.9pt overhang is invisible on screen.
 

@@ -1402,7 +1402,7 @@ would have been as a citation.**
 
 ⚠️ `paper/` is gitignored, so this is the ONLY versioned record of the kit state.
 Both AS-5 kits edited identically; parity, skeleton and hygiene guards green;
-arXiv kit rebuilds at **7 pages, zero LaTeX warnings, no undefined references**.
+arXiv kit rebuilds clean: **zero LaTeX warnings, no undefined references**.
 
 **Out — the refuted internals leg, everywhere it reached (seven sites).** The
 `\section{The discrimination is present and unread}` section with its table, the
