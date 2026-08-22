@@ -1953,6 +1953,56 @@ distribution. This is the class the ledger exists for: a number that was
 internally consistent, printed for days, and wrong only relative to data already
 sitting on disk.
 
+### ⚠️ That guard was HALF a sentence, and the supersession did not reach the mirrors (2026-08-22, same day)
+
+Three things found by sweeping the AS-6 kit for counted claims with no ledger
+entry, rather than by reading the sentences again.
+
+**(a) One sentence, one half checked.** The Method reads "distributions, over 12
+controls for Llama Guard 3 and 14 for WildGuard". The ledger located `and (\w+)
+for WildGuard` and nothing else, so **half a checked sentence was reading as a
+checked sentence**. Llama Guard's 12 is correct and was unverified; the recipe
+is now `as6_guard_floor_controls`, source-driven, with one entry per guard.
+
+**(b) The count can hold still while the VALUE drifts.** 11 controls and 14
+controls are different numbers and a count check sees that. A floor value can
+move with the control set unchanged, and the value is what a screen actually
+compares against, so `as6_guard_floor_value` covers Table 2's caption for both
+guards. It compares at **the paper's own printed precision**, read from the
+captured token rather than from a setting: `0.6617` against `0.6605` rounds away
+at three places and not at four, and a tolerance knob here would be a knob on
+how wrong a printed number may be.
+
+**(c) The mirrors kept the superseded pair for a day.** The paper and this
+record were both correct within the hour. `CLAUDE.md` was not: it carried "an
+**11-control distribution at 0.6852**" and "0.6852→**0.6617** (WildGuard)", plus
+two figures downstream of the same supersession (`combining_marks` clearing by
+0.003 rather than 0.004, and WildGuard's sigma window as [1.577, 2.082] rather
+than [1.580, 2.124]). `NOW.md` carried the same floor pair, and this document's
+sibling `phase1_map.md` still had a "reconciled rather than left to be found"
+block asserting the screen of record used 0.6852 over 11 and that re-deriving on
+fourteen was "filed, not done" — written before the re-derivation it was
+describing had run.
+
+**Why this matters more than the paper case, and it is the reason the fix went
+into code rather than into another warning.** A paper has referees. `CLAUDE.md`
+is loaded into every session in this repo and has none, so a superseded number
+there does not sit in one document waiting to be caught, it propagates into
+whatever the next session reasons about. The ledger therefore takes an optional
+`mirrors:` list per claim — a repo file and its own locating regex, since a
+mirror phrases the claim its own way — and checks it alongside the kits, at
+whatever precision that surface printed.
+
+**One thing the mutation test caught about the guard itself.** The first mirror
+anchors read `floors moved only 0.7098→**(...)** (Llama Guard)`. That put a
+second copy of a value in the ledger, which rule 2 forbids, and the consequence
+showed up immediately under mutation: restoring the historical error made the
+guard report *locate matched 0* rather than a value mismatch. It fired, for the
+wrong reason, and the reason would have disappeared the moment the copied value
+was the thing that drifted. Anchored on the guard name alone, the same mutation
+now reports `CLAUDE.md (mirror): asserts 0.6617`. **A guard that fires is not
+yet a guard that fires for the right reason**, and only mutation separates them.
+
 ## 26. TODO 81's TWO "COSTED BASELINES" COST MINUTES, AND ONE OF THEM NEEDS NO GENERATION AT ALL (2026-08-22)
 
 The item said "neither is $0", which was true and read as though these were the

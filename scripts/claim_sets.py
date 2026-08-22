@@ -393,15 +393,13 @@ def as6_paired_total_pairs(claim: dict) -> tuple[int, str]:
     return len(pairs), f"{len(pairs)} pairwise comparisons across both guards"
 
 
-def as6_wildguard_floor_controls(claim: dict) -> tuple[int, str]:
-    """How many controls WildGuard's floor is a distribution over.
+def _guard_floor(claim: dict) -> dict:
+    """The `floor` block of one guard's control-floor artefact.
 
-    This number drifted once, silently and for a whole paper cycle: the cluster
-    invocation passed a single `--ability-cells` file, so three conditions with
-    measured ability 0.00 never entered the control set, and the paper printed
-    the resulting floor for days. Nothing in the build could catch it, because
-    the floor was internally consistent with the controls it was given. It is a
-    counted claim, so it recomputes.
+    Shared by the two recipes below because the count and the value are halves
+    of the same object, and a paper sentence naming one without the other is
+    what let a superseded pair survive: the ledger checked "14 for WildGuard"
+    while "12 controls for Llama Guard 3" sat unchecked in the same sentence.
     """
     (source,) = _resolve_source(claim)
     floor = json.loads(source.read_text())["floor"]
@@ -410,6 +408,35 @@ def as6_wildguard_floor_controls(claim: dict) -> tuple[int, str]:
             f"{claim['id']}: the floor is a {floor['kind']}, not a distribution — "
             "a bound is reported differently and the paper's sentence would be wrong"
         )
+    return floor
+
+
+def as6_guard_floor_value(claim: dict) -> tuple[float, str]:
+    """The floor value itself, at the paper's own printed precision.
+
+    Added 2026-08-22 after the 11-control floor pair (0.6852 / 0.6617) was
+    superseded by the 14-control one (0.6803 / 0.6605) and survived for a day in
+    this repo's `CLAUDE.md` and `NOW.md` while the paper and the canonical
+    record were both already correct. The paper was right that time. A count
+    alone would not have noticed if it had not been: 11 controls and 14 controls
+    are different numbers, but a floor VALUE can drift while the count holds
+    still, and the value is what a screen actually compares against.
+    """
+    floor = _guard_floor(claim)
+    return floor["value"], f"floor {floor['value']:.6f} over {floor['n']} controls"
+
+
+def as6_guard_floor_controls(claim: dict) -> tuple[int, str]:
+    """How many controls a guard's floor is a distribution over.
+
+    This number drifted once, silently and for a whole paper cycle: the cluster
+    invocation passed a single `--ability-cells` file, so three conditions with
+    measured ability 0.00 never entered the control set, and the paper printed
+    the resulting floor for days. Nothing in the build could catch it, because
+    the floor was internally consistent with the controls it was given. It is a
+    counted claim, so it recomputes.
+    """
+    floor = _guard_floor(claim)
     return floor["n"], f"{floor['n']} controls at floor {floor['value']:.4f}: {', '.join(floor['controls'])}"
 
 
@@ -426,7 +453,8 @@ RECIPES = {
     "as6_length_bound_clearing_cells": as6_length_bound_clearing_cells,
     "as6_paired_separating_pairs": as6_paired_separating_pairs,
     "as6_paired_total_pairs": as6_paired_total_pairs,
-    "as6_wildguard_floor_controls": as6_wildguard_floor_controls,
+    "as6_guard_floor_controls": as6_guard_floor_controls,
+    "as6_guard_floor_value": as6_guard_floor_value,
 }
 
 
@@ -439,6 +467,24 @@ def _as_int(token: str, expect_word: str | None) -> int:
     if expect_word is not None and token == "only":
         return WORD_NUMBERS[expect_word]
     raise ValueError(f"cannot read {token!r} as a number")
+
+
+def _agrees(token: str, value: float | int, expect_word: str | None) -> tuple[str, bool]:
+    """Does the paper's token agree with the recomputed value?
+
+    Two kinds, and the DECIMAL COUNT comes from the paper rather than from a
+    setting. A paper printing `0.661` is asserting a rounded quantity, so the
+    artefact is rounded to the same places before comparing; a tolerance knob
+    here would be a knob on how wrong a printed number may be, which is not a
+    thing to tune. Counts stay exact.
+    """
+    token = token.strip()
+    if "." in token:
+        decimals = len(token.split(".", 1)[1])
+        asserted = float(token)
+        return token, round(float(value), decimals) == asserted
+    asserted = _as_int(token, expect_word)
+    return str(asserted), asserted == value
 
 
 def _kits(paper: str) -> list[Path]:
@@ -475,6 +521,31 @@ def main() -> int:
             print(f"   {'✓' if value == 0 else '⛔'} internal check, {value} mismatches")
             failures += value
             continue
+        # MIRRORS first: a repo file restating the same number. The paper has
+        # referees and this file has none, which is why the mirror is checked
+        # at all — `CLAUDE.md` is loaded into every session, so a superseded
+        # value there propagates into reasoning rather than into one document.
+        # Seed 2026-08-22: the 11-control floor pair (0.6852 / 0.6617) was
+        # superseded by the 14-control one and survived a day in `CLAUDE.md`
+        # and `NOW.md` while the paper and the canonical record were correct.
+        # Its own locate, because a mirror phrases the claim its own way.
+        for mirror in claim.get("mirrors", []):
+            path = REPO / mirror["file"]
+            if not path.exists():
+                # Gitignored mirrors (NOW.md) are legitimately absent on a
+                # fresh clone. Say so rather than passing quietly.
+                print(f"   ⚠️  {mirror['file']} absent — mirror UNCHECKED")
+                continue
+            flat = re.sub(r"\s+", " ", path.read_text())
+            hits = re.findall(mirror["locate"], flat)
+            if len(hits) != 1:
+                print(f"   ⛔ {mirror['file']}: locate matched {len(hits)}, expected 1")
+                failures += 1
+                continue
+            asserted, agrees = _agrees(hits[0], value, claim.get("expect_word"))
+            print(f"   {'✓' if agrees else '⛔'} {mirror['file']} (mirror): asserts {asserted}")
+            failures += not agrees
+
         kits = _kits(claim["paper"])
         if not kits:
             print(f"   ⚠️  no kits under paper/{claim['paper']}/ — claim UNCHECKED against prose")
@@ -486,10 +557,10 @@ def main() -> int:
                 print(f"   ⛔ {kit.relative_to(REPO)}: locate matched {len(hits)} sentences, expected 1")
                 failures += 1
                 continue
-            asserted = _as_int(hits[0], claim.get("expect_word"))
-            mark = "✓" if asserted == value else "⛔"
+            asserted, agrees = _agrees(hits[0], value, claim.get("expect_word"))
+            mark = "✓" if agrees else "⛔"
             print(f"   {mark} {kit.relative_to(REPO).parts[2]}: paper asserts {asserted}")
-            failures += asserted != value
+            failures += not agrees
 
     print("\n" + ("⛔ MISMATCHES: %d" % failures if failures else "✓ every artefact-backed claim agrees"))
     return 1 if failures else 0

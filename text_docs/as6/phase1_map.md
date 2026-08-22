@@ -368,19 +368,22 @@ numbers must be read through, stated once:
 - **Everything else holds**, because the leak is ability-dependent: +0.147 to
   +0.239 at fixed *n* where the base model decodes, −0.011 to +0.017 on the
   ability-0.00 controls. The floor is built where the confound is weakest and
-  applied where it is strongest, so it moved 0.003 / 0.024 while candidates fell
+  applied where it is strongest, so it moved 0.003 / 0.020 while candidates fell
   0.04–0.20. **The control floor is structurally blind to this**, which is a
   different failure from the two it did catch.
 
-⚠️ **Control-set bookkeeping, reconciled rather than left to be found.** §0.6's
-resolution note records WildGuard's floor as **0.6803 over 14 controls**; the
-screen of record uses **0.6852 over 11**. The 11 are the ability-0.00 rungs of
-job `9031680` alone; the other three (`base64`, `reverse_characters`,
-`tag_block`) were measured in an earlier Mistral run whose cells file the floor
-job did not read. The 11-control floor is the STRICTER of the two and no rung
-sits between 0.6803 and 0.6852, so no verdict differs — and both treatments
-(unsplit and split) used the same eleven, so the pass/fail comparison is like
-with like. Re-deriving on all fourteen is filed, not done.
+✅ **Control-set bookkeeping, RESOLVED 2026-08-22 (§25) — this block previously
+recorded the discrepancy as open and it is not.** It read "the screen of record
+uses **0.6852 over 11** … re-deriving on all fourteen is filed, not done". The
+re-derivation has run: the three missing controls (`base64`,
+`reverse_characters`, `tag_block`) had measured Mistral-7B-v0.3 ability 0.00 on
+disk since 2026-08-08, and **the 14-control floor is adopted on both
+treatments** — unsplit **0.6803** (was 0.6852), item-split **0.6605** (was
+0.6617). No verdict differs, verified rather than assumed: no rung's AUROC lies
+between the two floors and the per-condition `clears_floor` maps are identical.
+⚠️ The superseded pair **0.6852 / 0.6617 must not be quoted** — it survived in
+this repo's `CLAUDE.md` and `NOW.md` for a day after the canonical record was
+written, which is the mirror-drift the one-canonical-home rule exists to catch.
 
 ## 1. The licensing rule, settled by this run
 

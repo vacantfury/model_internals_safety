@@ -131,12 +131,63 @@ claims:
       sentence and moves whenever a condition enters or leaves Table 2.
     locate: 'independent intervals overlap on all (\w+)\s+pairs'
 
+  # The floor's COUNT and VALUE, both guards, four entries.
+  #
+  # Added the Llama Guard half and both values on 2026-08-22, after the sweep
+  # for uncovered counted claims found that one sentence — "distributions, over
+  # 12 controls for Llama Guard 3 and 14 for WildGuard" — had its second half
+  # checked and its first half not. Half a checked sentence reads as a checked
+  # sentence. The values came with it because a count can hold still while the
+  # value drifts, and the value is what a screen compares against.
+
   - id: as6_wildguard_floor_controls
     paper: as-6
-    recipe: as6_wildguard_floor_controls
+    recipe: as6_guard_floor_controls
     source: analysis/as6_floor_wildguard_split.json
     claim: >-
       controls WildGuard's control floor is a distribution over, under the
       item-split treatment that is the screen of record. Drifted once from 14 to
       11 because a cluster invocation passed one ability file.
     locate: 'and (\w+) for WildGuard'
+
+  - id: as6_llamaguard_floor_controls
+    paper: as-6
+    recipe: as6_guard_floor_controls
+    source: analysis/as6_floor_llamaguard_split.json
+    claim: >-
+      the same count for Llama Guard 3, the unchecked half of the sentence its
+      WildGuard twin was already checking.
+    locate: 'distributions, over (\w+) controls for Llama Guard 3'
+
+  - id: as6_wildguard_floor_value
+    paper: as-6
+    recipe: as6_guard_floor_value
+    source: analysis/as6_floor_wildguard_split.json
+    claim: >-
+      WildGuard's re-derived floor as Table 2's caption prints it. The
+      superseded 11-control value was 0.6617 against this 0.6605, a difference
+      that rounds away at three places but not at four, which is why the
+      comparison rounds to the PAPER's printed precision rather than a fixed one.
+    locate: 'and ([\d.]+) \(WildGuard\)'
+    mirrors:
+      - file: CLAUDE.md
+        locate: '→\*\*([\d.]+)\*\* \(WildGuard\)'
+      - file: NOW.md
+        locate: '→([\d.]+) WildGuard'
+
+  - id: as6_llamaguard_floor_value
+    paper: as-6
+    recipe: as6_guard_floor_value
+    source: analysis/as6_floor_llamaguard_split.json
+    claim: Llama Guard 3's re-derived floor, same caption.
+    locate: 're-derived floors of ([\d.]+) \(Llama Guard 3\)'
+    mirrors:
+      # ⚠️ The anchor names the GUARD, never the pre-holdout value. An earlier
+      # version anchored on `0.7098→`, which put a second copy of a value in the
+      # ledger (rule 2) and made the guard fire as "locate matched 0" instead of
+      # as a value mismatch — a catch for the wrong reason, and one that
+      # vanishes the moment the copied value is the thing that drifts.
+      - file: CLAUDE.md
+        locate: '→\*\*([\d.]+)\*\* \(Llama Guard\)'
+      - file: NOW.md
+        locate: '→([\d.]+) Llama Guard'
