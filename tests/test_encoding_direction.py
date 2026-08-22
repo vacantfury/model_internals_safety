@@ -47,9 +47,19 @@ def cell(**overrides) -> CellEvidence:
     return CellEvidence(**{**base, **overrides})
 
 
-def arms(harmful: float, benign: float, ability: float | None = None) -> ArmRates:
+def arms(
+    harmful: float,
+    benign: float,
+    ability: float | None = None,
+    mechanism_errors: int = 0,
+) -> ArmRates:
     return ArmRates(
-        harmful_refusal=harmful, benign_refusal=benign, n_harmful=100, n_benign=100, ability=ability
+        harmful_refusal=harmful,
+        benign_refusal=benign,
+        n_harmful=100,
+        n_benign=100,
+        ability=ability,
+        mechanism_errors=mechanism_errors,
     )
 
 
@@ -87,7 +97,10 @@ class TestArmRates:
 
     def test_an_empty_arm_is_rejected_rather_than_dividing_later(self):
         with pytest.raises(ValueError, match="non-empty"):
-            ArmRates(harmful_refusal=0.9, benign_refusal=0.1, n_harmful=0, n_benign=100)
+            ArmRates(
+                harmful_refusal=0.9, benign_refusal=0.1,
+                n_harmful=0, n_benign=100, mechanism_errors=0,
+            )
 
     def test_harm_gap_is_harmful_minus_benign(self):
         assert arms(0.92, 0.10).harm_gap == pytest.approx(0.82)
@@ -213,7 +226,10 @@ class TestTheReading:
 
     def test_the_resolution_follows_n_rather_than_being_a_constant(self):
         small = reading(
-            plaintext=ArmRates(harmful_refusal=0.9, benign_refusal=0.1, n_harmful=20, n_benign=20),
+            plaintext=ArmRates(
+                harmful_refusal=0.9, benign_refusal=0.1,
+                n_harmful=20, n_benign=20, mechanism_errors=0,
+            ),
             baseline=arms(0.99, 0.99, ability=0.91),
         )
         assert small.resolution == pytest.approx(0.05)

@@ -207,6 +207,12 @@ def arm_rates(
         n_harmful=len(harmful_records),
         n_benign=len(benign_records),
         ability=ability,
+        # TODO 95. This script computes its rates straight off the records and
+        # never builds a `Reading`, so `Reading.mechanism_errors` cannot
+        # withhold anything here — `ArmRates.harm_gap` reads `None` instead.
+        mechanism_errors=sum(
+            r.judge_mechanism_error for r in (*harmful_records, *benign_records)
+        ),
     )
 
 
@@ -308,9 +314,21 @@ def main(argv: list[str] | None = None) -> int:
     # generations re-deriving a constant — and worse, would let two families
     # disagree about a quantity that cannot differ.
     plaintext_rates = arm_rates(loaded, plain_harmful, plain_benign, judge, behavior_config)
+    # TODO 95: `harm_gap` is None when a judge call failed on either arm, so it
+    # cannot go straight into a format spec. Loud rather than crashing — the run
+    # should finish and record the failure, not die three hours in.
+    plain_gap = plaintext_rates.harm_gap
     print(f"plaintext  harmful {plaintext_rates.harmful_refusal:.2f}  "
-          f"benign {plaintext_rates.benign_refusal:.2f}  gap {plaintext_rates.harm_gap:+.2f}",
+          f"benign {plaintext_rates.benign_refusal:.2f}  "
+          f"gap {'UNMEASURED' if plain_gap is None else f'{plain_gap:+.2f}'}",
           flush=True)
+    if plaintext_rates.mechanism_errors:
+        print(
+            f"⚠️  JUDGE CALLS FAILED on the plaintext arm: "
+            f"{plaintext_rates.mechanism_errors}. Every rate in this run is computed "
+            "over verdicts fabricated from error text; the gaps read UNMEASURED.",
+            flush=True,
+        )
 
     readings: list[AblationReading] = []
     record: dict = {"plaintext": asdict(plaintext_rates), "families": {}}
@@ -470,7 +488,9 @@ def main(argv: list[str] | None = None) -> int:
         }
         # Checkpoint per family — a wall kill must not lose a finished rung.
         checkpoint()
-        print(f"{family}: L{reading.layer}  margin {reading.margin:+.3f}  "
+        margin = reading.margin
+        print(f"{family}: L{reading.layer}  "
+              f"margin {'UNMEASURED' if margin is None else f'{margin:+.3f}'}  "
               f"restored_fraction {reading.restored_fraction}  "
               f"ability_shift {reading.ability_shift}  verdict {reading.verdict(config)}",
               flush=True)

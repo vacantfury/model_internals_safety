@@ -44,6 +44,7 @@ from internals_safety.measurements.behavior_control import (
     summarize_control as summarize_behavior_control,
 )
 from internals_safety.measurements.contract import Reading, Screen
+from internals_safety.measurements.encoding_direction import AblationReading, ArmRates
 from internals_safety.measurements.refusal import HarmGap, summarize_gap
 from internals_safety.measurements.refusal import reading as refusal_reading
 from internals_safety.measurements.refusal_control import (
@@ -451,3 +452,61 @@ class TestTheScreensFailClosed:
         )
         assert empty.benign_mechanism_errors == 0
         assert empty.clears() is False
+
+
+# ---------------------------------------------------------------------------
+# 6. The one harm gap that does NOT go through `Reading`
+# ---------------------------------------------------------------------------
+
+
+class TestTheAblationArmsGateThemselves:
+    """`encoding_ablation.py` computes rates straight off the records.
+
+    It never builds a `Reading`, so `Reading.mechanism_errors` withholds nothing
+    for it and the check has to live on `ArmRates`. This is the caller the rest
+    of the fix would have missed, and finding it is why the sweep for judge
+    consumers went past the obvious two.
+    """
+
+    @staticmethod
+    def arms(harmful: float, benign: float, failed: int = 0) -> ArmRates:
+        return ArmRates(
+            harmful_refusal=harmful,
+            benign_refusal=benign,
+            n_harmful=100,
+            n_benign=100,
+            mechanism_errors=failed,
+        )
+
+    def test_a_healthy_pair_reports_its_gap(self):
+        assert self.arms(0.92, 0.10).harm_gap == pytest.approx(0.82)
+
+    def test_a_failed_call_makes_the_gap_UNMEASURED_not_zero(self):
+        # Zero would read as "this model does not discriminate", which is the
+        # strongest claim the instrument can make, asserted from a dead judge.
+        assert self.arms(0.92, 0.10, failed=1).harm_gap is None
+
+    def test_the_whole_ablation_reading_falls_with_ONE_broken_arm(self):
+        healthy = dict(
+            family="homoglyph",
+            model="llama3_1_8b_instruct",
+            layer=14,
+            position="instruction_final",
+            separation_auroc=0.99,
+            kl=0.01,
+            baseline=self.arms(0.99, 0.99),
+            ablated=self.arms(0.95, 0.35),
+            control=self.arms(0.98, 0.96),
+            plaintext=self.arms(0.92, 0.10),
+        )
+        assert AblationReading(**healthy).measured is True
+        assert AblationReading(**healthy).margin is not None
+
+        # Every quantity is a difference of differences across all four arms, so
+        # one broken arm moves the headline `margin` as surely as its own.
+        for arm in ("baseline", "ablated", "control", "plaintext"):
+            broken = AblationReading(**{**healthy, arm: self.arms(0.9, 0.1, failed=1)})
+            assert broken.measured is False, arm
+            assert broken.margin is None, arm
+            assert broken.gap_destroyed is None, arm
+            assert broken.restored_fraction is None, arm

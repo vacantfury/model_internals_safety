@@ -3226,6 +3226,30 @@ exact shape that has now failed here five times (`strata`, `device`,
 signatures, so a stale caller fails at `pytest` time rather than inside a
 running job with a live judge.
 
+### 8.6.1 The caller the fix nearly missed, and how it was found
+
+`Reading.mechanism_errors` withholds a condition, which covers every instrument
+that produces a `Reading`. **`encoding_ablation.py` does not.** It computes both
+arms' refusal rates straight off the `BehaviorRecord`s and assembles an
+`ArmRates` / `AblationReading` pair with no contract object anywhere in the
+path, so the gate that had just been built would have withheld nothing there.
+
+It was found by enumerating the judge CONSUMERS rather than the judge
+call sites: six scripts construct an API judge, two of them only read
+`prompt_template` lengths for the cost model, and of the remaining four this was
+the one that never reaches `Reading`. Grepping for `.judge(` would have found
+the call and stopped, because the call is fine. The defect is what happens to
+the verdicts afterwards.
+
+So `ArmRates` carries the count and `harm_gap` returns `None` rather than a
+float, which propagates through `gap_destroyed` / `gap_restored` /
+`control_gap_restored` / `margin` / `restored_fraction` and out to `verdict()`,
+which already returned `None` on an absent fraction. `AblationReading.measured`
+requires **all four** arms clean, not the two a given difference reads: every
+quantity there is a difference of differences, so one broken arm moves the
+headline `margin` as surely as the arm it sits in, and a partial reading would
+have to name an arm it trusts without any basis for doing so.
+
 ### 8.7 ✅ Every number already reported is CLEAR — checked, not assumed
 
 No run record on disk carries `mechanism_errors`, so the first instinct is to
