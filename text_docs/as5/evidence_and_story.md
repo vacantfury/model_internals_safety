@@ -2558,7 +2558,7 @@ where the artifact says fifteen, understating our own result. It came from readi
 a rounded console table instead of the JSON. **Recompute every figure from the
 artifact at the moment it enters a `.tex`, not from the summary that reported it.**
 
-## 4y ⏸ THE HELD-OUT CORPUS IS BUILT AND COSTED, AWAITING THE OWNER'S GO (2026-08-22)
+## 4y 🔄 THE HELD-OUT CORPUS IS LAUNCHED (2026-08-22, owner go: jobs 9458918-9458921)
 
 The last objection all three referees raised independently. It is the one that
 cannot be answered by an offline re-read, and until this sitting it could not be
@@ -2671,6 +2671,27 @@ exemption tied to nothing would have been a way to approve the very run the
 guard exists to reject. Consequence, stated rather than left implicit: **the
 held-out run's deployment axis is non-reportable by construction, deliberately,
 and that costs nothing because the run reports refusal rates.**
+
+**LAUNCHED 2026-08-22 on the owner's go**: jobs `9458918` (Llama-3.1-8B-Instruct),
+`9458919` (Qwen2.5-7B-Instruct), `9458920` (Tülu-3-8B), `9458921`
+(Mistral-7B-Instruct-v0.3), contiguous ids so nothing was dropped. The queue was
+read from `squeue`, not from the submitter's printout, which was `tail`-truncated
+and is therefore not evidence: same morning's fifth exit-code instance, applied
+rather than re-learned.
+
+⚠️ **One preflight check earned its place and is worth carrying.** `data/` is
+gitignored, so git guarantees nothing about a held-out corpus reaching the
+cluster, and both XSTest files were verified **by MD5 against the local copies
+rather than by size**. A divergent copy would have produced a different corpus
+behind an identical-looking run record, and the run record pins the corpus by
+content digest, so the mismatch would have surfaced only to whoever later
+compared two digests and wondered why. They match. The cluster HEAD is `f72f1ba`
+and all four presets resolved to argv carrying `--corpus xstest_matched` at exit
+0 with no `REFUSED` before anything was submitted.
+
+⚠️ The login now sits at **7 of 8 submit slots**, because the guardrail sibling's
+two `vllm_*` jobs and one other job share the same Unix user. One further
+submission fits; a batch does not.
 
 **What this does NOT answer.** Two things, stated so neither is discovered
 later. It is one held-out corpus, not two, so a failure to replicate would not
