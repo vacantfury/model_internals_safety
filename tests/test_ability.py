@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 from internals_safety.config import AbilityConfig, load_measurements_config
@@ -44,6 +46,29 @@ def test_generation_returns_one_response_per_message(tiny_model, messages):
     responses = generate(tiny_model, messages, max_new_tokens=4, batch_size=2)
     assert len(responses) == len(messages)
     assert all(isinstance(response, str) for response in responses)
+
+
+def test_batch_size_cannot_be_omitted():
+    """`batch_size` moves generated text, so it may not carry a default.
+
+    The retired marker called it plumbing on the grounds that "greedy decoding is
+    batch-invariant". The paper's own §7 refutes that: only 12–58% of responses
+    repeat byte-identically across nominally greedy runs, because batch
+    composition changes the reduction order in the matmuls and the argmax can
+    land elsewhere. An optional flag defaulting to the convenient value is the
+    shape that has failed in this repo five times, so the fix is the one that
+    worked there — make the omission inexpressible rather than detectable.
+
+    Pinned on the SIGNATURE rather than on a call, because `generate` is reached
+    only through the library and would be vacuous in
+    `test_entrypoint_call_sites.WATCHED`.
+    """
+    parameter = inspect.signature(generate).parameters["batch_size"]
+    assert parameter.default is inspect.Parameter.empty, (
+        "batch_size regained a default; a knob that changes generated text must "
+        "be passed, and every caller reads it from measurements.yaml"
+    )
+    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
 
 
 def test_measure_ability_pairs_every_encoded_prompt_with_a_response(tiny_model):

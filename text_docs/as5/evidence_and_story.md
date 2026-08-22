@@ -2085,6 +2085,95 @@ throughput-only on the grounds that "greedy decoding is batch-invariant", and
 composition changes reduction order. The marker asserts an invariance this repo
 has refuted. Filed in TODO 97.
 
+## 4t. ⛔ THREE COUNTED CLAIMS HAD GONE STALE UNDER THEIR OWN SCREENS, AND THE CHECK THAT FOUND THEM IS NOW MECHANICAL (2026-08-22)
+
+TODO 97 asked for a per-number provenance stamp. The peer session's parallel pass on
+AS-6 supplied the better design and it is cheaper: **both of the day's defects were
+found by recomputing the claim's SET and comparing it to what the document contains,
+not by tracing provenance forward.** A set-membership check needs no stamp, no
+ledger of screens per number, and no inference about what "touched" means. That last
+part is what made the stamp risky: getting it wrong yields a guard that is green
+while the failure is live, which is the `--dry-run`-returns-before-the-guard shape.
+
+### The three, all live in both kits, all found by the check
+
+**(a) The retired sign claim survived in the contributions list.** §6 was corrected
+on 2026-08-22 to "the standard metric is **blind** to it" because on the only
+screen-clean encoding the harmful arm moves five items at exact McNemar `p=0.06`.
+Contribution 3 still read *"reports its progress backwards ... On all three
+encodings tested, the harmful-arm metric and the harm gap disagree in sign"* — the
+retired wording, ranging over all three encodings, of which the echo screen rejects
+four of nine cells. **The screen changed one section and not the claim four pages
+earlier, which is exactly AS-6 §15's failure one paper over.** Rescoped: the
+homoglyph result is stated as blindness with its interval, and the sign disagreement
+is attributed to the two rejected encodings as a direction.
+
+**(b) Two different things both claimed to be the ninth defect.** §6 said "we count
+this as the ninth defect of §7" while `\paragraph{(9)}` was already the
+probe-item-leakage defect. §7 numbered exactly nine, and the defect §6 describes at
+length was **absent from the paper's own list**. It is now `(10)`, written out in §7,
+and §6 cites the stable id. ⚠️ **The sentence was mine, written the same day, in the
+pass that found (a)'s class.** An ordinal is a position claim that goes stale the
+moment the list grows while the sentence stays put, so the guard now refuses
+ordinals for numbered items outright.
+
+**(c) The abstract's partition disagreed with §7's.** Abstract: *"the eight on the
+behaviour axis share a direction, in that every one of them inflates apparent
+safety."* §7: *"Defects (1), (2), (3), (4), (7) and (8) all inflate apparent
+safety"* — **six**, with (5), (6), (9) on the probe axis. Corrected to ten defects
+and six inflating. ⚠️ **(3) was also in the wrong group and is now named as the
+single exception:** a binary judge that fires on 0.61–0.70 of *plaintext benign*
+prompts over-reports attack success, which understates apparent safety. That
+restores what §4e always said — every behaviour-axis defect inflates apparent safety
+*except one, which is a judge artefact running the other way*.
+
+### What the check verified rather than broke
+
+Four claims whose set lives in a run record now recompute clean on both kits
+(`uv run python scripts/claim_sets.py`, keyless, GPU-free, seconds):
+
+| claim | recomputed | paper |
+|---|---|---|
+| model-by-rung cells the echo screen returned a verdict on | 27 of 28 | 27 ✓ |
+| reported pipeline cells the screen rejects | 4 | four ✓ |
+| reported pipeline cells in total | 9 (3 stages x 3 encodings) | nine ✓ |
+| rungs clearing every screen on all four models | 1 (`homoglyph`) | "the only" ✓ |
+
+Two of those deserve a note. The **27** is right *because it excludes* the one cell
+the screen could not read (Llama `base64`, zero non-echoing cells in both arms) — the
+tri-state carried through rather than folded into a negative, which is the same
+discipline AS-6 §15 found violated. And **`homoglyph` really is the only rung**, but
+the margin is thinner than the sentence suggests: `math_bold` and `tag_block` also
+clear the echo screen on all four models and are excluded by *readability*, not by
+echo — `math_bold` by Mistral's ability of 0.00 against 1.00 on the other three. That
+is a genuine screen failure and not an unmeasured cell, so the claim stands.
+
+### The build, and the line between its halves
+
+`src/internals_safety/paper_claims.py` + `tests/test_paper_claim_integrity.py`
+check what a document can check against itself: contiguous numbering, every
+referenced id resolving, no ordinals, and every predicate partitioning the list
+agreeing on its cardinality wherever it is asserted. No run records, so it runs in
+the suite on a fresh clone. `scripts/claim_sets.py` + `conf/claim_sets.yaml` check
+what only a machine holding the runs can. **Keeping them apart is deliberate:** a
+single checker that silently skipped the artefact half while printing the mechanical
+half green would be the exact shape this repo has already paid two queue cycles for.
+The ledger holds a locating regex and a recipe name and **no second copy of any
+value** — one truth per claim, and it is the paper. Every guard here was verified by
+mutation in both directions, including against the three real defects above; the
+ordinal rule exists because the first version missed (b).
+
+### Residue, corrected the same pass
+
+`models/generate.py`'s `batch_size` was marked `# plumbing: throughput only — greedy
+decoding is batch-invariant`, which §7 of the paper refutes at 12–58% byte-identical
+responses across nominally greedy runs. It is now **keyword-only with no default**,
+so omitting it is a `TypeError`; every caller already read it from
+`measurements.yaml`, so nothing broke. The six other `plumbing(batch_size)` markers
+say something different ("every read is per-prompt") and were left alone, but their
+justification is about *attribution* rather than *numerical invariance* and is
+unmeasured. Filed, not swept.
+
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
 Jobs `9010897` (Mistral-7B-Instruct-v0.3, 1:15:12) and `9011034` (Tulu-3-8B,

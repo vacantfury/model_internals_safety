@@ -20,8 +20,19 @@ def generate(
     loaded: LoadedModel,
     user_messages: Sequence[str],
     max_new_tokens: int,
-    # plumbing(batch_size): throughput only — greedy decoding is batch-invariant
-    batch_size: int = 8,
+    # NO DEFAULT, keyword-only. `batch_size` is not plumbing: the retired
+    # marker read "throughput only — greedy decoding is batch-invariant",
+    # and the paper's own §7 refutes it. Only 12–58% of responses repeat
+    # byte-identically across nominally greedy runs, because batch
+    # composition changes the reduction order in the matmuls and the argmax
+    # can land elsewhere. A knob that moves generated text may not carry a
+    # convenient default that every caller silently inherits — that shape has
+    # failed in this repo five times (`strata`, `device`, `inherited`, the
+    # control floor, and now this one). Every caller reads it from YAML
+    # (`measurements.ability.batch_size`, `measurements.behavior.batch_size`),
+    # so omitting it is a TypeError rather than an inherited 8.
+    *,
+    batch_size: int,
     do_sample: bool = False,
     temperature: float | None = None,
     top_p: float | None = None,

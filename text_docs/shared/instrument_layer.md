@@ -2958,3 +2958,67 @@ rather than only in the plan:
   clusters by the model's **behaviour**. That is a free interpretation of
   measurements this repo already takes, and it is why recognition (read at
   `instruction_final`) and behaviour are not redundant.
+
+---
+
+## 7. A screen governs a TABLE, not the run that produced it (settled 2026-08-22)
+
+**The failure, stated once for both papers.** A screen adopted after a table
+exists will pass its own unit tests, appear in the Method, be called
+required-for-validity in Limitations, and never have touched the numbers.
+Nothing catches it, because **no artefact records which screens a given number
+went through.** The mirror failure is the same thing running forward: a screen
+that later shrinks one set leaves every *other* sentence ranging over the old
+one.
+
+Both arrived on 2026-08-22, one per paper, within an hour of each other:
+
+- **AS-5.** The echo screen had never been applied to the pipeline table. It
+  needs both arms' per-item verdicts and that experiment predates the benign arm
+  reaching disk. Applied, it rejects four of nine cells. It is now defect (10) of
+  the paper's own list.
+- **AS-6.** `blocked without decoding is at most 5 per 100 across all 38
+  guard-condition pairs` ranged over a set the control floor had shrunk three
+  subsections earlier, nine of the 38 carried a `null` decode cell, and one pair
+  genuinely exceeded the bound (`combining_marks` at 8/100, demoted out of the
+  table but still inside the sentence). Record: `as6/evidence_and_story.md` §15.
+
+**The method that found both, and it is NOT provenance tracing.** Recompute the
+claim's SET from the artefact and compare it to the set the screens actually
+produce. That needs no per-number stamp and no decision about what "touched"
+means — which is the part that would have gone wrong, because a stamp built on a
+wrong definition of touched is green while the failure is live.
+
+**The two halves, and why they must stay separate.**
+
+| half | checks | where | runs on a fresh clone |
+|---|---|---|---|
+| mechanical | claims whose set lives inside the document: list length, partition cardinalities, id references, ordinals | `paper_claims.py` + `tests/test_paper_claim_integrity.py` | yes |
+| artefact-backed | claims whose set lives in a run record: screened-cell counts, rejected cells, rungs clearing every screen | `scripts/claim_sets.py` + `conf/claim_sets.yaml` | no — `outputs/` is gitignored |
+
+A single checker doing both would SKIP the artefact half on any machine without
+the runs while printing the mechanical half green. That is `--dry-run` returning
+before the guard, which has cost this repo two queue cycles.
+
+**Four rules the build paid for.**
+
+1. **Ordinals are never used for a numbered item.** "The ninth defect" is a
+   position claim that goes stale the moment the list grows while the sentence
+   stays put, and it is how one paper ended up with two ninth defects. Stable ids
+   only. The first version of the guard missed this exact case.
+2. **The ledger holds no second copy of a value.** It names a locating regex and
+   a recipe; the paper is the one truth and the artefact is the one
+   recomputation. An expected number in the ledger goes stale in the direction
+   nobody checks.
+3. **The recipe vocabulary is CLOSED, with a vacuity guard both ways.** An
+   unnamed recipe is a hard failure, and a recipe no ledger entry uses is
+   rejected — a checker that checks nothing reads as coverage.
+4. **A cardinality over a partly unmeasured set is refused, not counted.** The
+   recomputation raises rather than returning a number when any cell in the set
+   is tri-state `None`. Folding unmeasured into a negative is this repo's
+   signature defect and it does not stop being one inside a guard.
+
+**AS-6 inherits this directly** and the guard covers its kits already, by glob.
+Its numbered-list surface is thinner, so the mechanical half currently finds
+nothing there; the artefact-backed ledger is where its `across all N` sentences
+belong, one entry each.

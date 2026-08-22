@@ -1,0 +1,46 @@
+# Claims whose SET lives in a run artefact rather than in the paper.
+#
+# `paper_claims.py` checks the claims a document can check against itself. These
+# are the other half: a sentence asserting a cardinality that only a run record
+# can confirm. Both defects that motivated this file were of exactly this shape,
+# found by recomputing the claim's set and comparing, not by tracing provenance
+# forward.
+#
+# There is ONE truth per claim and it is the PAPER. `locate` finds the sentence
+# and captures the number it asserts; `recipe` names the recomputation. The
+# ledger states which is which and holds no third copy of the value, so it
+# cannot go stale in a direction nobody notices.
+#
+# definitional: `recipe` is a CLOSED vocabulary implemented in
+# scripts/claim_sets.py. An unknown recipe is a hard failure, never a skip — the
+# typed residual, failing toward attention.
+
+claims:
+  - id: spread_screened_cells
+    paper: as-5
+    recipe: spread_echo_measured_cells
+    claim: >-
+      the count of model-by-rung cells on which the echo screen returned a
+      verdict, which must EXCLUDE the cells where it could not (n_clean = 0)
+    locate: '\$(\d+)\$ model-by-rung cells we screened'
+
+  - id: ladder_cells_rejected
+    paper: as-5
+    recipe: ladder_reported_cells_rejected
+    claim: reported pipeline cells the echo screen rejects
+    locate: 'it rejects (\w+) of the \w+ cells'
+
+  - id: ladder_cells_total
+    paper: as-5
+    recipe: ladder_reported_cells_total
+    claim: reported pipeline cells in total (3 stages x 3 encodings)
+    locate: 'it rejects \w+ of the (\w+) cells'
+
+  - id: rungs_passing_every_screen
+    paper: as-5
+    recipe: spread_rungs_passing_every_screen
+    claim: >-
+      rungs clearing readability, exact invertibility and the echo screen on all
+      four models. Homoglyph is asserted to be the only one, so this is 1.
+    locate: 'Homoglyph is the (only) rung passing every screen on all four models'
+    expect_word: one
