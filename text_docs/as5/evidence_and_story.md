@@ -1502,21 +1502,21 @@ once the survey paragraphs moved the float. Found in `build.log`, not by eye.
 `tabcolsep` 4pt → 2.5pt. Both kits now build with **0 overfull, 0 underfull-hbox
 and 0 undefined references**; 2521 tests green.
 
-## 4n. THE FIRST FOUR METHODS-REVIEW FINDINGS ARE ADJUDICATED — two refuted, two confirmed, and the refutation of the loudest one produced a new result (2026-08-21)
+## 4n. THE FIRST FOUR METHODS-REVIEW FINDINGS ARE ADJUDICATED: two refuted, two confirmed, and the refutation of the loudest one produced a new result (2026-08-21)
 
 TODO 84 held twelve unverified findings from the hostile methods review. The two
 flagged as able to move a reported number were checked first, against cached
 records, offline, `$0`. **Both accusations fail. Both premises are real.** The
 two that fell out alongside them are confirmed and cheap.
 
-### 4n.1 ⛔ #5 REFUTED — the echo asymmetry is real and it does not move the gap
+### 4n.1 ⛔ #5 REFUTED: the echo asymmetry is real and it does not move the gap
 
 The finding: on Llama the headline condition has `90` clean harmful cells against
 `75` clean benign ones, so the harm gap of exactly `0.00` becomes `+0.14` under a
 clean-cell denominator, making the paper's most-quoted number
 convention-dependent.
 
-**The asymmetry is real and the counts are almost exactly right — 89 and 74.**
+**The asymmetry is real and the counts are almost exactly right, 89 and 74.**
 The conclusion does not follow, and the instrument that answers it was already
 built (`measurements/refusal_control.py`, `scripts/echo_displacement.py`):
 
@@ -1534,11 +1534,11 @@ in RATE, and this one does not.** Homoglyph is the only rung that clears on all
 four models, which is why it is the headline; `fullwidth`, `fullwidth_letters`
 and `zero_width` FAIL the same screen on three of four.
 
-### 4n.2 ⚠️ #6 CONFIRMED — the paper describes an echo procedure the code does not run
+### 4n.2 ⚠️ #6 CONFIRMED: the paper describes an echo procedure the code does not run
 
 Defect (4)'s paragraph says *"Cells whose response echoes are therefore withheld
 rather than counted as refusals, and rates are reported over the surviving
-denominator."* **`behavior.py` computes `refusal_rate` over `len(group)` — every
+denominator."* **`behavior.py` computes `refusal_rate` over `len(group)`, counting every
 cell, echoing or not.** The clean-cell recomputation exists, but as a SCREEN: the
 condition is reportable only if `|reported gap − clean gap|` sits inside the
 gap's own 95% half-width. That is a defensible procedure and arguably the better
@@ -1549,12 +1549,12 @@ kind of error, and it is exactly the class AS-6's external reviewer spent four o
 ten objections on. Prose corrected; `n=100 per cell throughout` becomes TRUE
 rather than false, because nothing was ever removed.
 
-### 4n.3 ⛔ #8's ACCUSATION REFUTED, its RESIDUE CONFIRMED — one declared run family, never named
+### 4n.3 ⛔ #8's ACCUSATION REFUTED, its RESIDUE CONFIRMED: one declared run family, never named
 
 The finding: three replicates of the headline condition sit on disk and Table 1
 quotes the most favourable on both statistics.
 
-**The replicate count is understated — there are 4 to 8 per model, not three.**
+**The replicate count is understated. There are 4 to 8 per model, not three.**
 The accusation of selection fails on the decisive check: **all eight Table 1
 cells come from the `plain-baseline-*` run family, uniformly, on all four
 models.** That is one declared protocol, not per-cell picking. What survives is
@@ -1573,7 +1573,7 @@ each the maximum of their replicate set, and both maximise the cross-model
 contrast leg 1 argues. The right fix is not to re-pick a run. **It is to report
 the range**, which turns an accusation into a result.
 
-### 4n.4 ✅ NEW — the pipeline is not reproducible, and measuring how badly is free
+### 4n.4 ✅ NEW: the pipeline is not reproducible, and measuring how badly is free
 
 Chasing #8 produced something the paper does not have. Generation is greedy
 (`models/generate.py` defaults `do_sample=False`), the corpus digests are
@@ -1591,7 +1591,7 @@ separate cleanly by comparing the stored response text:**
 **Between 42% and 88% of greedy responses differ between repeats of the same
 run.** Nothing is sampled: batch composition changes padding and reduction
 order, one argmax flips, and the continuation diverges. Llama is the one model
-where the JUDGE is the larger route — `gpt-5-mini` at temperature 0 returned
+where the JUDGE is the larger route: `gpt-5-mini` at temperature 0 returned
 opposite verdicts on 31 byte-identical responses.
 
 **And the reported rates barely move anyway, which is the reassuring half.** The
@@ -1603,7 +1603,7 @@ That is why the spreads in 4n.3 are 0.01–0.06 rather than 0.13.
 sit beside the bootstrap noise null, which models sampling noise and is blind to
 both routes above. For leg 2 it is a defence: Table 2's cross-stage variation in
 gap lost is 0.11–0.16 per condition and 0.10 in the mean, and the same-cell
-run-to-run spread on the one stage with repeats is up to 0.05 — so the
+run-to-run spread on the one stage with repeats is up to 0.05, so the
 non-monotone wobble is partly noise and the flatness null stands. Every number
 involved is inside the `0.15` resolution the Limitations section already claims,
 so **no reported figure changes**; what changes is that the claim is now
@@ -1615,7 +1615,7 @@ judge, no GPU, `$0`); artifact
 
 ### 4n.5 ✅ #20 CONFIRMED, one line to fix
 
-The judge model appears nowhere in either kit — Method says only *"an LLM judge
+The judge model appears nowhere in either kit. Method says only *"an LLM judge
 at temperature 0"*. The run records have carried `judges.model = gpt-5-mini`
 throughout. An unnamed judge in a paper whose central instrument is that judge is
 the same objection AS-6's reviewer filed as con 6.
@@ -1625,9 +1625,9 @@ refutations had correct premises and wrong conclusions, which is a different
 failure from being wrong, and it is why the remaining eight are still worth
 checking rather than assuming.
 
-## 4o. THE NEXT FOUR FINDINGS — #12 and #21 are the same defect from two sides, and the correct control had never been run (2026-08-21)
+## 4o. THE NEXT FOUR FINDINGS: #12 and #21 are the same defect from two sides, and the correct control had never been run (2026-08-21)
 
-### 4o.1 ⛔ #11 REFUTED — a 4x token inflation is not a 4x confound
+### 4o.1 ⛔ #11 REFUTED: a 4x token inflation is not a 4x confound
 
 The finding: homoglyph multiplies token count about fourfold, so the length
 confound is amplified in tokens while BOTH length controls measure characters.
@@ -1635,7 +1635,7 @@ confound is amplified in tokens while BOTH length controls measure characters.
 **Its premise is exactly right and independently confirmed.** `length_null.py`
 measures `len(text)` in characters at every site, and
 `outputs/analysis/alphabet_fertility.json` puts homoglyph's tokens-per-character
-at **4.12x plaintext on Llama and 4.15x on Qwen** — the finding's number to two
+at **4.12x plaintext on Llama and 4.15x on Qwen**, the finding's number to two
 digits.
 
 **The conclusion does not follow, because both statistics are RANK-based.** The
@@ -1655,26 +1655,26 @@ general form: fertility measures how much an encoding inflates length on
 average; a confound is how much length VARIES BETWEEN THE ARMS. A uniform
 multiplier moves the first and not the second.** Homoglyph is character-preserving,
 so the arms' 86.0-vs-73.8 character difference is the corpus's own and the
-encoder does not touch it — which is precisely the case the length null was built
+encoder does not touch it, which is precisely the case the length null was built
 for.
 
-### 4o.2 ⚠️ #12 AND #21 CONFIRMED — and they are one defect seen from two sides
+### 4o.2 ⚠️ #12 AND #21 CONFIRMED, and they are one defect seen from two sides
 
 **#21's letter is wrong and its spirit is right.** It said the contract marks
 every `behavior` reading `reportable = False` and the paper's prose may
-contradict it. The withheld verdict is real — all 31 runs — but it is about the
+contradict it. The withheld verdict is real (all 31 runs) but it is about the
 ASR, and the paper reports no ASR by an explicit scope statement. **No published
 number is disowned by its own record.** What is true is worse in a different
 direction: **no run on disk carries a `refusal` reading at all.** The instrument
 for the quantity legs 1 and 2 are made of was wired into the entrypoint on
 2026-08-09, after every run that produced a paper number, and it is guarded by
-`if benign_behavior_records:` — so the paper's headline has never received a
+`if benign_behavior_records:`, so the paper's headline has never received a
 contract verdict of any kind.
 
 **#12 explains why it would have been withheld anyway, and it is a category
 error.** `LengthNull.margin()` returns `observed_auroc - encoded_auroc`. Two
-readings on the roster carry a RATE — `behavior` (an ASR) and `refusal` (a
-difference of refusal rates) — and both were handed that method. Subtracting a
+readings on the roster carry a RATE, namely `behavior` (an ASR) and `refusal` (a
+difference of refusal rates), and both were handed that method. Subtracting a
 character-length AUROC of 0.654 from a rate near zero is negative by
 construction. That is the whole of `withheld[behavior]`'s *"inside the length
 null by 0.634"*: a number that never examined the data. **P3 on the behaviour
@@ -1687,13 +1687,13 @@ the two violating calls.** `phase0_regime_map.py`'s readings list opens with
 which is not the same scale. Passing it here would satisfy P3 with a number that
 never examined this measurement."* Two of the three readings below it did exactly
 that. **Third time this estate has paid for the same lesson: a note predicting a
-defect is not a guard against it.** `WATCHED` could not have caught it either —
-the call binds perfectly, because the scale lives in the parameter's NAME.
+defect is not a guard against it.** `WATCHED` could not have caught it either.
+The call binds perfectly, because the scale lives in the parameter's NAME.
 
 ### 4o.3 ✅ THE CORRECT CONTROL, RUN FOR THE FIRST TIME, PASSES
 
 `measure_rate_length_null` permutes the harmful/benign labels WITHIN
-quantile bins of ciphertext length, using `quantile_strata` — the same binning
+quantile bins of ciphertext length, using `quantile_strata`, the same binning
 function as the probe side, because two callers binning length differently is how
 one "length-matched" claim becomes two. On the headline condition:
 
@@ -1718,15 +1718,15 @@ make deliberately, not a line to change.
 
 **Fixed structurally, not by threading the rule to its callers.** Both call sites
 now take the rate null, and `tests/test_entrypoint_call_sites.py` forbids any
-script from handing `length_null.margin(...)` to a rate-scale reading —
-mutation-verified: reverting one call site reddens exactly that test.
+script from handing `length_null.margin(...)` to a rate-scale reading.
+Mutation-verified: reverting one call site reddens exactly that test.
 
-### 4o.4 ⚠️ #17 CONFIRMED, WITH A NUMBER — one screen reads the outcome
+### 4o.4 ⚠️ #17 CONFIRMED, WITH A NUMBER: one screen reads the outcome
 
 The paper says homoglyph is "the rung on which every screen passes". Three of
 those screens are properties of the ENCODING and cannot see a refusal rate:
 readability, invertible-but-unreadable by construction, lexical transparency. The
-**echo screen can** — it is a stability criterion on the reported gap itself.
+**echo screen can**, because it is a stability criterion on the reported gap itself.
 
 Measured over the 27 model-by-rung cells with both arms on disk: passing
 correlates with the gap's magnitude at **r = −0.486 (p = 0.010)**, against
@@ -1736,17 +1736,17 @@ runs against us: rungs with LARGER encoded gaps are discarded more often, and a
 large encoded gap is evidence *against* the collapse leg 1 reports.
 
 The right response is disclosure, not correction. The screen is required for
-validity — dropping it admits rungs whose refusal verdicts are majority artefact
-— and the residual bias is a fraction of a correlation on 27 cells. Both kits now
+validity, since dropping it admits rungs whose refusal verdicts are majority artefact)
+and the residual bias is a fraction of a correlation on 27 cells. Both kits now
 say which screens are blind and which is not, and Limitations carries the
 numbers.
 
 **Running verdict: 11 checked, 8 held, 3 refuted.** All three refutations had
-correct premises. #11 is the cleanest example yet of the pattern — it verified a
+correct premises. #11 is the cleanest example yet of the pattern: it verified a
 tokenizer fact to two digits and then drew a conclusion the fact does not
 support.
 
-## 4p. ⚠️ #3 CONFIRMED AND IT COST A CLAIM — the noise null was unpaired, and the harmful arm is not inside it (2026-08-21)
+## 4p. ⚠️ #3 CONFIRMED AND IT COST A CLAIM: the noise null was unpaired, and the harmful arm is not inside it (2026-08-21)
 
 The finding: the noise null draws independent binomials, but the four models
 answer the same prompts, so the estimates are paired.
@@ -1772,7 +1772,7 @@ correct null it does not, and we can (p = 0.034).**
 ⚠️ **And the paired null used here is the CONSERVATIVE version**, which makes the
 verdict stronger rather than weaker. Item difficulty is estimated from the same
 four models being tested, so wherever they genuinely disagree an item lands near
-0.5 and contributes maximal Bernoulli variance — inflating the null. The claim
+0.5 and contributes maximal Bernoulli variance, inflating the null. The claim
 fails even against the inflated version.
 
 **The pairwise claim fails too, and by the paper's own preferred standard.** §The
@@ -1786,7 +1786,7 @@ that the harmful arm *compresses* model differences sevenfold, to a separation
 that is statistically detectable and useless for ranking, while the benign arm
 *expands* them to two-thirds of the range. That is both true and harder to
 attack: "indistinguishable" invites exactly the refutation above, and the
-asymmetry — which is the actual contribution — never depended on it. **The benign
+asymmetry, which is the actual contribution, never depended on it. **The benign
 arm is untouched by the choice of null**, exceeding the 99th percentile under
 both.
 
@@ -1795,25 +1795,25 @@ running an unpaired one would be finding #6 one section over.
 `figure_arm_inversion.paired_noise_null` implements it, `tests/test_noise_null.py`
 pins both directions (perfectly-agreeing models must give a null of exactly zero,
 where the independent null still invents a spread). ⚠️ **The plaintext arm cannot
-be paired from the data on disk** — per-item verdicts were persisted for the
-encoded conditions only — so plaintext spreads stay on the independent null and
+be paired from the data on disk**, because per-item verdicts were persisted for the
+encoded conditions only, so plaintext spreads stay on the independent null and
 the paper now says which is which. They sit 7× outside either, so nothing there
 turns on it.
 
 **Running verdict: 12 checked, 9 held, 3 refuted.**
 
-## 4q. THE LAST THREE — two were killed by other repairs, one is real and names its own fix (2026-08-21)
+## 4q. THE LAST THREE: two were killed by other repairs, one is real and names its own fix (2026-08-21)
 
 The raw review is recoverable (`as5_review_raw.md`, a prior session's scratchpad);
 these three were filed by number only, so the first step was finding the text
 rather than reasoning about a label.
 
-**#23 RESOLVED BY #3's FIX, not separately.** It said the abstract quoted the
+**#23 RESOLVED BY #3's FIX, plus one residue the peer session caught.** It said the abstract quoted the
 null's 97.5th percentile as if it were the null: *"a spread of 0.08 --- inside the
 0.10 ceiling that sampling noise alone produces"*, where Table 1 reports the null
 as 0.05 and 0.10 is its upper tail. Correct, and moot: the paired-null repair
 removed that sentence's claim altogether. The abstract no longer says the spread
-is inside anything. **Worth noting the pattern — a wrong number and a wrong
+is inside anything. **Worth noting the pattern: a wrong number and a wrong
 statistic in one sentence, and the deeper repair took both.**
 
 **#24 MOOT FOR THIS DRAFT.** With `n_permutations = 200` the smallest attainable
@@ -1822,7 +1822,22 @@ was a floor quoted as an estimate. It appears nowhere in either kit: the reading
 that carried permutation p-values belonged to the internals leg, withdrawn in
 §4k. The finding is right about the code and has no target in the paper.
 ⚠️ **It becomes live again the moment a permutation p-value is quoted**, which
-AS-6 does — filed there rather than closed here.
+AS-6 does, so it is filed there rather than closed here.
+
+**⚠️ #23's residue, found by the peer session reading the same review: the same
+move survived one paragraph over.** *"spread 0.15 against a null ceiling of 0.12,
+marginal"* quotes an upper tail where its two neighbours quote a median with an
+interval, so the word "null" carried two different statistics in adjacent
+sentences. Fixed by reporting every null the same way, and 0.15 against
+`0.06 [0.02, 0.12]` is *just outside*, not marginal. **A notation defect is never
+one sentence.** The abstract's instance was the one the reviewer quoted, and
+repairing only what was quoted would have left the identical error in the body.
+
+**The same pass found Table 1 disagreeing with its own Method.** Once the encoded
+nulls became paired, the table's `noise null` row still carried the independent
+values. Corrected: encoded harmful `0.05` to `0.04`, encoded benign `0.10` to
+`0.08`. The plaintext columns are unchanged, because per-item verdicts were never
+persisted for that arm, and the caption now says so.
 
 **#25 STANDS, and it is the most structural thing this reviewer found.** n=100 is
 the *entire* JailbreakBench harmful set and the whole of its benign counterpart.
@@ -1830,8 +1845,8 @@ Every threshold (decode similarity 0.75, overlap 0.60/0.80, probe floor 0.70,
 control-floor sigma 2.0, read percentile 50), every rung selection, every layer
 and position selection and every probe fit was set or performed on those same 200
 items. **No number in the paper has been evaluated on data that took no part in
-producing it.** Defect (9) is the sharp instance — a probe reading item identity
-— and the generalisation is that what that probe did with items, the pipeline
+producing it.** Defect (9) is the sharp instance (a probe reading item identity)
+and the generalisation is that what that probe did with items, the pipeline
 does with knobs.
 
 **The fix is cheaper than it looks and the paper now says so.** `data/` already
@@ -1841,9 +1856,20 @@ another is a run, not a research programme. Limitations names it as the next run
 rather than as a future direction, which is the honest register: we have the
 corpora and have not done it.
 
+**⚠️ AND THE SESSION THAT WROTE §4n TO §4q BROKE THE DASH LAW WHILE WRITING
+THEM.** The no-dash-line rule was declared unenforced on both kits and filed as
+TODO 87 on 2026-08-21, with the explicit note that *"new prose written from
+2026-08-21 conforms"*. The prose written that same day carried 39 dash-line
+connectors in this record and four more in the kits. Both are now rewritten as
+ordinary sentences; TODO 87's historical sweep is untouched, because it is a
+per-paper register change rather than a find-and-replace, and doing half of it
+here would collide with it. **The estate's own lesson, for the fourth time: a
+declared gap is not a mitigation, and the declaration is a trigger to conform,
+not a licence to keep violating.**
+
 **Final verdict on the methods review: 15 checked, 11 held, 3 refuted, 1 moot.**
-Every refutation had a correct premise — #5 verified a cell-count asymmetry, #11
-verified a tokenizer ratio to two digits, #8 verified that replicates exist — and
+Every refutation had a correct premise. #5 verified a cell-count asymmetry, #11
+verified a tokenizer ratio to two digits, #8 verified that replicates exist, and
 then drew a conclusion the fact did not support. **That is a more dangerous
 failure mode than being wrong, because the checkable half checks out.** Of the
 eleven that held, one overturned a claim (#3), two were the same uncaught defect
