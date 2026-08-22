@@ -47,7 +47,16 @@ import pytest
 
 PAPER_ROOT = Path(__file__).resolve().parent.parent / "paper"
 
-BODY_START = r"\begin{abstract}"
+#: Every document root a kit may carry. The appendix split out of `paper.tex`
+#: on 2026-08-22, so a kit is now TWO documents and both need the guard.
+DOC_NAMES = ("paper.tex", "supplement.tex")
+
+#: `\maketitle` rather than `\begin{abstract}` since 2026-08-22: it is the first
+#: line AFTER the author block, so it excludes the same legitimately-differing
+#: preamble while also existing in a supplement, which has no abstract. Using a
+#: marker only the main paper carries would have left the supplement discovered
+#: and then skipped, which is worse than not discovering it.
+BODY_START = r"\maketitle"
 BODY_END = r"\end{document}"
 
 
@@ -66,20 +75,27 @@ def _body_sentences(path: Path) -> list[str]:
     return [s.strip() for s in re.split(r"(?<=\.)\s+", body) if s.strip()]
 
 
-def _paper_ids() -> list[str]:
+def _documents() -> list[tuple[str, str]]:
+    """(paper id, document name) for every document carried by >1 kit."""
     if not PAPER_ROOT.is_dir():
         return []
     return sorted(
-        d.name
+        (d.name, doc)
         for d in PAPER_ROOT.iterdir()
-        if d.is_dir() and len(list(d.rglob("paper.tex"))) > 1
+        if d.is_dir()
+        for doc in DOC_NAMES
+        if len(list(d.rglob(doc))) > 1
     )
 
 
-@pytest.mark.parametrize("paper_id", _paper_ids())
-def test_every_kit_of_a_paper_carries_the_same_body(paper_id: str) -> None:
+def _paper_ids() -> list[str]:
+    return sorted({pid for pid, _ in _documents()})
+
+
+@pytest.mark.parametrize("paper_id,doc", _documents())
+def test_every_kit_of_a_paper_carries_the_same_body(paper_id: str, doc: str) -> None:
     """Two kits, one paper: the body must be sentence-identical across kits."""
-    sources = sorted((PAPER_ROOT / paper_id).rglob("paper.tex"))
+    sources = sorted((PAPER_ROOT / paper_id).rglob(doc))
     reference = sources[0]
     expected = _body_sentences(reference)
 
@@ -114,10 +130,21 @@ def test_the_guard_found_something_to_guard() -> None:
     if not PAPER_ROOT.is_dir():
         pytest.skip("`paper/` is gitignored and absent — nothing to compare")
 
-    multi_kit = _paper_ids()
-    if not multi_kit:
+    documents = _documents()
+    if not documents:
         pytest.skip("no paper in `paper/` has more than one kit yet")
 
-    for paper_id in multi_kit:
-        sources = list((PAPER_ROOT / paper_id).rglob("paper.tex"))
-        assert len(sources) > 1, f"{paper_id} was selected but has one source"
+    for paper_id, doc in documents:
+        sources = list((PAPER_ROOT / paper_id).rglob(doc))
+        assert len(sources) > 1, f"{paper_id}/{doc} was selected but has one source"
+
+    # A kit that grew a supplement while the guard still knew only `paper.tex`
+    # would pass, silently, on half the paper. Assert the discovery SAW the
+    # split rather than trusting that it would have.
+    for paper_id in _paper_ids():
+        for kit in {s.parent for s in (PAPER_ROOT / paper_id).rglob("paper.tex")}:
+            roots = {f.name for f in kit.glob("*.tex")}
+            assert roots <= set(DOC_NAMES), (
+                f"{kit.name} carries {sorted(roots - set(DOC_NAMES))}, which no "
+                "parity pair covers — add it to DOC_NAMES or it ships unguarded"
+            )

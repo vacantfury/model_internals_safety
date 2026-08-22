@@ -191,13 +191,15 @@ class TestTheArtefactBackedLedger:
         for claim in self.ledger():
             if claim.get("check") == "internal":
                 continue
-            kits = sorted((PAPER_DIR / claim["paper"]).glob("**/paper.tex"))
+            kits = claim_sets._kit_prose(claim["paper"])
             if not kits:
                 pytest.skip(f"no kits under paper/{claim['paper']}/")
-            for kit in kits:
-                flat = re.sub(r"\s+", " ", kit.read_text())
+            for name, flat in kits:
+                # Per KIT, not per FILE: the appendix split into supplement.tex
+                # on 2026-08-22 and a sentence that moved there is still
+                # asserted once by that kit.
                 hits = re.findall(claim["locate"], flat)
-                assert len(hits) == 1, f"{claim['id']} in {kit.relative_to(REPO)}: {len(hits)} hits"
+                assert len(hits) == 1, f"{claim['id']} in {name}: {len(hits)} hits"
 
     def test_an_internal_check_declares_a_source_and_a_normal_claim_declares_a_locate(self):
         """The `check: internal` exemption above must not become a way to file a

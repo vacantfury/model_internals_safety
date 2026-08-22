@@ -2414,3 +2414,46 @@ recipes and their now-orphaned `_paired_pairs` helper, because
 `test_paper_claim_integrity.py` enforces the vocabulary in both directions: a
 registered recipe no claim uses fails the build, which is what a bidirectional
 guard is for.
+
+## 29. THE PAPER SPLIT INTO MAIN AND SUPPLEMENT (2026-08-22, owner order)
+
+AS-5 was already split and AS-6 was not, so this aligns AS-6 to the sibling
+rather than inventing a scheme. Four documents now build, all at exit 0, zero
+LaTeX errors, zero undefined references, zero overfull boxes.
+
+**The cut is the existing `\appendix`**, which was already the boundary. What
+made it cheap is a property worth checking before any such split: **the
+appendix refers to no main-body label.** Only two references crossed, both from
+the main paper into the appendix, and both were reworded to NAME the supplement
+rather than number it. So neither document needs `xr`, there is no circular
+build order, and each compiles standalone, which is what a venue taking the two
+files separately needs.
+
+**Two deliberate deviations from the AS-5 sibling, both stated rather than
+drifted into.** AS-5 numbers its supplement sections 1, 2, ... with no
+`\appendix`, and titles it `Supplementary Document: <title>`: **matched.** But
+AS-5 carries a `supplement.bib` that is BYTE-IDENTICAL to its `paper.bib`, and
+AS-6 points both documents at `paper.bib` instead. A duplicated bibliography is
+a second copy that can drift, which is the defect the kit-parity test exists to
+catch, one file over.
+
+### 29.1 The split created an unguarded surface, and the guards had to grow
+
+Two of them, and both are the same shape: **a discovery rule written when a kit
+was one file.**
+
+`test_paper_source_parity.py` globbed `**/paper.tex`, so `supplement.tex` would
+have shipped **unguarded across kits** while the test stayed green. It now
+parametrises over `(paper, document)` and compares from `\maketitle` rather than
+`\begin{abstract}`, because a supplement has no abstract and a marker only the
+main paper carries would have discovered the file and then skipped it, which is
+worse than not discovering it. Mutation-verified on `supplement.tex`
+specifically, and it now also ASSERTS that no kit carries a `.tex` document root
+outside `DOC_NAMES`, so a third document cannot appear unguarded either.
+
+The claim ledger globbed the same way, so a `locate` sentence that moved into
+the supplement read as **a claim that stopped being asserted**. A kit is now a
+DIRECTORY whose prose is all its document roots, and a claim must be found once
+per kit rather than once per file. The guard crying wolf during a restructure is
+the worst possible time for it to be wrong, because that is when its output is
+least likely to be believed.

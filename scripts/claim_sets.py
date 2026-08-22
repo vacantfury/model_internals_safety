@@ -539,7 +539,25 @@ def _agrees(token: str, value: float | int, expect_word: str | None) -> tuple[st
 
 
 def _kits(paper: str) -> list[Path]:
+    """The MAIN document of each kit. Table-parsing recipes want exactly this."""
     return sorted((PAPER_DIR / paper).glob("**/paper.tex"))
+
+
+def _kit_prose(paper: str) -> list[tuple[str, str]]:
+    """(kit name, whitespace-flattened prose) per kit, main AND supplement.
+
+    A kit became TWO documents on 2026-08-22 when the appendix split out. A
+    `locate` looks for its sentence once per KIT, never once per file: a
+    sentence moving into the supplement is a relocation, and reading it as a
+    claim that stopped being asserted would be the guard crying wolf at exactly
+    the moment someone is restructuring the paper, which is when it is least
+    likely to be believed.
+    """
+    out = []
+    for main in _kits(paper):
+        text = "\n".join(f.read_text() for f in sorted(main.parent.glob("*.tex")))
+        out.append((main.parent.name, re.sub(r"\s+", " ", text)))
+    return out
 
 
 def main() -> int:
@@ -597,20 +615,19 @@ def main() -> int:
             print(f"   {'✓' if agrees else '⛔'} {mirror['file']} (mirror): asserts {asserted}")
             failures += not agrees
 
-        kits = _kits(claim["paper"])
+        kits = _kit_prose(claim["paper"])
         if not kits:
             print(f"   ⚠️  no kits under paper/{claim['paper']}/ — claim UNCHECKED against prose")
             continue
-        for kit in kits:
-            flat = re.sub(r"\s+", " ", kit.read_text())
+        for name, flat in kits:
             hits = re.findall(claim["locate"], flat)
             if len(hits) != 1:
-                print(f"   ⛔ {kit.relative_to(REPO)}: locate matched {len(hits)} sentences, expected 1")
+                print(f"   ⛔ {name}: locate matched {len(hits)} sentences, expected 1")
                 failures += 1
                 continue
             asserted, agrees = _agrees(hits[0], value, claim.get("expect_word"))
             mark = "✓" if agrees else "⛔"
-            print(f"   {mark} {kit.relative_to(REPO).parts[2]}: paper asserts {asserted}")
+            print(f"   {mark} {name}: paper asserts {asserted}")
             failures += not agrees
 
     print("\n" + ("⛔ MISMATCHES: %d" % failures if failures else "✓ every artefact-backed claim agrees"))
