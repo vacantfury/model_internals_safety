@@ -33,6 +33,12 @@ is the right one; the short version is that the unrestricted optimum bounds near
 The bound is one-directional on purpose. A control that can only ever fail to
 reject is a verdict with a script attached.
 
+Fixing the budget to the guard's own blocked count is the right comparison, since
+the confound at issue is that THIS guard's decisions are partly length and its
+rate is observed. The strictly more conservative bound, the maximum over every
+budget in either unit, is computed alongside it so that the question does not
+have to be argued: it is recorded as `length_only_gap_bound_any_budget`.
+
 **Length is measured TWICE, in characters and in the guard's own tokens, and
 neither is optional.** The referee's worry and AS-5's $0.6544$ both name
 CHARACTER length, but a guard processes tokens, and the published confound this
@@ -203,13 +209,15 @@ def main() -> int:
     digests = {"harmful": digest(harmful_prompts), "harmless": digest(benign_prompts)}
     ladder = load_ladder()
 
+    # Imported here rather than at module scope: it is the one heavy dependency,
+    # and `--help` should not pay for it.
+    from transformers import AutoTokenizer
+
     results: dict[str, list[dict]] = {}
     for guard, reported in REPORTED.items():
         rates, source = arm_rates(guard)
         # The guard's OWN tokenizer, not a shared one: the two guards' vocabularies
         # differ by 4x and a token count is meaningless across them.
-        from transformers import AutoTokenizer
-
         tokenizer = AutoTokenizer.from_pretrained(load_guard_config(guard).hf_id)
 
         # THE CORPUS MUST BE THE ONE THE GUARD SAW. A digest mismatch means the
@@ -232,9 +240,22 @@ def main() -> int:
 
             # THE SELF-CHECK. Regenerating the benign arm is only as trustworthy
             # as regenerating the harmful arm, which we can verify exactly.
+            #
+            # A MISSING key raises rather than skipping. `family` came from this
+            # run's own summaries, so an absent ciphertext means the record and
+            # its summary disagree about what was measured; skipping would leave
+            # the benign regeneration unlicensed while the run still printed a
+            # bound, which is the shape of a check that certifies rather than
+            # tests.
             for prompt, generated in zip(harmful_prompts, harmful_ct):
                 key = (family, prompt.id)
-                if key in disk and disk[key] != generated:
+                if key not in disk:
+                    raise SystemExit(
+                        f"{guard}/{family}/{prompt.id}: the run summarises this condition but "
+                        "its cells hold no such prompt, so the regeneration cannot be verified "
+                        "against anything. Refusing to bound an arm on an unchecked encoder."
+                    )
+                if disk[key] != generated:
                     raise SystemExit(
                         f"{guard}/{family}/{prompt.id}: regenerated ciphertext differs from "
                         "the one the guard was given. The encoders have moved since the run; "
@@ -252,6 +273,19 @@ def main() -> int:
                 unit: length_only_gap(harmful_n, benign_n, n_blocked)
                 for unit, (harmful_n, benign_n) in units.items()
             }
+            # SENSITIVITY TO THE BUDGET-MATCHING CHOICE. Fixing k to the guard's
+            # own blocked count is the right comparison -- the confound is "this
+            # guard's decisions are partly length", and its rate is observed --
+            # but a referee may reasonably ask what happens without that
+            # constraint. So the strictly more conservative bound, the maximum
+            # over every budget in either unit, is computed and recorded rather
+            # than argued about. It is never the binding number; it is the
+            # answer to "does the conclusion depend on the constraint".
+            any_budget = max(
+                length_only_gap(harmful_n, benign_n, k)
+                for harmful_n, benign_n in units.values()
+                for k in range(1, len(harmful_n) + len(benign_n) + 1)
+            )
             # THE CONSERVATIVE VERDICT: the binding bound is the LARGEST one, so a
             # cell clears only if it clears in both units. Taking the smaller, or
             # taking whichever unit was measured first, is how a control comes to
@@ -269,6 +303,8 @@ def main() -> int:
                     "length_only_gap_bound_by_unit": bounds,
                     "binding_unit": max(bounds, key=lambda u: bounds[u]),
                     "clears_bound": observed > binding,
+                    "length_only_gap_bound_any_budget": any_budget,
+                    "clears_any_budget_bound": observed > any_budget,
                     "auroc_by_unit": {
                         "chars": length_auroc(harmful_ct, benign_ct),
                         "tokens": _length_auroc_numeric(*units["tokens"]),
@@ -281,7 +317,7 @@ def main() -> int:
         print(f"\n{guard}  (arms from {source}; harmful ciphertexts verified byte-identical)")
         print(
             f"  {'condition':17s} {'gap':>7s} {'bnd.chr':>8s} {'bnd.tok':>8s} "
-            f"{'margin':>7s} {'unit':>6s} {'tok H/B':>13s}  verdict"
+            f"{'margin':>7s} {'unit':>6s} {'anyK':>6s}  verdict"
         )
         for row in rows:
             mark = "REPORTED" if row["reported"] else "--"
@@ -294,7 +330,7 @@ def main() -> int:
                 f"{row['length_only_gap_bound_by_unit']['tokens']:>+8.3f} "
                 f"{row['observed_gap'] - row['length_only_gap_bound']:>+7.3f} "
                 f"{row['binding_unit']:>6s} "
-                f"{row['mean_harmful']['tokens']:>5.1f}/{row['mean_benign']['tokens']:<7.1f} "
+                f"{row['length_only_gap_bound_any_budget']:>+6.2f} "
                 f"{mark:9s} {verdict}"
             )
 

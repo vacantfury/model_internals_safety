@@ -19,8 +19,10 @@ import numpy as np
 import pytest
 
 from internals_safety.measurements.intervals import (
+    holm_adjusted,
     mcnemar_exact,
     paired_bootstrap_difference,
+    paired_bootstrap_rate_difference,
     unpaired_difference_interval,
     wilson,
     z_for,
@@ -229,3 +231,67 @@ class TestTheUnpairedInteractionInterval:
         )
         assert point < 0
         assert hi < 0
+
+
+class TestThePairedRateDifference:
+    """The single-arm paired contrast, whose whole point is that it is narrower."""
+
+    def test_it_recovers_a_known_difference(self):
+        rng = np.random.default_rng(0)
+        a = [True] * 30 + [False] * 70
+        b = [True] * 10 + [False] * 90
+        point, lo, hi = paired_bootstrap_rate_difference(a, b, rng, draws=2000, alpha=0.05)
+        assert point == pytest.approx(0.20)
+        assert lo < 0.20 < hi
+
+    def test_it_is_narrower_than_treating_the_arms_as_independent(self):
+        """The justification for the estimator, tested rather than asserted.
+
+        Two conditions that agree on most items: the paired interval sees the
+        agreement, an independent one cannot and pays for it in width.
+        """
+        rng = np.random.default_rng(1)
+        a = [i % 10 < 3 for i in range(100)]
+        b = [i % 10 < 2 for i in range(100)]
+        _, lo, hi = paired_bootstrap_rate_difference(a, b, rng, draws=20000, alpha=0.05)
+        paired_width = hi - lo
+
+        z = z_for(0.05)
+        a_lo, a_hi = wilson(sum(a), len(a), z)
+        b_lo, b_hi = wilson(sum(b), len(b), z)
+        independent_width = (a_hi - a_lo) + (b_hi - b_lo)
+        assert paired_width < independent_width
+
+    def test_mismatched_item_counts_raise_rather_than_pairing_by_position(self):
+        rng = np.random.default_rng(0)
+        with pytest.raises(ValueError, match="same items"):
+            paired_bootstrap_rate_difference([True, False], [True], rng, draws=10, alpha=0.05)
+
+    def test_an_empty_arm_is_nan_not_zero(self):
+        rng = np.random.default_rng(0)
+        point, lo, hi = paired_bootstrap_rate_difference([], [], rng, draws=10, alpha=0.05)
+        assert math.isnan(point) and math.isnan(lo) and math.isnan(hi)
+
+
+class TestHolmAdjustment:
+    """Order preservation and monotonicity, the two ways this goes quietly wrong."""
+
+    def test_it_preserves_input_order(self):
+        # Sorted: 0.01, 0.03, 0.04 at indices 1, 2, 0. Steps are 3*0.01 = 0.03,
+        # 2*0.03 = 0.06, 1*0.04 = 0.04 which the running maximum lifts to 0.06.
+        assert holm_adjusted([0.04, 0.01, 0.03]) == pytest.approx(
+            [0.06, 0.03, 0.06], abs=1e-9
+        )
+
+    def test_it_is_monotone_non_decreasing_in_rank(self):
+        """A step-down procedure that is not enforced monotone can invert a pair."""
+        raw = [0.001, 0.02, 0.021, 0.9]
+        adjusted = holm_adjusted(raw)
+        by_rank = [adjusted[i] for i in sorted(range(len(raw)), key=lambda i: raw[i])]
+        assert by_rank == sorted(by_rank)
+
+    def test_a_single_test_is_unchanged(self):
+        assert holm_adjusted([0.03]) == pytest.approx([0.03])
+
+    def test_it_never_exceeds_one(self):
+        assert holm_adjusted([0.6, 0.7, 0.8]) == pytest.approx([1.0, 1.0, 1.0])

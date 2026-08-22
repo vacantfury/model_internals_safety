@@ -1775,6 +1775,16 @@ the shape of the two distributions *at the cut*, not their overall overlap. This
 is a further reason not to report a length AUROC as the control for a rate, which
 is what the probe-side null does and what this replaces.
 
+### The budget-matching choice is not load-bearing
+
+Fixing k to the guard's own blocked count is the right comparison, because the
+confound at issue is that THIS guard's decisions are partly length and its rate
+is observed. A referee can still ask what happens without the constraint, so the
+strictly more conservative bound is computed and recorded rather than argued
+about: the maximum over EVERY budget in either unit is **0.28 on five of the six
+cells and 0.38 on WildGuard `reverse_words`**, and all six still clear. The
+tightest case stays WildGuard `reverse_words`, at 0.44 against 0.38.
+
 ### What licenses regenerating an arm at all
 
 "The encoders are deterministic" is a claim about code, and this repo has been
@@ -1799,3 +1809,91 @@ every threshold rule in both directions) and by the ledger entry
 `as6_length_bound_clearing_cells`, which RAISES rather than quietly returning a
 smaller number if any reported cell stops clearing. Paper: a new Controls
 paragraph and a new specification subsection with the table, both kits.
+
+## 24. THE ABSTENTION WAS UNDERPOWERED, AND IT SURVIVES ANYWAY FOR A BETTER REASON (2026-08-21)
+
+TODO 89. Item 89's own instruction was the right one and is worth restating: *do
+not relax the abstention by assuming a paired test would be stronger, run one.*
+Running it produced a two-part answer, and only the first part was anticipated.
+
+### Part 1: the stated reason was wrong
+
+Table 2's caption refused to order the surviving conditions because their Wilson
+intervals overlap. The conditions are the same 100 harmful prompts wearing
+different transformations, so they are item-paired and an independent interval
+throws the pairing away. Under exact McNemar with Holm adjustment within each
+guard, **3 of the 6 pairs separate, and none of the 6 separates under the
+independent intervals**, so every separation is one the published reasoning could
+not see:
+
+| Guard | Pair | Counts | Discordant | Difference [95%] | Holm $p$ |
+|---|---|---|---|---|---|
+| Llama Guard 3 | `homoglyph` vs `zero_width` | 7/17 | 1/11 | −0.10 [−0.17, −0.04] | **0.019** |
+| WildGuard | `homoglyph` vs `reverse_words` | 23/9 | 20/6 | +0.14 [+0.04, +0.24] | **0.019** |
+| WildGuard | `reverse_words` vs `zero_width` | 9/23 | 4/18 | −0.14 [−0.23, −0.05] | **0.013** |
+
+The three that do not separate are genuine: Llama Guard `homoglyph` vs
+`reverse_words` is 7 against 8, and WildGuard `homoglyph` vs `zero_width` is 23
+against 23 at McNemar $p = 1.0$.
+
+### ⛔ Part 2: the ordering it produces is the BLOCK-RATE ordering
+
+`decoded_not_blocked` is a conjunction, and whether an ordering of it says
+anything about decoding depends on how close the decode term is to one. At the
+reported operating point it is:
+
+| Guard | Condition | Decode rate | Block rate | Unblocked | D&¬B recovers |
+|---|---|---|---|---|---|
+| Llama Guard 3 | `homoglyph` | 0.99 | 0.92 | 8 | 88% |
+| Llama Guard 3 | `zero_width` | 0.99 | 0.83 | 17 | 100% |
+| Llama Guard 3 | `reverse_words` | 0.69 | 0.65 | 35 | 23% |
+| WildGuard | `homoglyph` | 0.96 | 0.75 | 25 | 92% |
+| WildGuard | `zero_width` | 0.94 | 0.71 | 29 | 79% |
+| WildGuard | `reverse_words` | 0.78 | 0.73 | 27 | 33% |
+
+**On the four surface cells the decode term is not the binding one.** The count
+recovers 79 to 100 per cent of the unblocked prompts, so separating two of them
+largely restates Table 3's block rates. `reverse_words` at 23 and 33 per cent is
+the contrast proving this is a property of those cells and not of the statistic.
+
+**So the abstention stays, on the different ground.** The paper now says the
+paired test separates three pairs and that we still decline to order the
+conditions by this count, because it is not a quantity that can rank them.
+
+⚠️ **This is good news for the claim and bad news only for ordering.** A decode
+term of 0.94 to 0.99 means the failure to block cannot be attributed to
+comprehension on *any* prompt at those conditions, which is the strongest form
+the paper's actual thesis can take. What it cannot do is discriminate between
+conditions, and the old caption was reaching for exactly that.
+
+### ⚠️ The paper's first draft of this overstated it, and a test caught it
+
+I wrote "the count is within one or two prompts of the unblocked count there".
+True on three of the four cells and false on WildGuard `zero_width` (23 of 29).
+`tests/test_paired_cell_ordering.py` asserted the claim as a number and went red
+before the sentence shipped. The published form is the range, 79 to 100 per cent.
+*A counted claim written as a qualitative phrase is still a counted claim*, and
+this one was checkable only because the marginals were persisted to the artifact
+rather than printed.
+
+### What licenses the comparison at all
+
+`scores-b10` was produced at `reading_percentile` 50, which is retired; the paper
+reports 75. The per-prompt read is reconstructed as `decode_score > threshold_75`
+from `operating_point_*_20260808.json`, and **the script refuses to compare
+anything until that reconstruction reproduces all six of Table 2's published
+counts exactly.** It does. The check is against the PAPER's numbers, held as a
+literal, rather than against a second recomputation, because a self-check that
+recomputes both sides agrees with itself at any threshold.
+
+Instrument: `scripts/paired_cell_ordering.py`, artifact
+`outputs/analysis/paired_cell_ordering_20260821.json`, estimators
+`paired_bootstrap_rate_difference` and `holm_adjusted` in `intervals.py` (spine,
+not the script; the first is pinned by a test asserting it is narrower than
+treating the arms as independent, which is its whole justification). Ledger
+entries `as6_paired_separating_pairs` and `as6_paired_total_pairs` cover the
+numerator and denominator separately, since a sentence reading "three of the six"
+goes stale from either end; the first also raises if an independent interval ever
+starts separating, which would make the paper's contrast between the two tests
+false. Paper: Table 2's caption and a new specification subsection with the
+pairwise table, both kits.

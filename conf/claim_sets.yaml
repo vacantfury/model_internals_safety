@@ -110,3 +110,23 @@ claims:
       the sentence asserts all of them do and a quieter count would read as a
       different true claim.
     locate: 'All (\w+) reported cells\s+exceed their bound'
+
+  - id: as6_paired_separating_pairs
+    paper: as-6
+    recipe: as6_paired_separating_pairs
+    source: analysis/paired_cell_ordering_20260821.json
+    claim: >-
+      pairwise comparisons of the decoded-and-not-blocked count that separate
+      under the exact McNemar test with Holm adjustment. The recipe also RAISES
+      if any pair starts separating under the independent intervals, which would
+      make the paper's contrast between the two tests false.
+    locate: 'separates (\w+) of the six'
+
+  - id: as6_paired_total_pairs
+    paper: as-6
+    recipe: as6_paired_total_pairs
+    source: analysis/paired_cell_ordering_20260821.json
+    claim: >-
+      the number of pairwise comparisons, which is the denominator of that same
+      sentence and moves whenever a condition enters or leaves Table 2.
+    locate: 'independent intervals overlap on all (\w+)\s+pairs'

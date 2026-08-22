@@ -184,6 +184,66 @@ def paired_bootstrap_difference(
     return (point, float(lo), float(hi))
 
 
+def paired_bootstrap_rate_difference(
+    arm_a: Sequence[bool],
+    arm_b: Sequence[bool],
+    rng: np.random.Generator,
+    *,
+    draws: int,
+    alpha: float,
+) -> tuple[float, float, float]:
+    """Percentile interval for ONE rate minus another, over the SAME items.
+
+    Distinct from `paired_bootstrap_difference`, which contrasts two
+    *harmful-minus-benign gaps*. Here each arm is a single per-item verdict
+    vector and the statistic is ``mean(a) - mean(b)``. AS-6's surviving
+    conditions are the identical 100 harmful prompts wearing different
+    transformations, so item difficulty is shared and resampling the two sides
+    independently would widen the interval by variance that is not there.
+
+    One resampled index vector serves both arms per draw. That is the whole
+    difference from an unpaired interval, and it is the reason a comparison the
+    unpaired form must abstain on can separate here.
+
+    `draws` and `alpha` are KEYWORD-ONLY with no default, following this repo's
+    rule that a statistical knob a caller could forget is a knob that will be
+    forgotten. Returns ``(point, lo, hi)``.
+    """
+    a = np.asarray(arm_a, dtype=float)
+    b = np.asarray(arm_b, dtype=float)
+    if a.shape != b.shape:
+        raise ValueError(
+            "a paired rate difference needs the same items in both conditions; got "
+            f"{a.shape} vs {b.shape}"
+        )
+    if a.size == 0:
+        return (float("nan"), float("nan"), float("nan"))
+
+    point = float(a.mean() - b.mean())
+    idx = rng.integers(0, a.size, size=(draws, a.size))
+    stat = a[idx].mean(axis=1) - b[idx].mean(axis=1)
+    lo, hi = np.quantile(stat, [alpha / 2, 1 - alpha / 2])
+    return (point, float(lo), float(hi))
+
+
+def holm_adjusted(p_values: Sequence[float]) -> list[float]:
+    """Holm-Bonferroni step-down adjustment, order preserved.
+
+    Reported alongside the raw values rather than instead of them. A family of
+    pairwise comparisons over the same conditions is exactly where an unadjusted
+    p-value invites the reading it cannot support, and this repo has already
+    paid once for treating significance as sufficiency.
+    """
+    order = sorted(range(len(p_values)), key=lambda i: p_values[i])
+    running = 0.0
+    out = [0.0] * len(p_values)
+    for rank, index in enumerate(order):
+        adjusted = (len(p_values) - rank) * p_values[index]
+        running = max(running, adjusted)
+        out[index] = min(1.0, running)
+    return out
+
+
 def mcnemar_exact(only_a: int, only_b: int) -> float:
     """Two-sided exact McNemar p-value from the two DISCORDANT counts.
 

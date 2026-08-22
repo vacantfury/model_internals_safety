@@ -360,6 +360,39 @@ def as6_length_bound_clearing_cells(claim: dict) -> tuple[int, str]:
     return len(clearing), f"{len(reported)} reported cells, all clearing: {detail}"
 
 
+def _paired_pairs(claim: dict) -> list[dict]:
+    (source,) = _resolve_source(claim)
+    data = json.loads(source.read_text())
+    return [row for block in data["guards"].values() for row in block["pairs"]]
+
+
+def as6_paired_separating_pairs(claim: dict) -> tuple[int, str]:
+    """Pairs separating under the paired test, after the Holm adjustment.
+
+    The numerator of a "three of the six" sentence. Both halves move when the
+    reported set moves: the item-level holdout has already taken one condition
+    out, which would change six to three without touching either word in a
+    sentence that would still read fluently.
+    """
+    pairs = _paired_pairs(claim)
+    separating = [row for row in pairs if row["separates_after_adjustment"]]
+    if any(not row["wilson_intervals_overlap"] for row in pairs):
+        raise ValueError(
+            f"{claim['id']}: a pair now separates under the INDEPENDENT intervals too, "
+            "so the paper's claim that the paired test sees what they cannot is stale"
+        )
+    detail = ", ".join(
+        f"{row['left']}/{row['right']} p={row['mcnemar_p_holm']:.3f}" for row in separating
+    )
+    return len(separating), f"{len(separating)} of {len(pairs)} pairs: {detail}"
+
+
+def as6_paired_total_pairs(claim: dict) -> tuple[int, str]:
+    """The denominator, checked separately so it cannot drift out of the sentence."""
+    pairs = _paired_pairs(claim)
+    return len(pairs), f"{len(pairs)} pairwise comparisons across both guards"
+
+
 RECIPES = {
     "spread_echo_measured_cells": spread_echo_measured_cells,
     "ladder_reported_cells_rejected": ladder_reported_cells_rejected,
@@ -371,6 +404,8 @@ RECIPES = {
     "as6_bwd_measurable_pairs": as6_bwd_measurable_pairs,
     "as6_bwd_unlicensed_pairs": as6_bwd_unlicensed_pairs,
     "as6_length_bound_clearing_cells": as6_length_bound_clearing_cells,
+    "as6_paired_separating_pairs": as6_paired_separating_pairs,
+    "as6_paired_total_pairs": as6_paired_total_pairs,
 }
 
 
