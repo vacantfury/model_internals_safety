@@ -2505,3 +2505,32 @@ It cross-references the holdout section, which needed a `\label` added, the
 second dangling label this restructure produced. Both were caught by refusing to
 write a `\ref` without checking its target exists, which cost seconds each time
 and would have cost a build failure or, worse, a rendered `??`.
+
+### 29.4 The read-through found what the guards structurally cannot
+
+Asked whether the paper was ready to submit, I checked rather than answered.
+The guards were all green and one thing was still wrong.
+
+**The INTRODUCTION enumerated what the format-detector reading is contingent on
+and omitted the largest contingency.** It listed "a linear probe at one position"
+and "a licensing procedure that leaves most cipher conditions unmeasured", and
+did not mention that this is the one cell in the paper not taken under the
+item-level holdout. §5.8 and Limitations both said so; the intro did not, and the
+intro is what a referee reads first. Fixed in both kits, pointing at
+Section~\ref{sec:format}. The Conclusion was already adequately hedged ("under
+the conditions we test") and was left alone.
+
+**This is the class of defect no guard here can catch**, and it is worth naming
+because the guards are good enough to feel like coverage. Parity checks the kits
+agree. The ledger checks numbers against artefacts. The bib generator checks
+cited keys. Hygiene checks page counts and venue tokens. **Not one of them asks
+whether the paper's three statements of the same claim say the same thing**, and
+after a session that rewrote an abstract, replaced a table column, deleted a
+subsection and added two paragraphs, that is exactly where the damage collects.
+
+Also checked, since a submission was in question and no guard covers it either:
+the anonymous kit carries no author name, affiliation, email, repository
+pointer or self-citation, its supplement's title page reads "Anonymous
+submission", and every `Zhang` in the bibliography is a third-party citation. A
+clean rebuild from scratch confirms all four documents come from current
+sources: exit 0, zero errors, zero undefined references, zero overfull boxes.
