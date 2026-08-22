@@ -161,3 +161,71 @@ class TestMcNemar:
 
     def test_a_p_value_never_exceeds_one(self):
         assert mcnemar_exact(1, 1) <= 1.0
+
+
+class TestTheUnpairedInteractionInterval:
+    """The difference-of-differences estimator used for AS-6's factorial.
+
+    It exists only because the guard wrapper runs persisted per-item verdicts
+    for one of six cells, so the correct paired estimator cannot be reached.
+    Its conservatism is the property under test: a claim that an interaction is
+    ABSENT must not be read off it.
+    """
+
+    def test_it_recovers_a_known_difference_of_differences(self):
+        from internals_safety.measurements.intervals import unpaired_interaction_interval, z_for
+
+        # (0.98 - 0.23) - (0.92 - 0.39) = 0.75 - 0.53 = 0.22
+        point, lo, hi = unpaired_interaction_interval(
+            (98, 100), (23, 100), (92, 100), (39, 100), z_for(0.05)
+        )
+        assert point == pytest.approx(0.22, abs=1e-9)
+        assert lo < point < hi
+
+    def test_it_is_wider_than_the_paired_estimator_on_identical_data(self):
+        """The whole reason it is second choice, asserted rather than assumed.
+
+        Perfectly correlated items are the case where pairing buys the most, so
+        if the unpaired interval were ever narrower the estimator would be
+        understating and the docstring's safe-direction promise would be false.
+        """
+        import numpy as np
+
+        from internals_safety.measurements.intervals import (
+            paired_bootstrap_difference,
+            unpaired_interaction_interval,
+            z_for,
+        )
+
+        rng = np.random.default_rng(0)
+        a_h = [True] * 90 + [False] * 10
+        a_b = [True] * 30 + [False] * 70
+        b_h = [True] * 80 + [False] * 20
+        b_b = [True] * 40 + [False] * 60
+        _, p_lo, p_hi = paired_bootstrap_difference(
+            (a_h, a_b), (b_h, b_b), rng, draws=4000, alpha=0.05
+        )
+        _, u_lo, u_hi = unpaired_interaction_interval(
+            (90, 100), (30, 100), (80, 100), (40, 100), z_for(0.05)
+        )
+        assert (u_hi - u_lo) > (p_hi - p_lo)
+
+    def test_a_zero_denominator_is_nan_and_never_a_zero_effect(self):
+        from internals_safety.measurements.intervals import unpaired_interaction_interval, z_for
+
+        point, lo, hi = unpaired_interaction_interval(
+            (0, 0), (1, 10), (1, 10), (1, 10), z_for(0.05)
+        )
+        assert all(v != v for v in (point, lo, hi))  # NaN, not 0.0
+
+    def test_sign_reversals_survive_rather_than_being_clipped(self):
+        """WildGuard homoglyph's interaction is NEGATIVE: the encoding recovers
+        discrimination relative to the wrapper. Clipping at zero would erase the
+        most surprising cell in the table."""
+        from internals_safety.measurements.intervals import unpaired_interaction_interval, z_for
+
+        point, lo, hi = unpaired_interaction_interval(
+            (99, 100), (63, 100), (75, 100), (23, 100), z_for(0.05)
+        )
+        assert point < 0
+        assert hi < 0

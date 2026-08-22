@@ -100,6 +100,44 @@ def unpaired_difference_interval(
     return (max(-1.0, p_a - p_b - half), min(1.0, p_a - p_b + half))
 
 
+def unpaired_interaction_interval(
+    a_harmful: tuple[int, int],
+    a_benign: tuple[int, int],
+    b_harmful: tuple[int, int],
+    b_benign: tuple[int, int],
+    z: float,
+) -> tuple[float, float, float]:
+    """Wald interval on a difference of differences from FOUR independent samples.
+
+    The statistic is the same one `paired_bootstrap_difference` computes,
+    ``(p_a_harmful - p_a_benign) - (p_b_harmful - p_b_benign)``: how much the
+    harm gap moves between two conditions. Each argument is
+    ``(successes, total)``.
+
+    **Use this only when the per-item verdicts are unavailable.** Conditions
+    within one arm are the SAME prompts rendered differently, so they are
+    genuinely item-paired and the paired bootstrap is the correct estimator.
+    This one treats all four cells as independent, which inflates the variance
+    by the shared item difficulty and therefore returns a WIDER interval than
+    the truth. That is the safe direction for a claim that an interaction is
+    nonzero, and the wrong direction for a claim that one is absent, so a null
+    read off this estimator is not a null.
+
+    It exists because the guard wrapper runs persisted per-item records for the
+    encoded harmful arm only; the other five cells of the factorial survive as
+    aggregate rates. Recovering the pairing means re-running with per-item
+    persistence on every arm, not a different formula.
+    """
+    cells = (a_harmful, a_benign, b_harmful, b_benign)
+    if any(total == 0 for _, total in cells):
+        return (float("nan"), float("nan"), float("nan"))
+    p = [s / n for s, n in cells]
+    point = (p[0] - p[1]) - (p[2] - p[3])
+    variance = sum(pi * (1 - pi) / n for pi, (_, n) in zip(p, cells))
+    half = z * math.sqrt(variance)
+    return (point, max(-2.0, point - half), min(2.0, point + half))
+
+
 def paired_bootstrap_difference(
     arm_a: Sequence[Sequence[bool]],
     arm_b: Sequence[Sequence[bool]],

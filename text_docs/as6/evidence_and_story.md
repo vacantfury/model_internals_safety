@@ -1620,3 +1620,61 @@ third. It cannot catch the second, and it would not have caught this one either,
 because both endpoints are real numbers from the real artefact and only the
 MEMBERSHIP differs. **The check that finds this family is not a test, it is the
 habit of asking which set a number ranges over, every time one is written.**
+
+## 22. CON 8 IS DONE, AND THE FACTORIAL MAKES THE WRAPPER CLAIM BOTH WEAKER AND MORE USEFUL (2026-08-21)
+
+`scripts/guard_factorial.py`, keyless, GPU-free, seconds. Artifact
+`outputs/analysis/guard_factorial_20260821.json`. Source: the `guard-scaffold-*`
+runs that arrived in §21.
+
+### The result
+
+| guard | condition | gap plain | wrapped | encoded | Δ wrapper | Δ encoding beyond wrapper |
+|---|---|---|---|---|---|---|
+| Llama Guard | homoglyph | 0.75 | 0.63 | 0.53 | 0.12 [−0.01, 0.25] | 0.10 [−0.05, 0.25] |
+| Llama Guard | zero_width | 0.75 | 0.67 | 0.54 | 0.08 [−0.05, 0.21] | 0.13 [−0.02, 0.28] |
+| Llama Guard | reverse_words | 0.75 | 0.68 | 0.36 | 0.07 [−0.06, 0.20] | **0.32 [0.16, 0.48]** |
+| WildGuard | homoglyph | 0.54 | 0.36 | 0.52 | **0.18 [0.04, 0.32]** | **−0.16 [−0.31, −0.01]** |
+| WildGuard | zero_width | 0.54 | 0.43 | 0.48 | 0.11 [−0.03, 0.25] | −0.05 [−0.21, 0.11] |
+| WildGuard | reverse_words | 0.54 | 0.50 | 0.44 | 0.04 [−0.10, 0.18] | 0.06 [−0.10, 0.22] |
+
+### ⛔ The published percentages were point estimates straddling zero
+
+The paper said *"the wrapper accounts for 8 to 16 per cent of Llama Guard's
+plaintext harm gap and 7 to 33 per cent of WildGuard's."* Those are the Δ wrapper
+column as fractions of each guard's plain gap, and **five of the six intervals
+include zero.** Only WildGuard `homoglyph` separates. A percentage range reads as
+a measured decomposition and this one is mostly not distinguishable from no
+effect at all.
+
+**The correction makes the paper's own argument stronger.** Its conclusion is
+that neither guard is principally a format detector, and "the wrapper term is
+small and mostly indistinguishable from zero" says that far better than a
+percentage range that invites the reader to take 33% seriously.
+
+### The surprising cell, which a marginal comparison could not show
+
+**WildGuard `homoglyph`'s encoding term is NEGATIVE and separates: −0.16
+[−0.31, −0.01].** Relative to the same content wearing the same wrapper, the
+encoding *recovers* discrimination (wrapped gap 0.36, encoded gap 0.52). The
+wrapper hurts this guard more than the encoding does. Reporting a difference of
+marginal rates against a bar would have shown neither this nor Llama Guard
+`reverse_words`' +0.32, which is the referee's methodological point landing on
+real cells rather than in principle.
+
+### ⚠️ The intervals are CONSERVATIVE, and the reason is a data limitation
+
+Conditions within an arm are the same prompts rendered differently, so they are
+item-paired, but **the wrapper runs persisted per-item verdicts for the encoded
+harmful arm only** (`benign_cells.jsonl` is empty in every one of them). Five of
+six cells survive as aggregate rates, so `unpaired_interaction_interval` treats
+all four as independent and inflates the width by the shared item difficulty.
+Consequence, stated in the module docstring, the script header and the table
+caption: **a cell that separates here does so; a cell that does not is NOT shown
+to be null.** Recovering the pairing needs a re-run with per-item persistence on
+every arm, not a different formula.
+
+The estimator went to `intervals.py` rather than into the script, per the spine
+rule, and is pinned by four tests including one asserting it is genuinely wider
+than the paired bootstrap on identical data. That property is its whole
+justification, so it is tested rather than claimed.
