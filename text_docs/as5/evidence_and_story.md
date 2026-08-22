@@ -1875,6 +1875,115 @@ failure mode than being wrong, because the checkable half checks out.** Of the
 eleven that held, one overturned a claim (#3), two were the same uncaught defect
 (#12/#21), and the rest were prose that did not match the code.
 
+## 4r. THE EXTERNAL REVIEW: two referees, both 4/reject, reading two different drafts (2026-08-22)
+
+Two referee reports arrived. Both rate **4, "ok but not good enough, rejection"**,
+both at confidence 4. Raw text sits in the gitignored kit directory; this section
+is the adjudication.
+
+### 4r.1 Establish the version before acting on any objection
+
+The two referees describe different papers, and the difference is the scaffold arm.
+
+**Referee 1 read a two-table, pre-scaffold draft.** Its single largest objection,
+con 1, is that plaintext prompts are sent verbatim while encoded prompts carry an
+instruction scaffold, so "the experiment does not isolate the effect of encoding"
+and a factorial control is needed. That control is in the current draft as the
+middle arm of Table 2. Its con 2 attacks the "indistinguishable" claim as a
+failure to reject rather than an equivalence test, and its con 5 quotes the echo
+prose as withholding cells from a denominator. Both were repaired 2026-08-21
+(§4p for the null, §4o for the echo prose), before the review was run.
+
+**Referee 2 read the current three-table version**, and opens its Pros with the
+arm referee 1 asked for: "the distinction among plaintext, scaffold, and encoded
+conditions in Section 4 is the paper's strongest contribution", quoting Llama's
++0.83 → +0.16 template term against Qwen's +0.82 → +0.80. It also credits "the
+revision from an independent-binomial null to an item-paired null" and the item
+leakage withdrawal, all of which post-date referee 1's copy.
+
+⚠️ **This is the reading that governs what to do next.** Three of referee 1's ten
+objections are already answered, and one of them was its headline. Treating the
+two reports as ten plus ten independent findings would spend the next pass
+re-fixing repairs that landed the day before. **The signal is the intersection**,
+which is where two referees reading different drafts still agree.
+
+### 4r.2 What both referees say, which is what survives
+
+1. **The pipeline table reports point estimates and no uncertainty** (R1 cons 6
+   and 7, R2 con 5). It gives the plaintext gap and gap lost, never the raw
+   encoded arms, no intervals, no per-cell echo rates, no repeat-run range. The
+   text calls a 0.41 → 0.35 endpoint move "nothing" while the paper itself states
+   that differences below roughly 0.15 are not separable at n=100. As written the
+   claim cannot be distinguished from an underpowered one. **This is a reporting
+   gap, not a measurement gap**: the paired machinery exists and the per-prompt
+   verdicts are cached. Filed as TODO 92.
+2. **The refusal judge carries no human validation** (R1 con 4, R2 con 4). Both
+   make the same sharp point, and it is correct: separating plaintext harmful
+   from plaintext benign at +0.79 to +0.82 is not independent validation, because
+   that separation is also the desired result. Every number in all three tables
+   is judge-derived. Neither referee disputes the negative controls we DO have;
+   they dispute that negative controls establish positive validity.
+3. **There is no reproducibility appendix** (R1 con 8, R2 con 6), and R2 gives
+   the reason it is material rather than cosmetic: the paper's own §7 reports
+   only 12 to 58 per cent byte-identical responses across nominally greedy runs.
+   Every omitted implementation detail is therefore load-bearing. TODO 91.
+4. **Nothing is held out** (R2 con 2, and R1 con 3 in the specific form of
+   corpus adequacy). R2 names the consequence precisely: homoglyph is retained
+   because it passes all screens, and the screens were calibrated on the corpus
+   used for the conclusions. It cites our own disclosed r = −0.49 between
+   passing the echo screen and gap magnitude as making this worse, which is the
+   correct use of that disclosure and exactly why §4o kept it in.
+5. **The verbal claims outrun the evidence** (R1 con 9, R2 cons 3 and 9). One
+   encoding, four 7-8B models, one corpus, one judge, against abstract and
+   conclusion language about encoded-prompt evaluation in general.
+
+### 4r.3 One objection we can answer today with an instrument we already built
+
+Referee 1's con 3 asks whether the behavioural gap survives length-matched and
+token-count-matched pairs, citing our own reported AUROC 0.654 for raw character
+length and noting that every transform preserves or amplifies length cues.
+
+**That test has already run.** `measure_rate_length_null` was built 2026-08-21
+for finding #12, and under it the harm gap clears the length-matched null by
+**+0.427 / +0.269 / +0.133** on Qwen, Tülu and Mistral. It does not clear on
+Llama, and the reason is not a failure: Llama's encoded gap is zero, and an
+absent effect cannot beat a null. The paper reports none of this. Adding it
+converts a referee objection into a control we passed. TODO 93.
+
+### 4r.4 The suggested references: twelve, all real, four already ours
+
+Adjudicated at primary source. **No fabricated title**, which is worth recording
+because AS-6's equivalent pass found one in nine (TODO 82).
+
+Four were already in science's masters before the review ran, and **Broken-Token
+is discussed in four separate documents in this repo**. A referee's
+"potentially missing related work" is a hypothesis about our corpus, and a third
+of it was wrong here in the same direction as our own recorded failure: absence
+asserted from a narrow index. **Grep the corpus before believing a paper is
+missing** held again, this time from the other side.
+
+Eight are genuinely absent and all eight exist. Two carry a caveat that matters
+more than their presence. **Ball et al.** (2406.09289, 40 citations) is the most
+relevant of the twelve, since latent-space dynamics under jailbreak is precisely
+the mechanism question §8 leaves open, and its venue is UNSETTLED: Semantic
+Scholar says EACL, dblp says CoRR, arXiv carries no journal-ref, and its arXiv
+author list reads Panickssery where Semantic Scholar says Rimsky. **JailFact-Bench**
+resolves only through a DOI, at a workshop, with zero citations. Full list and
+identifiers: TODO 94.
+
+⚠️ **A referee suggestion is not an obligation.** Several of these would answer
+"your scope is too narrow" by citation rather than by evidence, which is the
+cheap move and the wrong one. Cite what bears on the argument.
+
+### 4r.5 What the two reports agree the paper is worth
+
+Neither referee disputes the phenomenon. R1 pro 1 restates it correctly from
+Table 1 unprompted (0.99 against 0.99 for Llama, +0.61 for Qwen), R2 pro 2 does
+the same, and both call the transparency about instrument failures unusual and
+valuable rather than damaging. The rejection is not about the finding. It is
+about uncertainty reporting, judge validation, reproducibility, and held-out
+evidence, in that order, and four of those five are offline work.
+
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
 Jobs `9010897` (Mistral-7B-Instruct-v0.3, 1:15:12) and `9011034` (Tulu-3-8B,
