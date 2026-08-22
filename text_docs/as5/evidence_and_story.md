@@ -1472,6 +1472,36 @@ problem, not a missing-paper problem. The two new entries were copied
 neither carries a `note` field, so nothing curation-shaped can be typeset.
 Build: clean, no undefined citations, both new keys resolved in the `.bbl`.
 
+### The withdrawn probe is now DEFECT (9), not a footnote (2026-08-21, TODO 85 closed)
+
+The instrument leg claimed eight defects and filed our own in Limitations. That
+is two standards in one paper: it audits everyone else's missing controls by
+number and its own by paragraph. **The count is nine**, and (9) is ours — the
+item-leaking transfer, with the reason the existing screens could not catch it:
+*the floor is estimated on encodings the model cannot decode, which is precisely
+where item leakage is weakest, and applied to encodings it decodes well, which
+is where leakage is strongest.* The summary paragraph no longer absorbs it
+silently — (5), (6) and (9) are named as probe-axis defects against the eight
+behaviour-axis ones that share the inflates-apparent-safety direction.
+
+⚠️ **The withdrawn VALUE is deliberately NOT printed in the paper.** (9) says
+"near-ceiling on all four models" and quotes only the held-out $0.618$--$0.811$.
+A retired number typeset in a PDF is a number someone lifts, and this repo's
+standing rule is that it is never quoted again.
+
+**`zhao2025llmsencode` is back, doing more work than before the cut.** With the
+internals section gone it is no longer a position citation; it is what makes the
+open question precise — harmfulness and refusal are represented separately, so
+the protocol could disrupt the downstream use or degrade the representation
+itself, *and the two call for opposite remedies*. Refusal rates cannot separate
+them. The paper now names that as the most valuable question it leaves open,
+which is a better ending than the one the refuted section gave it.
+
+**Typesetting defect fixed in passing:** `tab:arms` ran 4.88pt into the margin
+once the survey paragraphs moved the float. Found in `build.log`, not by eye.
+`tabcolsep` 4pt → 2.5pt. Both kits now build with **0 overfull, 0 underfull-hbox
+and 0 undefined references**; 2521 tests green.
+
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
 Jobs `9010897` (Mistral-7B-Instruct-v0.3, 1:15:12) and `9011034` (Tulu-3-8B,
