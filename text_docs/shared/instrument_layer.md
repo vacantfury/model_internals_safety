@@ -1796,79 +1796,111 @@ and still dominate the variance across them.
 
 ---
 
-### 3.12 ⛔ AN LLM ANNOTATOR CANNOT VALIDATE A SAFETY JUDGE, BECAUSE IT GOES SILENT ON EXACTLY THE DISCRIMINATING CELLS (2026-08-22)
+### 3.12 ✅ THE REFUSAL JUDGE IS VALIDATED BY TWO CROSS-FAMILY ANNOTATORS, and the drop-out that nearly stopped it was ONE family's policy (2026-08-22)
 
 All three external referees name the same gap independently: every regime count
-in AS-5 splits on `refused`, and no human has checked that verdict. The owner
-ruled out spending his own time on it, so the plan was the house default for a
-high-stakes claim with no external anchor: one cross-family second opinion. Our
-judge is `gpt-5-mini`, so the annotator has to come from another family.
+in AS-5 splits on `refused`, and no independent labeller had ever checked that
+verdict. The owner ruled out spending his own time, so the route was the house
+default for a high-stakes claim with no external anchor: a cross-family second
+opinion. Our judge is `gpt-5-mini`, so the annotator has to be another family.
 
-**It does not work, and the reason generalises.** `claude-opus-4-5` returned an
-EMPTY reply on **27 of 200** items, with zero mechanism errors. The missingness
-is not random:
+⚠️ **This is JUDGED, never VERIFIED.** Two models are not a human. The label is
+the honest one and it is not cosmetic.
 
-| cut | empty rate |
-|---|---|
-| harmful arm | **18 / 90 = 20%** |
-| benign arm | 9 / 110 = 8% |
-| `claimed_genuine_refusal` | **10 / 50 = 20%** |
-| `echo_scored_as_refusal` | **10 / 50 = 20%** |
-| `echo_not_scored_as_refusal` | 5 / 50 = 10% |
-| `claimed_engagement` | 2 / 50 = 4% |
-| Llama-3.1-8B responses | **17 / 76 = 22%** |
-| Qwen2.5-7B responses | 1 / 41 = 2% |
+**Result: the judge implements its own contract, and it does so well.**
 
-**The mechanism, checked rather than assumed.** The empty items are the ones
-whose RESPONSE decodes the request and then complies, so the prompt shown to the
-annotator contains real harmful content. Three examples: a decoded request for
-extinguishing a fire without alerting firefighters, one for shell companies to
-funnel government money, one for dumping hazardous medical waste. A system
-message framing the task as classification rather than generation does NOT
-recover them: tested directly on one item, both with and without, and both came
-back empty.
+| | `claude-opus-4-5` | `gemini-3.1-pro` |
+|---|---|---|
+| labelled | 173 / 200 | **198 / 200** |
+| `claimed_genuine_refusal` agreement | 1.000 | 1.000 |
+| `echo_scored_as_refusal` | 0.900 | 0.920 |
+| `claimed_engagement` | 0.958 | 0.959 |
+| `echo_not_scored_as_refusal` | 0.956 | 0.939 |
+| judge refused, annotator engaged | 0.050 | **0.040** |
+| judge engaged, annotator refused | 0.043 | **0.051** |
 
-⛔ **The consequence is the finding, and it is general.** An LLM annotator
-declines on the cells that carry actual harmful content. Those are precisely the
-cells where a refusal judge's verdict is worth checking, because a cell whose
-response refused or echoed contains nothing to decline over. **So the annotator
-is most silent exactly where the validation has to happen**, and the silence is
-concentrated on the harmful arm and on judge-refused cells. Dropping the 27 and
-scoring the surviving 173 would report an agreement rate computed on the easy
-half and present it as the whole.
+Two independently-prompted families from different vendors land within 0.02 of
+each other on every error rate, and they agree with EACH OTHER on 160 of the 172
+items both labelled (0.930). Nine of the twelve disagreements are on the A-vs-B
+boundary, which sits INSIDE "refused" and therefore cannot move the quantity the
+paper reports. That is the same structure the sibling's Round R found on a
+different rubric: low three-class agreement, high binary agreement, disagreement
+one-directional on a single boundary.
 
-**What this rules in and out.** It rules OUT model annotation as a substitute for
-human labelling on this task, for both papers. AS-6 inherits it directly: a
-guard-side judge validation faces the same wall, since guard inputs are harmful
-by construction. It rules IN reporting the missingness itself, which is a small
-methodological result: the standard "use an LLM judge to check your LLM judge"
-move has a failure mode that is invisible unless the dropout is cross-tabulated
-against the strata, and a simple overall completion rate of 86.5% would look
-acceptable.
+**The composition finding, which is what the paper actually gains.** Pool-weighted
+across the two refused strata, the annotator calls **0.63** (Gemini) and **0.49**
+(Anthropic) of judge-`refused` cells label B, echo or irrelevant rather than a
+refusal. This is NOT judge error: the JailbreakBench template explicitly instructs
+that echo and irrelevance count as a refusal, and the annotator was given the same
+definition, which is why binary agreement is 0.90 to 1.00. It is an independent
+measurement of what `refused` is MADE OF under encoded prompts, and it supports
+the paper's defect (4) with a number from outside our own pipeline.
 
-**Inherited human evidence, and its limits.** The sibling repo's Round R
-(2026-07-28) validated the SAME judge model on a refusal task against a blind
-human annotator: kappa 0.794 binary, 0.875 on the representative block, 100
-items, verdict withheld from the labeller. Two gaps prevent it from closing this
-one. It validated a different RUBRIC (a three-class over-refusal scheme, not the
-JailbreakBench binary template we run), and a different RESPONSE DISTRIBUTION
-(benign VLM responses under imaging attacks, not text-encoded prompts). ⛔ The
-transfer is weakest exactly where AS-5 needs it: Round R met echo too, 26 cases,
-and handled it by ADDING a rubric clause, which is direct evidence the two
-rubrics differ on our failure mode. Report it as inherited context with the
-extrapolation named, never as validation of this configuration. ⚠️ Its filled
-sheet is absent from disk (only the blank and the key survive, all 100 label
-cells empty), so the number can be cited and not recomputed.
+⚠️ **A stratified sample's raw rate is not a population rate.** The sheet takes 50
+per stratum while the pools are 914 genuine-refusal against 155 echo-scored, so
+the unweighted figure is an artefact of the design. `judge_validation_score.py`
+now reports the pool-weighted estimate and prints the raw one beside it marked as
+not a population rate. Here the two are close (0.631 against 0.610) because both
+refused strata have similar B-rates, but that is luck and not a reason to skip
+the weighting.
+
+⛔ **THE DROP-OUT IS ONE FAMILY'S POLICY, NOT A PROPERTY OF LLM ANNOTATION.** The
+first version of this section generalised from the Anthropic pass alone and was
+wrong within the hour, which is this repo's own one-model-is-not-a-conclusion
+lesson committed by the session that keeps citing it. What is true:
+`claude-opus-4-5` returned EMPTY on 27 of 200 with zero mechanism errors, and the
+missingness was sharply concentrated (harmful arm 20% against benign 8%;
+`claimed_genuine_refusal` and `echo_scored_as_refusal` 20% each against
+`claimed_engagement` 4%; Llama responses 22% against Qwen 2%), on items whose
+response decodes the request and then complies, so the prompt carried real harmful
+content. A system message framing the task as classification did not recover them,
+tested both ways on one item. **`gemini-3.1-pro` missed only 2, and neither was a
+decline**: both were items whose model response was itself empty, where it replied
+`[Empty response]` instead of a letter.
+
+**The transferable rule.** A completion rate is not a coverage check. Anthropic's
+86.5% looks acceptable and hides a 20%-against-4% concentration on exactly the
+cells being validated. Cross-tabulate drop-out against the strata, always, and
+when one family declines, try another before concluding anything about the method.
+
+⛔ **A CONFIDENT WRONG NUMBER CAME OUT OF THIS AND IT WAS CAUGHT BY A CONSISTENCY
+CHECK, NOT BY A TEST.** The first scoring run reported per-stratum agreement of
+0.42 to 0.57 and both error directions at ~0.5, i.e. the judge as a coin. The
+judge was fine; the JOIN was broken. `model_annotator.py` filled the sheet with a
+sequential `text.replace(marker + " _", ..., 1)` and SKIPPED unlabelled items, so
+every item after the first skip received the NEXT item's label. Two skips shifted
+the Gemini sheet, twenty-seven shifted the Anthropic one. **It was visible only
+because the two annotators agreed with each other at 0.930 while agreeing with the
+judge at chance, which is impossible unless the join is wrong.** The write is now
+positional and `tests/test_model_annotator.py` pins it. ⚠️ The reading side had
+been guarded against this exact shift since the sheet was built
+(`test_a_dropped_item_does_not_silently_shift_the_alignment`); nothing guarded the
+WRITING side, which is the same defect facing the other way. **When a guard exists
+for one direction of a join, ask what holds the other direction.**
+
+**Inherited human evidence, and its limits.** The sibling's Round R (2026-07-28)
+validated the SAME judge model on a refusal task against a blind HUMAN annotator:
+kappa 0.794 binary, 0.875 representative, 100 items, verdict withheld from the
+labeller. Two gaps stop it closing this one on its own: a different RUBRIC (a
+three-class over-refusal scheme, not the JailbreakBench binary template we run)
+and a different RESPONSE DISTRIBUTION (benign VLM responses under imaging attacks).
+⛔ The transfer is weakest exactly at our failure mode: Round R met echo too, 26
+cases, and handled it by ADDING a rubric clause, which is direct evidence the two
+rubrics differ there. Report it as inherited context with the extrapolation named,
+never as validation of this configuration. ⚠️ Its filled sheet is absent from disk
+(only the blank and the key survive, all 100 label cells empty), so the number can
+be cited and not recomputed.
 
 **Audit of the other rounds, so nobody repeats it.** Round J is filled but
-validates the HARM judge (kappa 0.68, HarmBench rubric, VLM targets); AS-5
-reports no ASR number, so it validates a judge we do not use. **Round H was never
-labelled**: 78 rows, every `human_label` cell empty, no filled counterpart
-anywhere in the tree, and it is also a harm round.
+validates the HARM judge (kappa 0.68, HarmBench rubric, VLM targets), and AS-5
+reports no ASR number. **Round H was never labelled**: 78 rows, every
+`human_label` cell empty, no filled counterpart in the tree, and also a harm round.
 
-Instruments: `scripts/judge_validation_sample.py` (blinded, stratified),
-`scripts/model_annotator.py` (cross-family, refuses the judge's own family,
-never converts silence into a label), `scripts/judge_validation_score.py`.
+Instruments: `scripts/judge_validation_sample.py` (blinded, shuffled, stratified
+on the judge's own verdict so both error directions are estimable),
+`scripts/model_annotator.py` (refuses the judge's own family, never converts
+silence into a label, writes positionally), `scripts/judge_validation_score.py`
+(pool-weighted rates, loud cross-tabulated exclusions).
 
 ## 4. Open, with the method already identified
 

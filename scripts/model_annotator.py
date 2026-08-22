@@ -164,12 +164,31 @@ def main(argv: list[str] | None = None) -> int:
         item["raw"] = raw
         filled.append(item)
 
-    text = args.sheet.read_text()
-    for item in items:
-        if item["label"] in VALID:
-            text = text.replace(
-                f"{LABEL_MARKER} _", f"{LABEL_MARKER} {item['label']}", 1
-            )
+    # POSITIONAL, never sequential-replace. The first version walked `items` and
+    # did `text.replace(marker + " _", marker + " " + label, 1)`, SKIPPING items
+    # whose label was None. Every item after the first skip then received the
+    # NEXT item's label, so 2 Gemini skips and 27 Anthropic skips silently
+    # shifted the whole sheet. It was caught only because agreement with the
+    # judge collapsed to chance (0.42-0.57) while the two annotators agreed with
+    # each other at 0.930, which is impossible unless the join is broken.
+    # `tests/test_judge_validation.py` already forbade exactly this shift on the
+    # READING side; nothing guarded the WRITING side.
+    # `items` is in SHEET order (parse_items walks the text) and `re.sub` visits
+    # matches in the same order, so the i-th marker belongs to items[i]. Iterating
+    # the parse order rather than a sorted index avoids assuming the headings are
+    # a contiguous 1..N, which is write_sheet's business and not this file's.
+    order = iter(items)
+
+    def fill(_match: re.Match) -> str:
+        label = next(order)["label"]
+        return f"{LABEL_MARKER} {label}" if label in VALID else f"{LABEL_MARKER} _"
+
+    text = re.sub(
+        rf"^{re.escape(LABEL_MARKER)} _$",
+        fill,
+        args.sheet.read_text(),
+        flags=re.MULTILINE,
+    )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(text)
 

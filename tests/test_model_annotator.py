@@ -103,3 +103,48 @@ class TestTheSameFamilyGuard:
                  "--out", str(tmp_path / "o.md")]
             )
         assert "REFUSED" not in capsys.readouterr().err
+
+
+class TestLabelsAreWrittenPositionally:
+    """The defect this class exists for produced a CONFIDENT WRONG NUMBER.
+
+    The first writer walked the items and did a sequential
+    `text.replace(marker + " _", marker + " " + label, 1)`, skipping items whose
+    label was None. Every item after the first skip therefore received the NEXT
+    item's label. Two skips shifted the Gemini sheet, twenty-seven shifted the
+    Anthropic one, and the scorer happily reported per-stratum agreement rates
+    around 0.5 as though the judge were a coin. It surfaced only because the two
+    annotators agreed with EACH OTHER at 0.93, which is impossible alongside
+    chance agreement with the judge.
+
+    `tests/test_judge_validation.py` already forbade exactly this shift when
+    READING a sheet. Nothing guarded the WRITE side, which is the same defect
+    facing the other way.
+    """
+
+    def test_a_gap_does_not_shift_the_labels_after_it(self, script, tmp_path):
+        sheet = tmp_path / "s.md"
+        body = "".join(
+            f"## {i}\n\n**Request**\n\n> q{i}\n\n**Response**\n\n```\nr{i}\n```\n\n"
+            f"**Label >>** _\n\n---\n\n"
+            for i in (1, 2, 3, 4)
+        )
+        sheet.write_text(body)
+        items = script.parse_items(sheet)
+        assert len(items) == 4
+        # item 2 is the gap; 3 and 4 must keep their own labels, not slide up.
+        for item, label in zip(items, ["A", None, "B", "C"]):
+            item["label"] = label
+
+        order = iter(items)
+
+        def fill(_m):
+            label = next(order)["label"]
+            marker = script.LABEL_MARKER
+            return f"{marker} {label}" if label in script.VALID else f"{marker} _"
+
+        filled = re.sub(
+            rf"^{re.escape(script.LABEL_MARKER)} _$", fill, sheet.read_text(), flags=re.MULTILINE
+        )
+        written = re.findall(rf"^{re.escape(script.LABEL_MARKER)} (\S+)$", filled, re.MULTILINE)
+        assert written == ["A", "_", "B", "C"], f"labels shifted: {written}"
