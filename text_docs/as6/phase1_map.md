@@ -67,9 +67,12 @@ content, which retires the format-detector hypothesis empirically.
 ⚠️ **Third control, and it subtracts the headline: §0.6 (2026-08-08).** The
 control floor is now derived. Llama Guard keeps **four** rungs at 0.08–0.25, and
 `caesar3`'s 0.77 turns out to be a **control** — base-model ability 0.00.
-**WildGuard's floor is a 3-control bound, so the 69% above is NOT reportable**
-either, pending one cheap Mistral ability job. `blocked_without_decoding ≈ 0` is
-untouched: it needs no floor.
+~~**WildGuard's floor is a 3-control bound, so the 69% above is NOT reportable**
+either, pending one cheap Mistral ability job.~~ ⚠️ **STALE since 2026-08-09 and
+corrected 2026-08-21:** job `9031680` ran, WildGuard's floor is an
+11-to-14-control DISTRIBUTION, and the 69% is screened. It is removed by the
+WRAPPER screen instead, which is a different reason (§0.7).
+`blocked_without_decoding ≈ 0` is untouched: it needs no floor.
 
 **Second control, and it subtracts a finding: §1.5.** The per-prompt decode read
 sat at the median of the benign distribution — a 50% false-positive rate by
@@ -156,9 +159,10 @@ them must apply this correction.
   reported until that is resolved."* The floor is now derived from the guard's
   BASE MODEL's ability (`instrument_layer.md` §2.7), and `caesar3` is **a control
   rung**: Llama-3.1-8B's ability on it is 0.00, so nothing was decoded and the
-  0.77 is the probe's own surface-feature reading. **WildGuard is still open** —
+  0.77 is the probe's own surface-feature reading. ~~**WildGuard is still open** —
   Mistral ability covers 3 of its rungs, so its floor is a 3-control bound and
-  none of its numbers are reportable yet.
+  none of its numbers are reportable yet.~~ ⚠️ **STALE — closed 2026-08-09 by job
+  `9031680`; WildGuard's floor is a distribution and its map is screened.**
 - **One model each.** §3.6.1's lesson applies here too: two guards is the minimum
   that makes a dissociation a dissociation, not the number that makes either
   guard's own behaviour a general claim.
@@ -337,6 +341,41 @@ WildGuard's 0.69 `combining_marks` headline — is unscreened on the block axis.
 The three headlines this map has already lost to a control that ran afterwards
 (`caesar3`, both cipher bands) are the reason that sentence is here rather than
 in a footnote.
+
+## 0.7 ✅ THE ITEM-SPLIT SCREEN RAN 2026-08-21 — the map of record is what survives it
+
+Full record and the mechanism: `as6/evidence_and_story.md` §9. What this file's
+numbers must be read through, stated once:
+
+- **Every decode AUROC above is the UNSPLIT number.** `probe_transfer` fits on
+  all 200 plaintext items and scores the encoded versions of those same items,
+  so the condition is held out and the items are not. Held out, the reported
+  cells read: Llama Guard `homoglyph` **0.845**, `zero_width` **0.767**,
+  `reverse_words` **0.758**, `fullwidth` **0.706**; WildGuard `homoglyph`
+  **0.789**, `zero_width` **0.772**, `reverse_words` **0.764**,
+  `combining_marks` **0.664**.
+- **Floors under the same treatment:** Llama Guard **0.7066** (12 controls),
+  WildGuard **0.6617** (11 controls).
+- ⛔ **Llama Guard `fullwidth` falls** (0.7057 against 0.7066) and is `(U)`,
+  never "demoted by 0.0009" — its split band [0.627, 0.788] straddles the floor,
+  and under the holdout it reads BELOW `caesar3` (0.7107), a rung on which the
+  base model decodes nothing. The cell goes, not the margin.
+- **Everything else holds**, because the leak is ability-dependent: +0.147 to
+  +0.239 at fixed *n* where the base model decodes, −0.011 to +0.017 on the
+  ability-0.00 controls. The floor is built where the confound is weakest and
+  applied where it is strongest, so it moved 0.003 / 0.024 while candidates fell
+  0.04–0.20. **The control floor is structurally blind to this**, which is a
+  different failure from the two it did catch.
+
+⚠️ **Control-set bookkeeping, reconciled rather than left to be found.** §0.6's
+resolution note records WildGuard's floor as **0.6803 over 14 controls**; the
+screen of record uses **0.6852 over 11**. The 11 are the ability-0.00 rungs of
+job `9031680` alone; the other three (`base64`, `reverse_characters`,
+`tag_block`) were measured in an earlier Mistral run whose cells file the floor
+job did not read. The 11-control floor is the STRICTER of the two and no rung
+sits between 0.6803 and 0.6852, so no verdict differs — and both treatments
+(unsplit and split) used the same eleven, so the pass/fail comparison is like
+with like. Re-deriving on all fourteen is filed, not done.
 
 ## 1. The licensing rule, settled by this run
 

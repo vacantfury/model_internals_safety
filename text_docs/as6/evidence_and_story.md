@@ -837,3 +837,91 @@ decoded-not-blocked — remains an artefact under every treatment tried.
 ability job that closes it has since run, so WildGuard's floor is an
 **11-control distribution** on both treatments. The warning "do not use it" is
 obsolete; the numbers above are the distributional floors.
+
+---
+
+## 10. ✅ THE SPECIFICATION BLOCK LANDED, WITH ITEM 83's FOUR REVISIONS INSIDE IT (2026-08-21)
+
+TODO 78. Both kits rebuilt clean: **exit 0, 0 overfull boxes, 0 undefined
+references or citations**, parity guard green, full suite 2546 passed.
+`paper/` is gitignored, so this section is the only record of what the kits now
+say.
+
+### 10.1 The four revisions from §9, as they appear in the paper
+
+1. **Llama Guard `fullwidth` is out of Table 2.** Its row is deleted, the
+   `\multirow` drops 4 → 3, and the caption states that it appeared there before
+   the holdout and is now unmeasured on the decode axis. The Results text
+   justifies the withdrawal by the comparison that does NOT depend on a
+   thousandth: under the holdout it reads below `caesar3`, a condition whose
+   base model decodes nothing at all. *It is the cell rather than the margin
+   that has to go.*
+2. **Every decode AUROC in Table 2 is the item-split value** (0.985 → 0.845 and
+   so on down), against floors of 0.707 and 0.662 named in the caption. The two
+   surviving appearances of 0.985 are both explicitly labelled as the
+   *uncontrolled* value.
+3. **The margins are stated as a limitation, not buried.** A new Limitations
+   paragraph gives the post-holdout range (smallest 0.052, largest 0.139,
+   against a pre-holdout smallest of 0.087) and says in terms that no claim in
+   the paper rests on how comfortably a condition passed a screen.
+4. **The sigma window is reported, never the constant.** Same paragraph:
+   $[2.11, 3.44]$ and $[1.58, 2.08]$, with 2.0 configured — below the first
+   range, 0.08 inside the second — and the reason the first is survivable
+   (control membership is decided before the comparison).
+
+Plus the two additions §9 named: the item holdout is a `Controls` paragraph in
+Method and a Results subsection of its own, and `E` (0.90–0.98, `homoglyph`
+0.935 against a held-out 0.845) is reported as the denominator, which turns
+"the signal survives" into "degraded by ~0.09 AUROC, not floorbound".
+
+Downstream sites that moved with them: the attrition table gains a fourth screen
+row (**3** and **4**); the abstract, the attrition prose and the Conclusion all
+carry the new counts; and the `fullwidth` dissociation subsection now says
+**neither** guard's decode survives there, which strengthens rather than weakens
+it, since that subsection was always framed as a behavioural result.
+
+### 10.2 The specification itself — Appendix A, twelve subsections
+
+Corpus · conditions · guards, rendering and the verdict read · activation
+capture · the content probe · licensing · the control floor · the item-level
+holdout · the per-prompt read and operating point · base-model ability ·
+per-condition block rates · reproducibility. It is transcription from `conf/`
+and the instrument modules, and it answers cons 2/3/5/6 — *a methodology paper
+that does not specify its method* — in one place.
+
+**Two defects the transcription itself found, which is the argument for writing
+specifications out rather than pointing at code:**
+
+- ⛔ **The Method described the wrong null.** It said the licensing null was
+  drawn "under shuffled training labels". The code permutes the **evaluation**
+  labels with the fitted direction held fixed, and
+  `permutation_null_max_transfer_auroc`'s docstring says in terms that shuffling
+  the training labels was tried first and is WRONG here — a logistic fit on
+  shuffled labels is near-constant, so its transfer AUROC collapses onto 0.5
+  with almost no variance and the null licenses noise. The paper had been
+  describing the rejected version of its own screen. Corrected, with the reason
+  kept, because the reason is the interesting half.
+- ⚠️ **"Neither guard blocks any genuine cipher condition" was false by two
+  prompts.** Llama Guard blocks 2/100 `rot13`. Found by generating the
+  per-condition table from `review_statistics_20260821.json` instead of quoting
+  the four numbers the story needed. Now "no more than 2 per 100", with the
+  table to check it against.
+
+**One gap declared rather than papered over:** the guard checkpoints are pinned
+by repository identifier and not by revision hash, because nothing in
+`provenance.py` records a resolved revision. The appendix says so. Filing the
+code change rather than claiming it, since a claim about our harness that is not
+true is the same class of defect as the null above.
+
+**Citations added:** JailbreakBench (`NEURIPS2024_63092d79`, NeurIPS 2024 D&B)
+for the corpus, which was named in the paper and cited nowhere. Mistral is
+deliberately **named by identifier and not cited** — `model_slate.md` §2.1
+establishes that 2310.06825 describes v0.1 while we run v0.3, so a citation
+there would assert provenance the paper does not have.
+
+### 10.3 What item 78 asked for and did NOT land
+
+**The operating-point sweep as a figure.** It needs run `9033528`, which is not
+local; the local `scores-b10` records are at the retired `reading_percentile`
+50 and would reproduce the superseded map (§8.1). Still gated on the owner's
+down-sync, same gate as the rest of TODO 79.
