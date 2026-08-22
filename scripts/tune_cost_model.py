@@ -51,7 +51,7 @@ from internals_safety.config import (
     load_preset,
 )
 from internals_safety.cost import census_phase0, load_cost_config
-from internals_safety.data import prompt_set
+from internals_safety.pipeline import load_contrast_sets
 from internals_safety.encodings.registry import load_ladder
 from internals_safety.judges.harmbench import HarmBenchJudge
 from internals_safety.judges.refusal import RefusalJudge
@@ -96,8 +96,12 @@ def decode_budget(preset, corpus, measurements, judge_template_chars: int) -> in
     ladder = load_ladder()
     families = preset.families if isinstance(preset.families, list) else list(ladder)
     n_prompts = preset.n_prompts or corpus.n_prompts
-    harmful = prompt_set(corpus.harmful_set, limit=n_prompts)
-    harmless = prompt_set(corpus.harmless_set, limit=n_prompts)
+    # The preset's own pair — a run's measured seconds-per-token is fitted
+    # against the census of the prompts it actually sent.
+    _, pair = corpus.pair(preset.corpus)
+    harmful, harmless = load_contrast_sets(
+        pair.harmful_set, pair.harmless_set, n_prompts, matching=pair.matching
+    )
 
     from transformers import AutoTokenizer
 

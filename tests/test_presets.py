@@ -286,9 +286,39 @@ class TestAPresetCannotApproveAnUNREPORTABLERun:
         if preset.n_prompts is not None and preset.n_prompts < 32:
             return  # a smoke run reports nothing and is not held to it
 
+        from internals_safety.config import load_corpus_config
         from internals_safety.measurements.deployment import REQUIRED_CONTROLS
+        from internals_safety.measurements.lexical_decorrelation import (
+            LEXICAL_CONTROL_SETS,
+        )
 
         assert "lexical_vocabulary" in REQUIRED_CONTROLS  # the rule this mirrors
+
+        # ⚠️ ONE EXEMPTION, DERIVED RATHER THAN LISTED (2026-08-22). Once a run
+        # could name its own contrast pair, a pair could BE this control's
+        # corpus, and then declaring `lexical` would screen the probe on the
+        # corpus it was fitted on — a control that cannot fail, passing more
+        # comfortably than before. `phase0_regime_map` refuses that combination
+        # outright, so the two rules cannot both be satisfied.
+        #
+        # The exemption is narrow and it is not a loophole: it does NOT say the
+        # deployment numbers are fine, it says the run knowingly does not buy
+        # them. The contract still fails closed and marks every deployment
+        # reading non-reportable, which is asserted below rather than assumed —
+        # an exemption tied to nothing would be a way to approve exactly the run
+        # this class exists to reject.
+        _, pair = load_corpus_config().pair(preset.corpus)
+        if LEXICAL_CONTROL_SETS & {pair.harmful_set, pair.harmless_set}:
+            assert "lexical" not in preset.instruments, (
+                f"{name} pairs on {sorted(LEXICAL_CONTROL_SETS)}, which IS the lexical "
+                "control's corpus; the entrypoint refuses this combination"
+            )
+            assert "lexical_vocabulary" in REQUIRED_CONTROLS, (
+                "the exemption is only safe while the contract still withholds a "
+                "deployment reading whose lexical control was never computed"
+            )
+            return
+
         assert "lexical" in preset.instruments, (
             f"{name} runs the deployment probe without the XSTest lexical control, so "
             "every deployment reading it produces is non-reportable by the contract. "
@@ -314,15 +344,31 @@ class TestNPromptsFitsTheCorpus:
         preset = load_preset(name)
         if preset.n_prompts is None:
             return
-        pilot = load_corpus_config()
-        for prompt_set_name in (pilot.harmful_set, pilot.harmless_set):
+        # ⚠️ The PRESET's pair, not the default one. Checking a held-out preset
+        # against the default corpus is the same reach-for-the-default defect the
+        # registry exists to make unwritable, and it would fail a valid preset
+        # rather than pass an invalid one — which is the direction that gets a
+        # correct guard deleted.
+        corpus = load_corpus_config()
+        pair_name, pair = corpus.pair(preset.corpus)
+        for prompt_set_name in (pair.harmful_set, pair.harmless_set):
             path = DATA_DIR / prompt_set_name
             if not path.exists():
                 pytest.skip(f"{path} absent; data/ is gitignored and re-copied per clone")
             available = sum(1 for line in path.read_text().splitlines() if line.strip())
+            if pair.matching == "contrast_type":
+                # The matched subset is smaller than either file, so the file
+                # count is the wrong denominator — derive the real one.
+                from internals_safety.pipeline import load_contrast_sets
+
+                harmful, _ = load_contrast_sets(
+                    pair.harmful_set, pair.harmless_set, 10**6, matching=pair.matching
+                )
+                available = min(available, len(harmful))
             assert preset.n_prompts <= available, (
-                f"{name} asks for {preset.n_prompts} prompts per class; {prompt_set_name} "
-                f"holds {available}. --n-prompts is PER CLASS, not the total across both."
+                f"{name} asks for {preset.n_prompts} prompts per class; pair {pair_name!r} "
+                f"({prompt_set_name}) holds {available}. --n-prompts is PER CLASS, not the "
+                "total across both."
             )
 
 

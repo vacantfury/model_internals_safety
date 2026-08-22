@@ -57,6 +57,25 @@ from sklearn.metrics import roc_auc_score
 # silently compares unrelated prompts and reports a reassuring number.
 CONTRAST_PREFIX = "contrast_"
 
+#: The prompt files this control reads. Declared HERE, next to the control that
+#: needs them, and imported by the two entrypoints that used to spell them out.
+#:
+#: **They exist as a named set because of what became possible on 2026-08-22.**
+#: Once a run could name its own contrast pair, `xstest_matched` became a legal
+#: corpus — and this control screens the probe on XSTest. A run that FITS the
+#: probe on XSTest and then screens it on XSTest is checking the instrument
+#: against its own training corpus, which is the item-identity leakage that
+#: withdrew AS-5's internals leg, one control over. Nothing in the numbers would
+#: look wrong: the screen would simply pass, more comfortably than before.
+#: `phase0_regime_map` refuses the combination, and it can only refuse it
+#: because the two file names are one declaration rather than four literals.
+#: Named individually rather than derived by sorting the set: which file is the
+#: safe arm is a semantic fact, and recovering it from alphabetical order is the
+#: kind of coupling that survives every test and breaks on a rename.
+SAFE_CONTROL_SET = "xstest_safe_prompts.jsonl"
+UNSAFE_CONTROL_SET = "xstest_unsafe_prompts.jsonl"
+LEXICAL_CONTROL_SETS = frozenset({SAFE_CONTROL_SET, UNSAFE_CONTROL_SET})
+
 # ---------------------------------------------------------------------------
 # THE MEASURED VOCABULARY-READER FLOOR (2026-08-06).
 #

@@ -992,8 +992,49 @@ class JudgeConfig(StrictModel):
     substantive_quality_bars: tuple[float, ...] = (0.25, 0.375, 0.50, 0.625, 0.75)
 
 
+#: How a contrast pair's two arms are held comparable. A CLOSED vocabulary with
+#: no residual member, deliberately: an unlisted strategy is a `ValidationError`
+#: at load rather than a silent pass-through, because "these two corpora are
+#: comparable" is the assumption every harm gap in either paper rests on.
+#:
+#:   ``theme``            the corpus SHIPS its benign arm as a 1:1 topic-matched
+#:                        counterpart to its harmful arm. Both files are used as
+#:                        they stand. JailbreakBench.
+#:   ``contrast_type``    the corpus names each unsafe subset by prefixing its
+#:                        safe partner's name, so the matched subset is DERIVED
+#:                        (see `matched_subset`) rather than hand-listed. XSTest.
+MatchingStrategy = Literal["theme", "contrast_type"]
+
+#: XSTest names an unsafe type by prefixing the safe type it contrasts with.
+#: Shared with `measurements.lexical_decorrelation`, which reads the same scheme
+#: for the probe's vocabulary screen — one corpus convention, one spelling.
+CONTRAST_TYPE_PREFIX = "contrast_"
+
+
+class ContrastPair(StrictModel):
+    """One named harmful/harmless pair, with the provenance that licenses it.
+
+    **A pair is NAMED, never assembled at a command line.** The point is not
+    ergonomics: a harm gap is a difference of refusal rates between two arms,
+    and it means nothing unless the arms were built to be compared. Letting a
+    preset pass two filenames would let a run pair any harmful corpus with any
+    benign one and report the topic difference as a safety result. Naming a
+    registry entry forces the matching claim to be written down once, next to
+    the citation that backs it, where a reader can reject it.
+    """
+
+    harmful_set: str
+    harmless_set: str
+    matching: MatchingStrategy
+    #: The corpus paper and its evidence tier, per the method-provenance law.
+    #: Required with no default — an unattributed corpus is the objects-of-study
+    #: half of the defect that rule exists to prevent.
+    provenance: str
+    notes: str = ""
+
+
 class CorpusConfig(StrictModel):
-    """`conf/corpus.yaml` — the contrast pair, and the default run scope.
+    """`conf/corpus.yaml` — the contrast-pair registry, and the default scope.
 
     Separate from `measurements.yaml` because these are *corpus and scope*
     choices, not knobs of the instruments.
@@ -1005,22 +1046,55 @@ class CorpusConfig(StrictModel):
     which prompt sets form the contrast pair. That is a fact about the CORPUS
     both papers share, not about one experiment.
 
-    **The two jobs this file does, now that presets exist.** `harmful_set` and
-    `harmless_set` are the contrast pair itself, declared here and nowhere else
-    — JBB ships its benign set theme-matched to its harmful set, which is the
-    whole reason it is the negative class, and no preset may override it.
-    `n_prompts` and `families` are DEFAULTS for a bare invocation, which a
-    preset supersedes. That is a layering, not a second home: "which sets are
-    the contrast pair", "what does a bare run do", and "what does causal_sweep
-    do" are three different facts, and each has exactly one home.
+    **A REGISTRY since 2026-08-22, and the flat `harmful_set`/`harmless_set`
+    fields are GONE rather than kept as a convenience.** Three external referees
+    all named the same objection — nothing is held out — and it was mechanically
+    true: all 44 runs on disk carry the identical pair in their provenance,
+    because there was no way to express a second one. Adding an override while
+    leaving `corpus.harmful_set` reachable would have re-created this repo's
+    signature defect one more time: `phase0_regime_map` recorded the provenance
+    by reading that attribute, so an overridden run would have written the
+    DEFAULT pair into its own record and every later analysis would have read a
+    corpus the run did not use. Deleting the attribute makes that unwritable.
+    Every caller now asks for a pair BY NAME (`pair(None)` for the default), so
+    the name that was resolved is the only thing there is to record.
+
+    `n_prompts` and `families` remain DEFAULTS for a bare invocation, which a
+    preset supersedes. That is a layering, not a second home.
     """
 
-    harmful_set: str = "jbb_prompts.jsonl"
-    harmless_set: str = "jbb_benign_prompts.jsonl"
+    #: The pair used when a run names none. A key of `pairs`, checked below.
+    default_pair: str = "jbb"
+    pairs: dict[str, ContrastPair] = Field(default_factory=dict)
     n_prompts: int = 100
     # "all" = every family in conf/encodings.yaml; otherwise an explicit list.
     families: Literal["all"] | list[str] = "all"
     models: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _default_pair_exists(self) -> "CorpusConfig":
+        if self.default_pair not in self.pairs:
+            raise ValueError(
+                f"default_pair {self.default_pair!r} is not in the registry "
+                f"({sorted(self.pairs)}) — conf/corpus.yaml"
+            )
+        return self
+
+    def pair(self, name: str | None) -> tuple[str, ContrastPair]:
+        """`(resolved name, pair)`. `None` means the default, stated as such.
+
+        Returns the NAME alongside the pair because the name is what the run
+        record has to carry: "which corpus was this" is answerable from a
+        filename only by re-deriving the registry, and a record that has to be
+        re-derived is a record that will be re-derived wrongly.
+        """
+        resolved = self.default_pair if name is None else name
+        if resolved not in self.pairs:
+            raise SystemExit(
+                f"unknown contrast pair {resolved!r}; conf/corpus.yaml registers "
+                f"{sorted(self.pairs)}"
+            )
+        return resolved, self.pairs[resolved]
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -1166,7 +1240,7 @@ Entrypoint = Literal[
 GUARD_TARGET_ENTRYPOINTS = frozenset({"as6_guard_probe", "decoder_guard_pipeline"})
 
 _CONSUMES: dict[str, frozenset[str]] = {
-    "phase0_regime_map": frozenset({"target", "families", "n_prompts", "instruments"}),
+    "phase0_regime_map": frozenset({"target", "families", "n_prompts", "instruments", "corpus"}),
     # NO `instruments` — the guard entrypoint has no such flag, and claiming it
     # did cost a job. Preset `guard_benign_arm_wildguard` carried
     # `instruments: [lexical]`, this map accepted it, `command()` rendered it,
@@ -1214,6 +1288,15 @@ class PresetConfig(StrictModel):
     targets: list[str] = Field(default_factory=list)
     families: Literal["all"] | list[str] | None = None
     n_prompts: int | None = None
+    # Which contrast pair from `conf/corpus.yaml`'s registry. `None` = the
+    # default pair, which is what every run before 2026-08-22 used because it
+    # was the only one expressible. Declared in the preset because it changes
+    # what the run MEANS — a held-out corpus is the difference between a result
+    # and a replication — and because the approval artifact must say which
+    # prompts are being sent. Validated against the live registry in
+    # `tests/test_presets.py`, not here, so config.py keeps no second copy of
+    # the pair names.
+    corpus: str | None = None
     instruments: list[str] = Field(default_factory=list)
     sae_layers: list[int] = Field(default_factory=list)
     # model name -> the run directory whose results.json this run re-reads.
@@ -1246,7 +1329,7 @@ class PresetConfig(StrictModel):
         set_but_ignored = [
             name
             for name in ("target", "targets", "families", "n_prompts", "instruments",
-                         "sae_layers", "source_runs")
+                         "sae_layers", "source_runs", "corpus")
             if name not in consumed and getattr(self, name)
         ]
         # `render_chat` is checked SEPARATELY because its meaningful value is
@@ -1315,6 +1398,8 @@ class PresetConfig(StrictModel):
             base += ["--families", *self.families]
         if self.instruments:
             base += ["--instruments", *self.instruments]
+        if self.corpus is not None:
+            base += ["--corpus", self.corpus]
 
         # `sae_pregate` takes ONE layer per invocation, so a three-layer preset
         # is three array tasks rather than one command with a repeated flag —

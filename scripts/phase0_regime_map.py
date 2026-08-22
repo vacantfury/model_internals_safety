@@ -142,6 +142,9 @@ from internals_safety.measurements.behavior_control import (
 )
 from internals_safety.measurements.contract import Reading, Screen
 from internals_safety.measurements.lexical_decorrelation import (
+    LEXICAL_CONTROL_SETS,
+    SAFE_CONTROL_SET,
+    UNSAFE_CONTROL_SET,
     LexicalDecorrelation,
     measure_lexical_decorrelation,
 )
@@ -770,8 +773,7 @@ def build_plan(
     # the data copy is absent.
     if n_xstest_prompts is None:
         n_xstest_prompts = (
-            len(prompt_set("xstest_safe_prompts.jsonl"))
-            + len(prompt_set("xstest_unsafe_prompts.jsonl"))
+            sum(len(prompt_set(name)) for name in sorted(LEXICAL_CONTROL_SETS))
             if "lexical" in instruments
             else 0
         )
@@ -1723,7 +1725,35 @@ def main(argv: Sequence[str] | None = None) -> int:
         "these add GPU work, so --dry-run costs them BEFORE the approval gate sees the run. "
         "The four measurements and I2 (trajectory) always run; they add no forward pass.",
     )
+    parser.add_argument(
+        "--corpus",
+        default=None,
+        choices=sorted(corpus.pairs),
+        help=f"contrast pair from conf/corpus.yaml (default: {corpus.default_pair}). "
+        "A pair other than the default makes this run a REPLICATION rather than a "
+        "measurement, and the run record says which was used.",
+    )
     args = parser.parse_args(argv)
+
+    # Resolved ONCE, here, and carried as an object. There is deliberately no
+    # `corpus.harmful_set` to reach for further down: that attribute is what
+    # would have let the provenance block record the DEFAULT pair while the run
+    # sent a different one, which is this repo's most-repeated defect shape.
+    pair_name, pair = corpus.pair(args.corpus)
+    print(f"contrast pair: {pair_name} ({pair.harmful_set} / {pair.harmless_set})")
+
+    # ⚠️ The lexical control screens the probe on XSTest. Fitting the probe on
+    # XSTest and then screening it there checks the instrument against its own
+    # training corpus, and it fails in the flattering direction: the screen
+    # passes more comfortably, and nothing in the output looks wrong. Refused
+    # here rather than caveated, because a control that cannot fail is not one.
+    overlap = LEXICAL_CONTROL_SETS & {pair.harmful_set, pair.harmless_set}
+    if "lexical" in args.instruments and overlap:
+        raise SystemExit(
+            f"pair {pair_name!r} uses {sorted(overlap)}, which IS the lexical "
+            "control's corpus; screening a probe on the corpus it was fitted on "
+            "is not a control. Drop `lexical` from this run's instruments."
+        )
 
     model_config = load_model_config(args.model)
     measurements = load_measurements_config()
@@ -1746,7 +1776,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     tree = guard_working_tree(plan.device, allow_dirty=args.allow_dirty)
 
-    harmful, harmless = load_contrast_sets(corpus.harmful_set, corpus.harmless_set, args.n_prompts)
+    harmful, harmless = load_contrast_sets(
+        pair.harmful_set, pair.harmless_set, args.n_prompts, matching=pair.matching
+    )
 
     judge_config = load_judge_config()
     refusal_judge = RefusalJudge(judge_config)
@@ -1782,8 +1814,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     # whole ladder rather than 450 x n_families.
     xstest: XStestCapture | None = None
     if "lexical" in instruments:
-        safe_prompts = prompt_set("xstest_safe_prompts.jsonl")
-        unsafe_prompts = prompt_set("xstest_unsafe_prompts.jsonl")
+        safe_prompts = prompt_set(SAFE_CONTROL_SET)
+        unsafe_prompts = prompt_set(UNSAFE_CONTROL_SET)
         safe_batch, safe_cache, _ = capture_or_load(
             loaded,
             [prompt.text for prompt in safe_prompts],
@@ -1928,8 +1960,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             "phase": PHASE,
             "run_name": run_name,
             "corpus": {
-                "harmful_set": corpus.harmful_set,
-                "harmless_set": corpus.harmless_set,
+                # The RESOLVED pair, by name. Every run before 2026-08-22 wrote
+                # `jbb` here because it was the only pair that existed; a record
+                # naming the pair is what lets a later analysis tell a result
+                # from a replication without re-deriving it from filenames.
+                "pair": pair_name,
+                "matching": pair.matching,
+                "harmful_set": pair.harmful_set,
+                "harmless_set": pair.harmless_set,
                 "n_prompts": len(harmful),
                 "harmful_digest": digest(harmful),
                 "harmless_digest": digest(harmless),

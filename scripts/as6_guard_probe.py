@@ -670,7 +670,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     tree = guard_working_tree(device, allow_dirty=args.allow_dirty)
 
-    harmful, harmless = load_contrast_sets(corpus.harmful_set, corpus.harmless_set, args.n_prompts)
+    _, pair = corpus.pair(None)
+    harmful, harmless = load_contrast_sets(
+        pair.harmful_set, pair.harmless_set, args.n_prompts, matching=pair.matching
+    )
 
     directory, activations_dir, run_name = resolve_run_paths(
         PHASE, config.name, args.run_name, args.outputs_dir

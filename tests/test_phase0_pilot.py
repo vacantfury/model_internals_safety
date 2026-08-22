@@ -495,6 +495,10 @@ class TestMain:
         assert corpus["n_prompts"] == 6
         assert corpus["harmful_set"] == "jbb_prompts.jsonl"
         assert len(corpus["harmful_digest"]) == 16
+        # The pair by NAME, which is what tells a later analysis whether a run
+        # is the result or the replication.
+        assert corpus["pair"] == "jbb"
+        assert corpus["matching"] == "theme"
 
     def test_cells_are_one_auditable_jsonl_line_per_prompt(self, run):
         lines = (run / "cells.jsonl").read_text().splitlines()

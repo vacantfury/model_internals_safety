@@ -233,8 +233,11 @@ def main(argv: list[str] | None = None) -> int:
     config = measurements.encoding_direction
     corpus = load_corpus_config()
     model_config = load_model_config(args.model)
+    # The default pair, named as such: this entrypoint has no --corpus flag,
+    # so it says which pair it wants rather than reaching for a bare attribute.
+    _, pair = corpus.pair(None)
     harmful, harmless = load_contrast_sets(
-        corpus.harmful_set, corpus.harmless_set, args.n_prompts
+        pair.harmful_set, pair.harmless_set, args.n_prompts, matching=pair.matching
     )
     encoders = {family: get_encoder(family) for family in args.families}
 

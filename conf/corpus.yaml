@@ -7,21 +7,83 @@
 # `as6_guard_probe.py` was loading "the pilot config" to find the contrast pair.
 #
 # TWO LAYERS, deliberately:
-#   harmful_set / harmless_set   the contrast pair itself. Declared HERE and
-#                                nowhere else; a preset may not override it.
+#   pairs / default_pair         the contrast-pair REGISTRY. Declared HERE and
+#                                nowhere else; a preset selects a pair BY NAME,
+#                                never by filename.
 #   n_prompts / families / models  DEFAULTS for a bare invocation, which a
 #                                preset supersedes. Not a second home — "what
 #                                does a bare run do" is a different fact from
 #                                "what does causal_sweep do".
+#
+# WHY A REGISTRY, ADDED 2026-08-22. Until this file held one pair and there was
+# no way to express a second, so every run used it: all 44 run records on disk
+# carry `jbb_prompts.jsonl / jbb_benign_prompts.jsonl`, checked rather than
+# assumed. Three external referees independently raised the same objection —
+# nothing is held out — and they were right in the strongest sense: every rung,
+# every screen, every cut and every reported rate came from one contrast pair.
+# A registry is what makes a second one expressible; a preset naming one is what
+# makes a held-out run a committed artifact rather than a flag string.
+#
+# A pair is NAMED rather than assembled from two filenames because a harm gap
+# means nothing unless the two arms were BUILT to be compared. Two filenames on
+# a command line would let any harmful corpus meet any benign one and report the
+# topic difference as a safety result.
 
-# The contrast pair. JailbreakBench ships its benign set as a *theme-matched*
-# counterpart to its harmful set (jbb_defamation <-> benign_defamation, and so
-# on down all 100), which is why it is the negative class here rather than the
-# larger OR-Bench set: an unmatched negative class would let the content probe
-# separate on topic or provenance instead of on harmfulness, and measurement #2
-# would report that separation as "the content is present".
-harmful_set: jbb_prompts.jsonl
-harmless_set: jbb_benign_prompts.jsonl
+default_pair: jbb
+
+pairs:
+
+  # The pair every reported number in both papers currently rests on.
+  # JailbreakBench ships its benign set as a *theme-matched* counterpart to its
+  # harmful set (jbb_defamation <-> benign_defamation, and so on down all 100),
+  # which is why it is the negative class here rather than the larger OR-Bench
+  # set: an unmatched negative class would let the content probe separate on
+  # topic or provenance instead of on harmfulness, and measurement #2 would
+  # report that separation as "the content is present".
+  jbb:
+    harmful_set: jbb_prompts.jsonl
+    harmless_set: jbb_benign_prompts.jsonl
+    matching: theme
+    provenance: >-
+      Chao et al., JailbreakBench, NeurIPS 2024 Datasets & Benchmarks
+      (arXiv 2404.01318); tier (A). 100 harmful behaviours with a 1:1
+      theme-matched benign counterpart shipped by the authors.
+    notes: >-
+      NOT held out from anything. Rung selection, both screens, every threshold
+      and every reported rate were decided on this pair.
+
+  # The HELD-OUT pair, added 2026-08-22 to answer the objection all three
+  # referees raised. Held out in the strong sense: no rung, screen, cut, or
+  # reported rate in either paper was chosen by looking at it. XSTest entered
+  # this repo on 2026-08-06 for the probe's vocabulary control
+  # (measurements/lexical_decorrelation.py) and has never produced a refusal
+  # rate, which is the axis AS-5 reports.
+  #
+  # ⚠️ Its benign arm is ADVERSARIALLY benign by design — prompts built to look
+  # harmful while being safe — so plaintext benign refusal is elevated and the
+  # plaintext harm gap is COMPRESSED relative to JBB. That is why the
+  # replication must be read as the FRACTION of discrimination destroyed and
+  # never as the absolute difference (house rule, evidence_and_story.md §4e):
+  # the fraction is what makes two corpora with different baselines comparable,
+  # and the absolute form has already produced one wrong model ordering here.
+  #
+  # 150 per arm, not 200: `matching: contrast_type` derives the matched subset
+  # from XSTest's own naming rule and the two many-to-one types drop out. See
+  # `pipeline.matched_by_contrast_type` for why a seeded balancing draw was
+  # rejected.
+  xstest_matched:
+    harmful_set: xstest_unsafe_prompts.jsonl
+    harmless_set: xstest_safe_prompts.jsonl
+    matching: contrast_type
+    provenance: >-
+      Röttger et al., XSTest: A Test Suite for Identifying Exaggerated Safety
+      Behaviours in Large Language Models, NAACL 2024
+      (ACL Anthology 2024.naacl-long.301, arXiv 2308.01263, CC-BY-4.0);
+      tier (A). Safe and unsafe prompts written as matched contrast pairs that
+      share alarming vocabulary and differ in intent.
+    notes: >-
+      Held out from every design decision in both papers. Used before only as
+      the probe's lexical-vocabulary control, never for a behavioural rate.
 
 # Both files hold exactly 100, so this is the full matched set. The binding
 # constraint is the probe's test-set size, not GPU time: at 100+100 the transfer

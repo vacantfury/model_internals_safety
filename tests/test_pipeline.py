@@ -86,13 +86,13 @@ class TestContrastSets:
             pipeline, "prompt_set", lambda name, limit=None: [name] * (3 if "harmful" in name else 2)
         )
         with pytest.raises(SystemExit, match="differ in size"):
-            load_contrast_sets("a_harmful", "b_harmless", 3)
+            load_contrast_sets("a_harmful", "b_harmless", 3, matching="theme")
 
     def test_matched_sets_pass_through(self, monkeypatch):
         import internals_safety.pipeline as pipeline
 
         monkeypatch.setattr(pipeline, "prompt_set", lambda name, limit=None: [name] * 4)
-        harmful, harmless = load_contrast_sets("a", "b", 4)
+        harmful, harmless = load_contrast_sets("a", "b", 4, matching="theme")
         assert len(harmful) == len(harmless) == 4
 
 

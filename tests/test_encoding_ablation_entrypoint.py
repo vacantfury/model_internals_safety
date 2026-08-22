@@ -97,7 +97,12 @@ def stubbed(monkeypatch, tiny_model, tiny_config):
 
     # Prefixed so the stub judge can separate the arms; the prefix travels as
     # `plaintext` through the encoder, which is what `measure_behavior` judges.
-    def contrast_sets(harmful_set, harmless_set, n):
+    # `matching` is keyword-only with no default on the real function, and this
+    # stub mirrors that rather than accepting **kwargs: a stub laxer than the
+    # thing it stands in for is the repo's named fixture defect, and this exact
+    # signature is the one a caller can silently forget.
+    def contrast_sets(harmful_set, harmless_set, n, *, matching):
+        assert matching in ("theme", "contrast_type"), matching
         return (
             [Prompt(id=f"h{i}", text=f"HARMFUL request {i}", category="t") for i in range(n)],
             [Prompt(id=f"b{i}", text=f"benign request {i}", category="t") for i in range(n)],

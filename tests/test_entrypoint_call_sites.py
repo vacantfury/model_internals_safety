@@ -105,6 +105,14 @@ WATCHED = {
     # direction is the safe one.
     "summarize_behavior_control": behavior_control.summarize_control,
     "summarize_control": refusal_control.summarize_control,
+    # Added 2026-08-22, EIGHTH application of the trigger, and this one changed
+    # five callers at once. `matching` became keyword-only with no default when
+    # the contrast pair became a named registry entry rather than a filename.
+    # The stale call is not merely a TypeError waiting on a queue: a default of
+    # "theme" would pair XSTest's 200 unsafe prompts against a 200-prefix of 250
+    # safe ones, pass the size check, and report a harm gap between two arms
+    # that were never matched. Five scripts call it and every one is bound here.
+    "load_contrast_sets": pipeline.load_contrast_sets,
 }
 
 

@@ -203,8 +203,9 @@ def main() -> int:
     args = parser.parse_args()
 
     corpus = load_corpus_config()
+    _, pair = corpus.pair(None)
     harmful_prompts, benign_prompts = load_contrast_sets(
-        corpus.harmful_set, corpus.harmless_set, corpus.n_prompts
+        pair.harmful_set, pair.harmless_set, corpus.n_prompts, matching=pair.matching
     )
     digests = {"harmful": digest(harmful_prompts), "harmless": digest(benign_prompts)}
     ladder = load_ladder()

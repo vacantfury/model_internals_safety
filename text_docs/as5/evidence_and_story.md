@@ -2558,6 +2558,127 @@ where the artifact says fifteen, understating our own result. It came from readi
 a rounded console table instead of the JSON. **Recompute every figure from the
 artifact at the moment it enters a `.tex`, not from the summary that reported it.**
 
+## 4y ⏸ THE HELD-OUT CORPUS IS BUILT AND COSTED, AWAITING THE OWNER'S GO (2026-08-22)
+
+The last objection all three referees raised independently. It is the one that
+cannot be answered by an offline re-read, and until this sitting it could not be
+answered at all, because a second corpus was not expressible.
+
+**The objection is mechanically true, not arguable.** Checked rather than
+assumed: of the run records on disk, 44 carry a corpus block and **all 44 name
+the identical pair** (`jbb_prompts.jsonl` / `jbb_benign_prompts.jsonl`). Every
+rung, every screen, every cut and every reported rate in this paper was decided
+on one contrast pair. A referee saying nothing is held out is describing the
+artifacts.
+
+**Why it was unexpressible, which is the part worth keeping.** `conf/corpus.yaml`
+held two flat fields and its own comment said "no preset may override it". That
+was a deliberate protection (an unmatched negative class would let the content
+probe separate on topic instead of on harm) and it hardened into an inability.
+The fix is not an override flag. It is a **named registry**: a pair carries its
+two files, its matching strategy, and its provenance with an evidence tier, so
+"these two corpora are comparable" is a written claim next to the citation that
+backs it. Two filenames on a command line would let any harmful corpus meet any
+benign one and report the topic difference as a safety result.
+
+**The structural half, and it is the fifth instance of one shape.** Adding the
+flag while leaving `corpus.harmful_set` reachable would have re-created this
+repo's signature defect once more: `phase0_regime_map` built its provenance
+block by reading that attribute, so an overridden run would have written the
+DEFAULT pair into its own record, and every later analysis would have read a
+corpus the run did not use. A wrong number with a green suite, found by whoever
+next trusted the record. **So the attribute is deleted rather than deprecated.**
+Every caller now asks for a pair by name (five scripts, all updated), the
+resolved name is the only thing there is to record, and
+`test_the_flat_corpus_fields_are_gone` keeps it deleted. Same reasoning one
+argument over: `matching` is keyword-only with **no default**, because a default
+of `theme` on a contrast-type pair pairs XSTest's 200 unsafe prompts against a
+200-prefix of 250 safe ones, passes the size check, and reports a harm gap
+between two arms nobody matched. Omitting it is a `TypeError`. Both guards were
+verified by mutation, and `load_contrast_sets` joins the static call-site roster
+as its eighth entry.
+
+**The held-out pair is XSTest, and the choice is not a compromise.** Röttger et
+al., NAACL 2024, tier (A). It entered this repo on 2026-08-06 as the probe's
+lexical-vocabulary control and has **never produced a refusal rate**, which is
+the only axis this paper reports. Three properties earn it the slot: it is
+matched **by the corpus authors** rather than by us, which is exactly the
+property `corpus.yaml` says JBB was chosen for; it is already vetted and cited
+here, so the replication adds no unverified provenance; and its benign arm is
+built from prompts designed to look harmful, which is the false-positive axis
+§4d routed phase 1 onto.
+
+⚠️ **That last property is also the caveat, and it decides how the result may be
+read.** An adversarially benign arm elevates plaintext benign refusal, so the
+plaintext harm gap on XSTest is **compressed relative to JBB before any encoding
+is applied**. The replication is therefore a claim about the **fraction of
+discrimination destroyed** and never about the absolute difference. That is
+already house rule (§4e), and the reason is on the record: the absolute form
+compares models on a scale they do not share, and it produced one wrong ordering
+here when §4d called Mistral the most robust model when it is merely the least
+discriminating one.
+
+**150 per arm, derived rather than chosen.** `matched_by_contrast_type` reads
+XSTest's own naming rule: a safe type is in iff `contrast_<type>` is a real
+unsafe type. Six of eight unsafe types pair one to one; the two that contrast
+with two safe types each drop out, because balancing them would mean drawing 25
+of 50 at some seed, and a seeded draw inside a holdout is a knob in the one
+place a holdout is supposed to have none. 150 is larger than the 100 every
+published cell rests on.
+
+**What the run is.** Four presets, `heldout_corpus_<model>.yaml`, one per model
+in Table 1, on the two rungs the paper reports (`homoglyph` for Table 1,
+`math_bold` for Table 2) with the mandatory model-level plaintext baseline
+supplying the denominator. Same shape as Table 1, so the result is a drop-in
+companion table.
+
+**Costed from the real corpus, not from an inflation factor**
+(`scripts/cost_model.py --preset ...`, keyless, GPU-free): per model **0.9 to
+1.3 GPU-hours** on 1 x H200 and **$1.64 to $4.94** of judge spend; four models
+**3.6 to 5.2 GPU-hours** and **$6.56 to $19.76**. Prefill is 271,314 measured
+tokens, decode 921,600 at max budget, 3,000 judge calls per model. Each job asks
+a 3h wall against a measured 65 to 73 minutes for the comparable
+comprehension-gap runs on the same hardware.
+
+**The gate is committed in each preset, and it cuts both ways.** If the fraction
+replicates, the held-out table goes in beside Table 1 and nothing else changes.
+If it does not, the claim is scoped to JBB in the abstract and in §1, the table
+is reported as the negative it is, and §4g's generality sentence comes out.
+Written that way deliberately: a replication attempt whose result would not be
+published is not one.
+
+⚠️ **AND THE BUILD NEARLY SHIPPED A CIRCULAR CONTROL, found by reading a
+`--dry-run` rather than by any test.** The lexical decorrelation control screens
+the deployment probe **on XSTest**. The moment a run could name its own contrast
+pair, `xstest_matched` became legal and the first draft of these presets carried
+`instruments: [lexical]` copied from the comprehension-gap ones. That fits the
+probe on XSTest and then screens it on XSTest: the instrument checked against
+its own training corpus, which is the item-identity leakage that withdrew the
+internals leg, one control over. It fails in the flattering direction. The
+screen would simply pass, more comfortably than before, and no number in the
+output would look wrong.
+
+Three things came out of the fix, and the third is the one that generalises.
+The two file names became **one declaration** (`LEXICAL_CONTROL_SETS`, in the
+control's own module, replacing four scattered literals), because an entrypoint
+cannot refuse a combination it cannot name. `phase0_regime_map` now **refuses**
+the combination rather than caveating it, since a control that cannot fail is
+not a control. And the existing preset guard, which requires every measurement
+run to declare that same control, gained exactly one **derived** exemption:
+where the pair IS the control's corpus, `lexical` must be ABSENT, and the test
+asserts the contract still withholds every deployment reading in that case. An
+exemption tied to nothing would have been a way to approve the very run the
+guard exists to reject. Consequence, stated rather than left implicit: **the
+held-out run's deployment axis is non-reportable by construction, deliberately,
+and that costs nothing because the run reports refusal rates.**
+
+**What this does NOT answer.** Two things, stated so neither is discovered
+later. It is one held-out corpus, not two, so a failure to replicate would not
+separate "the claim is JBB-specific" from "the claim is specific to
+theme-matched benign arms". And it holds the ENCODINGS fixed, so it is a corpus
+holdout and never an encoder holdout; §4g's within-model spread remains the only
+evidence on that axis.
+
 ## 5. What it DOES support, and it is a stronger paper *(SUPERSEDED — see §4a)*
 
 **Encoded jailbreaks are mostly not comprehension failures — and the standard

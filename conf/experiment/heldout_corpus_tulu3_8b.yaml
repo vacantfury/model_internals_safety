@@ -1,0 +1,82 @@
+# THE HELD-OUT CORPUS — the one objection all three referees raised.
+#
+# Every rung, every screen, every cut and every reported rate in AS-5 was
+# decided on JailbreakBench. That is not an inference about our process, it is
+# a property of the artifacts: all 44 run records on disk carry the identical
+# contrast pair, because conf/corpus.yaml held one pair and there was no way to
+# express a second. A referee who says nothing is held out is describing the
+# run records.
+#
+# This preset re-runs the paper's headline comparison on XSTest, which entered
+# this repo on 2026-08-06 as the probe's lexical-vocabulary control and has
+# never produced a refusal rate. No rung, threshold, or screen was chosen by
+# looking at it.
+#
+# ⚠️ READ THE RESULT AS A FRACTION, NEVER AS A DIFFERENCE. XSTest's benign arm
+# is adversarially benign by construction, so plaintext benign refusal is
+# elevated and the plaintext harm gap is COMPRESSED relative to JBB. The
+# fraction of discrimination destroyed is what makes two corpora with different
+# baselines comparable; the absolute form has already produced one wrong model
+# ordering in this project (evidence_and_story.md §4e).
+#
+# 150 per arm, not 200: the matched subset is derived from XSTest's own naming
+# rule and its two many-to-one contrast types drop out. See
+# `pipeline.matched_by_contrast_type` for why a seeded balancing draw inside a
+# holdout was rejected.
+entrypoint: phase0_regime_map
+description: >-
+  Tulu-3-8B on the paper's two reported rungs, against a contrast pair no design
+  decision in either paper ever saw.
+
+gates: >-
+  WHETHER THE HEADLINE IS A PROPERTY OF ENCODED PROMPTS OR A PROPERTY OF
+  JAILBREAKBENCH. AS-5 claims that encoding destroys a model's ability to tell
+  harmful requests from benign ones. Every number backing that claim comes from
+  one contrast pair, chosen before the claim existed and used to select the
+  rungs, the screens and the cuts.
+
+  If the fraction of discrimination destroyed replicates on XSTest, the claim is
+  about encoding and the held-out table goes into the paper beside Table 1;
+  the objection all three referees raised is answered with a measurement rather
+  than an argument, and no other section changes.
+
+  If it does not replicate, the claim is scoped to JBB in the abstract and in
+  §1, the held-out table is reported as the negative it is, and the generality
+  sentence in §4g comes out. Either way the table is written, because a
+  replication attempt whose result would not be published is not one.
+
+target: tulu3_8b
+
+# The two rungs the paper actually reports: homoglyph is Table 1, math_bold is
+# Table 2. The plaintext arm is not listed because it is not a rung — the
+# model-level plaintext baseline is mandatory in the entrypoint and is what the
+# gap is measured against.
+families:
+  - homoglyph
+  - math_bold
+
+# The full matched subset, which is LARGER than the n=100 every published cell
+# rests on. Not a bigger-is-better choice: taking a prefix would reintroduce a
+# selection step into the one run whose value is that it has none.
+n_prompts: 150
+
+corpus: xstest_matched
+
+# NO `instruments: [lexical]`, and the omission is load-bearing rather than
+# thrifty. The lexical control screens the probe on XSTest, which IS this run's
+# contrast pair, so requesting it here would screen the instrument against its
+# own training corpus and the screen would pass more comfortably than before.
+# `phase0_regime_map` refuses the combination outright. Nothing is lost: this
+# run reports refusal rates, and the probe axis it would license is not in the
+# paper.
+run_name: heldout-corpus-tulu3_8b
+
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  # The comprehension-gap runs did 4 rungs x 100 x 2 arms in 65-73 minutes on
+  # the same hardware; this is 2 rungs x 150, so a 3h ceiling is generous
+  # against a measured shape rather than guessed from a rate.
+  time: "03:00:00"

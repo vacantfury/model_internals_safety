@@ -45,7 +45,7 @@ from internals_safety.cost import (
     format_range,
     load_cost_config,
 )
-from internals_safety.data import prompt_set
+from internals_safety.pipeline import load_contrast_sets
 from internals_safety.encodings.registry import load_ladder
 from internals_safety.judges.harmbench import HarmBenchJudge
 from internals_safety.judges.refusal import RefusalJudge
@@ -194,6 +194,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         help=f"GPU type to cost against (default: {DEFAULT_HARDWARE})",
     )
     parser.add_argument("--n-prompts", type=int, default=corpus.n_prompts)
+    parser.add_argument(
+        "--corpus",
+        default=None,
+        choices=sorted(corpus.pairs),
+        help=f"contrast pair from conf/corpus.yaml (default: {corpus.default_pair})",
+    )
     parser.add_argument("--families", nargs="+", default=None, help="default: every configured rung")
     parser.add_argument(
         "--all-phases",
@@ -220,6 +226,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.families = preset.families
         if preset.n_prompts is not None:
             args.n_prompts = preset.n_prompts
+        # ⚠️ The preset's CORPUS, not the default one. The census tokenises real
+        # prompts, so a held-out pair with different prompt lengths gives a
+        # different estimate — and this script IS the approval-gate artifact, so
+        # costing the wrong corpus would be costing a run nobody is proposing.
+        args.corpus = preset.corpus
         print(f"costing preset {args.preset!r}\n")
     if not args.model:
         raise SystemExit("--model or --preset is required")
@@ -233,8 +244,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if unknown:
         raise SystemExit(f"unknown encoding families {unknown}; have {sorted(ladder)}")
 
-    harmful = prompt_set(corpus.harmful_set, limit=args.n_prompts)
-    harmless = prompt_set(corpus.harmless_set, limit=args.n_prompts)
+    pair_name, pair = corpus.pair(args.corpus)
+    # Through `load_contrast_sets`, not two bare `prompt_set` calls: the matched
+    # subset is derived there, and a census taken over the raw files would count
+    # prompts the run will never send.
+    harmful, harmless = load_contrast_sets(
+        pair.harmful_set, pair.harmless_set, args.n_prompts, matching=pair.matching
+    )
+    print(f"corpus pair {pair_name!r}: {len(harmful)} harmful + {len(harmless)} benign\n")
 
     print(f"tokenising {model_config.hf_id} ...", flush=True)
     from transformers import AutoTokenizer

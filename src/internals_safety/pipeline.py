@@ -40,7 +40,7 @@ from internals_safety.measurements.lexical_decorrelation import (
     measure_lexical_decorrelation,
 )
 from internals_safety.probes.linear import probe_transfer_detail, reading_threshold
-from internals_safety.config import ProbeConfig
+from internals_safety.config import CONTRAST_TYPE_PREFIX, MatchingStrategy, ProbeConfig
 from internals_safety.data import Prompt, prompt_set
 from internals_safety.encodings.base import EncodedPrompt, Invertibility
 from internals_safety.measurements.contract import Reading
@@ -194,8 +194,52 @@ def add_common_arguments(parser: argparse.ArgumentParser, *, default_n_prompts: 
     )
 
 
+def matched_by_contrast_type(
+    harmful: list[Prompt], harmless: list[Prompt]
+) -> tuple[list[Prompt], list[Prompt]]:
+    """The `contrast_type` matching strategy, DERIVED from the corpus's own names.
+
+    XSTest names every unsafe subset by prefixing the safe subset it contrasts
+    with: `contrast_homonyms` against `homonyms`, and so on. So the matched
+    subset is not a list somebody typed, it is the fixed point of that naming
+    rule — a safe type is in iff `contrast_<type>` is a real unsafe type, and an
+    unsafe type is in iff stripping the prefix names a real safe type.
+
+    **What that rule drops, and why dropping it is the honest move.** Two of
+    XSTest's eight unsafe types (`contrast_discr`, `contrast_privacy`) each
+    contrast with TWO safe types, so 50 safe prompts face 25 unsafe ones and no
+    one-to-one pairing exists. Balancing those by subsampling would mean drawing
+    25 of 50 at some seed, and a seeded draw inside a held-out corpus is a knob
+    in exactly the place a holdout is supposed to have none. The six remaining
+    types pair exactly, which is 150 per arm — larger than the 100 per arm every
+    number in either paper currently rests on.
+
+    Returns both arms filtered and in file order. Type membership is read off
+    each prompt's `category`, which is what the corpus files carry.
+    """
+    safe_types = {prompt.category for prompt in harmless}
+    unsafe_types = {prompt.category for prompt in harmful}
+    paired_safe = {
+        safe
+        for safe in safe_types
+        if f"{CONTRAST_TYPE_PREFIX}{safe}" in unsafe_types
+    }
+    paired_unsafe = {f"{CONTRAST_TYPE_PREFIX}{safe}" for safe in paired_safe}
+    if not paired_safe:
+        raise SystemExit(
+            "contrast_type matching found no paired types; the harmful arm's "
+            f"categories {sorted(unsafe_types)[:4]}... do not prefix any of the "
+            f"harmless arm's {sorted(safe_types)[:4]}... — is this pair really "
+            "matched by contrast type? (conf/corpus.yaml)"
+        )
+    return (
+        [prompt for prompt in harmful if prompt.category in paired_unsafe],
+        [prompt for prompt in harmless if prompt.category in paired_safe],
+    )
+
+
 def load_contrast_sets(
-    harmful_set: str, harmless_set: str, n_prompts: int
+    harmful_set: str, harmless_set: str, n_prompts: int, *, matching: MatchingStrategy
 ) -> tuple[list[Prompt], list[Prompt]]:
     """The probe's two classes, with the size check that must never be skipped.
 
@@ -203,9 +247,27 @@ def load_contrast_sets(
     signal, and the shift is invisible in the reported number. Raising here is
     the point: both scripts fit probes on these sets, so a mismatch is a defect
     in either, not a variant of one.
+
+    **`matching` is keyword-only with NO default, and that is the whole design.**
+    It is the fifth time this repo has met the same shape: a rule settles, it is
+    threaded into the caller that motivated it, and the other callers keep the
+    old behaviour silently (`strata` on `measure_deployment`, `device` on
+    `guard_working_tree`, the control floor never reaching `phase0_regime_map`,
+    the split-half screen reaching the AUROCs but not the counts). Defaulting
+    this to `"theme"` would mean a caller that forgot it pairs XSTest's 200
+    unsafe prompts against the first 200 of 250 safe ones — an arm mismatch that
+    produces a number rather than an error. Omitting it is a `TypeError`.
+
+    **The matching is applied BEFORE `n_prompts`**, so the limit takes a prefix
+    of the matched subset rather than of the raw file. The other order would let
+    a limit smaller than the file silently unbalance an already-matched pair.
     """
-    harmful = prompt_set(harmful_set, limit=n_prompts)
-    harmless = prompt_set(harmless_set, limit=n_prompts)
+    harmful = prompt_set(harmful_set)
+    harmless = prompt_set(harmless_set)
+    if matching == "contrast_type":
+        harmful, harmless = matched_by_contrast_type(harmful, harmless)
+    harmful = harmful[:n_prompts]
+    harmless = harmless[:n_prompts]
     if len(harmful) != len(harmless):
         raise SystemExit(
             f"contrast sets differ in size ({len(harmful)} vs {len(harmless)}); the probe's "
