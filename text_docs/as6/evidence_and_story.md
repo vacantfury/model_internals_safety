@@ -1162,3 +1162,57 @@ law governs clause joiners, not typography. A regex written against `-{2,}`
 would have destroyed all 51.
 
 Both kits build 0 overfull, 0 undefined. AS-5's 51 remain and stay TODO 87.
+
+## 14. ⚠️ THE ITEM HOLDOUT REACHED THE AUROCs AND NOT THE COUNTS, AND BOTH HEADLINE CELLS ARE BIASED TOWARD OUR OWN RESULT (2026-08-21)
+
+Found by running the peer session's AS-5 lesson against this paper: *a screen
+adopted in one section does not retroactively reach a table written before it
+existed, and nothing flags that.* AS-5's instance was the echo screen against
+its pipeline table. **AS-6 has one, and it is worse, because it lands on the two
+cells the paper reports as findings.**
+
+### 14.1 What is true
+
+`scripts/split_half_transfer.py` computes CONDITION-LEVEL statistics (A, B, C,
+D, E, F, G are all AUROCs over 200 splits). It never emits a per-prompt label
+and never touches the operating point. So:
+
+- every **AUROC** in the paper is the held-out one ✅
+- every **count** in the paper (`D&¬B` in Table 2, `blocked_without_decoding` in
+  §5.8) still comes from the **unsplit** probe's per-prompt read ⛔
+
+### 14.2 The direction is not neutral, and it favours us twice
+
+A prompt reads *decoded* when its score exceeds the 75th percentile of the same
+condition's BENIGN scores. Item memory raises a seen harmful item's score and
+lowers a seen benign one's, so it both raises the numerator and lowers the
+threshold. More prompts read *decoded*. Therefore:
+
+| cell | what the paper claims | leak moves it |
+|---|---|---|
+| `decoded_not_blocked` | populated, this is the finding | **up** |
+| `blocked_without_decoding` | "at most 5 per 100", the emptiness is the finding | **down** |
+
+**Both headline cells are biased toward the result we state.** This is the same
+asymmetry AS-5 reports on its behaviour axis (every defect inflates apparent
+safety), reappearing here as *every defect inflates the reported finding*, and
+it is structural for the same reason: a confound in the decode read cannot help
+being aligned with the claim, because the claim is about the decode read.
+
+### 14.3 What we did NOT do, deliberately
+
+**No estimate of the size.** The condition-level statistic fell 0.04–0.20 AUROC,
+and converting that into a count at a fixed percentile requires refitting the
+per-prompt read on held-out items, not arithmetic. Inventing a correction factor
+here would be the third instance of deriving a number from another number
+because the real one was expensive. Disclosed in Limitations, filed as TODO 90,
+gated on the same down-sync as 88/89 (the split read needs cached activations,
+and only summaries are local).
+
+⚠️ **The general check this came from is worth running on any paper here, and it
+is not the same as re-running the pipeline.** Run each screen against the TABLE
+it governs, not against the run that produced the table. A screen adopted after
+a table exists will pass its own tests, appear in the Method, be described in
+Limitations as required for validity, and still never have touched the numbers.
+Nothing in the build catches it, because there is no artifact that records which
+screens a table's numbers went through.
