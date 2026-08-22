@@ -213,6 +213,30 @@ class TestBothRunSchemasAreReadable:
         with pytest.raises(SystemExit, match="no summary carries"):
             sht.targets_from_record(run)
 
+    def test_a_guard_record_that_ALSO_carries_readings_takes_the_guard_branch(self, tmp_path):
+        """The strictest real record, and the one that killed a cluster job.
+
+        `guard-causal-*` runs emit an unnamed causal-licensing entry under
+        `readings` AND the per-family decode cells under `summaries`. A
+        presence-ordered check reads `readings`, finds no (layer, position), and
+        refuses a record that is perfectly readable. The paper's own Llama Guard
+        table comes from exactly such a record.
+        """
+        record = _as6_record(tmp_path / "activations")
+        record["readings"] = [{"name": None, "detail": {"licensed": False}}]
+        run = tmp_path / "results.json"
+        run.write_text(json.dumps(record))
+        targets = sht.targets_from_record(run)
+        assert [t.family for t in targets] == ["homoglyph"]
+
+    def test_a_record_matching_BOTH_schemas_is_refused_rather_than_guessed(self, tmp_path):
+        record = _as6_record(tmp_path / "activations")
+        record["activations_path"] = _as5_record()["activations_path"]
+        run = tmp_path / "results.json"
+        run.write_text(json.dumps(record))
+        with pytest.raises(SystemExit, match="BOTH schemas"):
+            sht.targets_from_record(run)
+
     def test_an_unrecognised_schema_is_refused(self, tmp_path):
         run = tmp_path / "results.json"
         run.write_text(json.dumps({"config": {}, "elapsed_seconds": 1.0}))

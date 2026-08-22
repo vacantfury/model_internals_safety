@@ -242,7 +242,25 @@ def targets_from_record(path: Path) -> list[Target]:
     """
     record = json.loads(path.read_text())
 
-    if "readings" in record:  # AS-5 phase-0
+    # Dispatch on what each branch CONSUMES, never on which key appears first.
+    # `guard-causal-*` records carry BOTH `readings` (one unnamed causal-licensing
+    # entry, no layer/position) and `summaries` (the per-family decode cells), so
+    # a presence-ordered check took the AS-5 branch on a guard record and died on
+    # the cluster. The discriminators below are the fields each branch actually
+    # reads, which cannot both be satisfied by one real record -- and if they ever
+    # are, that is a refusal rather than a coin flip.
+    guard_shaped = any(
+        isinstance(s, dict) and isinstance(s.get("activations"), dict)
+        for s in record.get("summaries", [])
+    )
+    phase0_shaped = isinstance(record.get("activations_path"), dict)
+    if guard_shaped and phase0_shaped:
+        raise SystemExit(
+            f"{path}: record matches BOTH schemas (top-level `activations_path` and "
+            "per-summary `activations`) -- refusing to guess which cells are authoritative"
+        )
+
+    if phase0_shaped:  # AS-5 phase-0
         deployment = next(
             (
                 r
@@ -272,7 +290,7 @@ def targets_from_record(path: Path) -> list[Target]:
             )
         ]
 
-    if "summaries" in record:  # AS-6 phase-1 guard run
+    if guard_shaped:  # AS-6 phase-1 guard run
         guard = str(record.get("config", {}).get("guard", {}).get("name") or path.parent.name)
         targets = []
         for summary in record["summaries"]:
@@ -297,7 +315,10 @@ def targets_from_record(path: Path) -> list[Target]:
             raise SystemExit(f"{path}: no summary carries a (layer, position) cell")
         return targets
 
-    raise SystemExit(f"{path}: unrecognised run schema (neither `readings` nor `summaries`)")
+    raise SystemExit(
+        f"{path}: unrecognised run schema (no top-level `activations_path`, no "
+        "`summaries` carrying per-family `activations`)"
+    )
 
 
 def main() -> int:
