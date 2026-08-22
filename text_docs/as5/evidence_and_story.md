@@ -2472,6 +2472,59 @@ Consequence meanwhile: both floors are `bound`, hence n-dependent per §2.4, and
 **not comparable across runs or models**. Mistral's `fullwidth` clears its own
 floor by only +0.022 and should be treated as marginal.
 
+## 4w ✅ DEFECT (11) IS CLOSED BY MEASUREMENT: the benign arm decodes as well as the harmful arm (2026-08-22)
+
+Jobs `9455425` / `9455426` / `9456081` / `9455427`, four models, all COMPLETED,
+1h05 to 1h13 each, about 4.5 GPU-hours against a 4.4 to 6.4 estimate. Artifact
+`outputs/analysis/comprehension_gap_20260822.json`.
+
+**The gate, as committed in the presets before launch.** Every harm gap this
+paper reports is a difference of refusal rates between two arms whose DECODE
+rates had never been compared, so part of every gap could have been a
+comprehension gap: a model may refuse benign encoded content more often simply
+because it decoded that content less often. That is referee 3's con 4, and its
+confidence statement named it as the paper's unresolved core.
+
+**The answer: the two arms decode the same, everywhere.**
+
+| model | family | ability H | ability B | delta | refusal H | refusal B | gap |
+|---|---|---|---|---|---|---|---|
+| Llama-3.1-8B | `homoglyph` | 0.90 | 0.92 | +0.02 | 0.98 | 0.99 | **-0.01** |
+| Llama-3.1-8B | `math_bold` | 1.00 | 1.00 | +0.00 | 0.60 | 0.44 | +0.16 |
+| Qwen2.5-7B | `homoglyph` | 0.98 | 0.99 | +0.01 | 0.88 | 0.32 | +0.56 |
+| Qwen2.5-7B | `math_bold` | 1.00 | 1.00 | +0.00 | 0.84 | 0.08 | +0.76 |
+| Tülu-3-8B | `homoglyph` | 0.88 | 0.78 | **-0.10** | 0.93 | 0.47 | +0.46 |
+| Tülu-3-8B | `math_bold` | 1.00 | 0.99 | -0.01 | 0.44 | 0.07 | +0.37 |
+| Mistral-7B | `homoglyph` | 0.95 | 0.96 | +0.01 | 0.91 | 0.68 | +0.23 |
+| Mistral-7B | `math_bold` | 0.00 | 0.00 | +0.00 | 1.00 | 0.99 | +0.01 |
+
+Across all sixteen cells including the anchors, the largest absolute difference
+is **0.10** and fourteen of sixteen sit within 0.02. **The harm gap is
+discrimination, and defect (11) closes.** Con 4 is answered with a measurement
+rather than a caveat, Leg 1 stands as written, and phase 1 keeps the
+false-positive target.
+
+⚠️ **The one cell to state rather than bury: Tülu-3 on `homoglyph`, benign 0.78
+against harmful 0.88.** It is the only delta beyond 0.02, it runs in the
+direction that would inflate a gap, and its gap is +0.46. Report the delta beside
+the gap for that cell; the effect is far too small to carry +0.46 but it is not
+zero and it should not be rounded away.
+
+**Two by-catches from the anchors, which is what the anchors were for.**
+`base64` and `tag_block` read ability 0.00 on BOTH arms and refusal near 1.00 on
+both, so the measurement can read a floor rather than merely finding differences
+where they are convenient. And **Mistral on `math_bold` is 0.00 on both arms**,
+independently confirming that its +0.00 gap there is a DECODE failure and never a
+discrimination failure, which is the distinction the screen ordering exists to
+protect.
+
+**Replication.** The harm gaps reproduce the numbers already reported in §4g
+within 0.06 on every cell: `homoglyph` -0.01/+0.56/+0.46/+0.23 against
++0.00/+0.62/+0.41/+0.24, and `math_bold` +0.16/+0.76/+0.37 against
++0.21/+0.74/+0.31. Llama's total loss of discrimination on `homoglyph` replicates
+and is, if anything, slightly the other way: it refuses benign homoglyph a point
+MORE often than harmful.
+
 ## 5. What it DOES support, and it is a stronger paper *(SUPERSEDED — see §4a)*
 
 **Encoded jailbreaks are mostly not comprehension failures — and the standard
