@@ -1123,3 +1123,42 @@ the free half is what tells us whether they are worth buying.
 AAAI column by 17.86pt at default `tabcolsep`; 3pt fits with the headers intact.
 Found in `build.log`, not by eye, which is the standing rule after the `tab:arms`
 incident.
+
+## 13. THE DASH-LAW PASS ON THE AS-6 KIT (2026-08-21)
+
+TODO 87, AS-6 half only. Global law 2026-08-19: in prose written for the owner
+or on his behalf, papers included, two clauses are never joined by a dash line.
+**39 em-dash joiners in the body, now zero**, in one deliberate pass rather than
+incrementally, with the built PDF read afterwards.
+
+**The distribution is the useful fact for the AS-5 half:** 36 of the 39 were
+**paired appositives** (`X---the gloss---and`) and only 3 were single
+clause-joiners. That ratio decides the method. A paired appositive is not a
+sentence-splitting problem, and reaching for a full stop on one produces a worse
+sentence than the dash did.
+
+**The rule that emerged, worth reusing:** the appositive's OWN internal
+punctuation picks the replacement. If it contains a comma or a semicolon,
+commas are unavailable and it takes parentheses (13 of 18 pairs here, e.g.
+*invisible characters, homoglyph and full-width substitution, word-order
+permutation*). If it is short and comma-free, commas read better and avoid a
+page of parentheses (*Causal tests, ablating the direction and observing the
+verdict, are the natural next step*). Two cases took neither: an imperative
+inside a parenthesis reads badly, so *The direct test (ablate the direction and
+observe whether the verdict moves) is well-established* became a colon with the
+imperative after it.
+
+⚠️ **A mechanical pass leaves a second defect behind, and only reading catches
+it.** Converting `X---gloss---Y` to `X (gloss) Y` silently drops the comma that
+the interrupted clause needs, so five sentences came out running on
+(*...under free permutation licensing (the natural significance test) 17 of 19
+conditions...*). The dashes were carrying two jobs, and replacing them
+one-for-one restores only one. Fixed by reading every one of the 20
+parentheticals in context.
+
+⚠️ **Do not touch `--`.** 51 en dashes in this body are ranges and compounds
+(`0.29--0.53`, `guard--condition`, `layer--position`) and are correct LaTeX. The
+law governs clause joiners, not typography. A regex written against `-{2,}`
+would have destroyed all 51.
+
+Both kits build 0 overfull, 0 undefined. AS-5's 51 remain and stay TODO 87.
