@@ -1984,6 +1984,107 @@ valuable rather than damaging. The rejection is not about the finding. It is
 about uncertainty reporting, judge validation, reproducibility, and held-out
 evidence, in that order, and four of those five are offline work.
 
+## 4s. ⛔ THE PIPELINE RESULT WAS READ BACKWARDS, AND OUR OWN ECHO SCREEN HAD NEVER TOUCHED THE TABLE (2026-08-22)
+
+The offline half of the review response ran: TODO 91, 92 and 93. All of it is
+keyless, GPU-free and $0, against per-prompt verdicts already on disk. Two of the
+three changed the paper's claims rather than confirming them.
+
+### 4s.1 The screen we require in two sections had never been run on this table
+
+⛔ `Limitations` and §7 both call the echo screen required for validity. Applied
+to §6's own cells for the first time, it **rejects four of the nine**:
+sft/fullwidth, dpo/zero-width, rlvr/fullwidth, rlvr/zero-width, with
+displacements of 0.107 to 0.256 against half-widths of 0.089 to 0.130. Homoglyph
+clears at all three stages by an order of magnitude, 0.003 to 0.011, which is why
+the rebuilt Table 3 is built on it and the other two now appear as direction
+only.
+
+**Why it had never been run, which is the part that generalises.** The screen
+compares the reported gap against the gap over non-echoing cells, so it needs
+BOTH arms' per-item verdicts. §6's experiment predates the benign arm being
+written to disk at all. A screen adopted in one section does not reach backwards
+into a table written before it existed, and nothing in the build notices, because
+**no artifact records which screens a given number went through**. The peer
+session found the same class in AS-6 inside the hour and worse: every AUROC there
+is item-held-out and every COUNT is not, and the leakage favours the reported
+finding on both cells. Filed as TODO 97 with the peer's proposed fix, a
+per-number provenance stamp checked against the screens the Method claims.
+
+### 4s.2 "The pipeline does not reach the encoded condition" was true and read backwards
+
+⛔ Encoded discrimination is **not flat**. On homoglyph it rises +0.20 → +0.46,
+and because both checkpoints answer the identical 100 harmful and 100 benign
+prompts the endpoints test as paired: a 20,000-draw bootstrap resampling items
+once and scoring both stages on the same resample gives **+0.26, CI [+0.14,
++0.38], excluding zero**. Same on the other two encodings, +0.30 and +0.36, both
+excluding.
+
+Gap lost nonetheless holds at 0.35 → 0.34, because Δ_plain rises +0.25 over the
+same pipeline. **The two movements cancel to within 0.01.** So the finding is not
+that post-training fails to reach the encoded condition; it is that post-training
+improves the encoded condition by very nearly the amount it improves the
+plaintext one, and therefore never narrows the distance between them.
+
+⚠️ This directly answers referee 2's con 6, which guessed the experiment "may be
+underpowered to distinguish a moderate repair from no repair". It is not
+underpowered. The movements it is built from are individually resolved at n=100,
+and it is the *difference* of two large real changes that is small. A measured
+cancellation is a much stronger sentence than a flat null, and the objection is
+what produced it.
+
+### 4s.3 The sharpest sentence had to be softened, and the replacement is better
+
+⚠️ On homoglyph, the one screen-clean encoding, harmful-arm refusal moves 0.99 →
+0.94. That is **5 discordant items out of 100, all one way, exact McNemar
+p = 0.062**, which does not resolve. So "the standard metric points the wrong
+way" cannot be said on the reportable cells; it holds on fullwidth and zero-width
+(0.94 → 0.73, 1.00 → 0.83), which are exactly the cells the echo screen rejects.
+
+The replacement is **"the standard metric is blind to it"**: the arm the field
+reports registers nothing while the arm it omits registers +0.26 with an interval
+excluding zero. That is closer to the paper's actual thesis than the wrong-way
+version was, since the thesis is that the harmful arm cannot see what it is
+trying to measure, not that it sees it inverted. Abstract updated to match.
+
+### 4s.4 The length objection, answered more plainly than we had answered it
+
+⚠️ **My own TODO filing said "the paper does not report this anywhere". It does.**
+§7 defect (5) already carried the clearance margins. I asserted an absence
+without grepping the artifact, which is the narrow-index failure of §4r.4 and
+TODO 74 committed in the act of writing them up. Third instance this week, first
+one that was mine.
+
+What was genuinely missing is the sharper form, now added: the **matching shift**.
+Length-matching moves the gap by at most **0.024** across the four models
+(+0.002, +0.003, −0.014, −0.024). The margins reproduce exactly (Qwen +0.427,
+Tülu +0.269, Mistral +0.133; Llama does not clear because its gap is 0.000, which
+is correct for an absence and must never be reported as a failed control).
+Instrument: `scripts/rate_length_null.py`.
+
+### 4s.5 What landed in the code
+
+`measurements/intervals.py` is new and is where the confidence level now lives:
+Wilson for rates, unpaired Wald for a harm gap because its arms are different
+corpora, an item-paired bootstrap for any contrast between conditions sharing
+items, and exact McNemar. It exists because `wilson` was about to have a second
+caller, which is the rule of two on the spine rule. **`z` is derived from
+`measurements.probes.alpha` and no longer written anywhere as a literal.** The
+config-discipline guard caught two of them, and deriving was the honest fix
+rather than marking them. `refusal_control.Z_95` was deliberately left where it
+is: that module may import only `contract`, so re-homing the constant would have
+traded a duplicated number for a broken structural invariant.
+
+Appendix A now carries every reproduction fact both referees listed, and
+`tab:full` carries the full per-cell table: Wilson intervals on every rate, echo
+denominators, the three-way echo sensitivity, and the repeat-run movement.
+
+⚠️ One residue the writing found: `models/generate.py:23` marks `batch_size` as
+throughput-only on the grounds that "greedy decoding is batch-invariant", and
+§7 measures 12 to 58 per cent byte-identical responses precisely because batch
+composition changes reduction order. The marker asserts an invariance this repo
+has refuted. Filed in TODO 97.
+
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
 Jobs `9010897` (Mistral-7B-Instruct-v0.3, 1:15:12) and `9011034` (Tulu-3-8B,

@@ -740,6 +740,17 @@ class ControlsConfig(StrictModel):
     # one printed interval endpoint genuinely depends on it (see the note above).
     # Not a tunable — a seed has no better or worse value.
     noise_null_seed: int = 0
+    # Draws for the ITEM-PAIRED bootstrap behind every reported contrast in the
+    # pipeline table. Separate from `noise_null_draws` on purpose: that knob is
+    # tuned for a max-minus-min statistic over k models and carries its own
+    # stability argument, and reusing it would silently import a basis that does
+    # not apply to a difference of two harm gaps.
+    # Tuning path: raise until every reported interval endpoint is invariant to
+    # the seed at the printed 0.01.
+    bootstrap_draws: int = 20_000
+    # Seed for the draws above. Part of the reproducibility contract, not a
+    # tunable — a seed has no better or worse value.
+    bootstrap_seed: int = 0
 
 
 class SAEConfig(StrictModel):

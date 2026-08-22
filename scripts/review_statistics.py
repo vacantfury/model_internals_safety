@@ -35,6 +35,12 @@ import math
 from collections import defaultdict
 from pathlib import Path
 
+from internals_safety.config import load_measurements_config
+from internals_safety.measurements.intervals import wilson, z_for
+
+#: Derived from `measurements.probes.alpha`, never a literal confidence level.
+Z = z_for(load_measurements_config().probes.alpha)
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RUNS = REPO_ROOT / "outputs" / "runs" / "as6_phase1"
 OUT = REPO_ROOT / "outputs" / "analysis"
@@ -52,24 +58,6 @@ REPORTED = {
 
 # constant(z): 1.96 is the standard-normal two-sided 95% quantile, a property of the
 # normal distribution and of the confidence level the paper reports, not a knob.
-def wilson(successes: int, total: int, z: float = 1.96) -> tuple[float, float]:
-    """Wilson score interval. Chosen over normal-approximation for a reason.
-
-    At n=100 with counts as low as 7, the normal approximation's lower bound
-    runs negative and its coverage is poor exactly where this paper's smallest
-    and most-quoted cells sit. Wilson stays inside [0, 1] and does not degenerate
-    at zero, which matters for ``blocked_without_decoding``, whose finding IS a
-    count near zero.
-    """
-    if total == 0:
-        return (float("nan"), float("nan"))
-    p = successes / total
-    denominator = 1 + z * z / total
-    centre = (p + z * z / (2 * total)) / denominator
-    half = z * math.sqrt(p * (1 - p) / total + z * z / (4 * total * total)) / denominator
-    return (max(0.0, centre - half), min(1.0, centre + half))
-
-
 #: The settled operating point (``conf/measurements.yaml`` probes.reading_percentile).
 #: Duplicated as a literal ON PURPOSE: this script must be able to say "the run you
 #: gave me predates the settled knob" even when run against an old checkout, and a
@@ -139,12 +127,12 @@ def rates(cells: list[dict]) -> dict:
         counts[cell["cell"]] += 1
     blocked = sum(1 for cell in cells if cell["blocked"])
     out = {"n": n, "blocked": blocked, "block_rate": blocked / n if n else float("nan")}
-    low, high = wilson(blocked, n)
+    low, high = wilson(blocked, n, Z)
     out["block_rate_ci95"] = [low, high]
     for name in ("decoded_not_blocked", "blocked_on_content",
                  "blocked_without_decoding", "never_decoded", "unmeasured"):
         count = counts[name]
-        low, high = wilson(count, n)
+        low, high = wilson(count, n, Z)
         out[name] = {"count": count, "rate": count / n if n else float("nan"),
                      "ci95": [low, high]}
     return out
@@ -215,7 +203,7 @@ def main() -> int:
                         if cell["cell"] == "blocked_without_decoding")
             entry["blocked_without_decoding_bound"] = {
                 "worst_condition": worst, "count": count, "n": len(grouped[worst]),
-                "ci95": list(wilson(count, len(grouped[worst]))),
+                "ci95": list(wilson(count, len(grouped[worst]), Z)),
             }
         else:
             entry["blocked_without_decoding_bound"] = {"withheld": reason}

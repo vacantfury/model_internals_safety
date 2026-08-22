@@ -137,6 +137,15 @@ ROSTER: tuple[Item, ...] = (
 # instrument and forgot the manifest" into a failing test rather than a silently
 # optimistic status report.
 NOT_ROSTER: dict[str, str] = {
+    "intervals": (
+        "not an instrument — the uncertainty estimators every reported rate and "
+        "contrast is quoted with. Landed 2026-08-22 when the external review's "
+        "most-repeated objection turned out to be that whole tables carried point "
+        "estimates. It measures nothing and licenses nothing: it takes counts and "
+        "returns bounds, which is why it sits outside both the roster and the "
+        "control battery. It is also the one home of the confidence level, derived "
+        "from `measurements.probes.alpha` rather than written as a literal"
+    ),
     "ability": "measurement #1 — the pilot's original four, predating the I-roster",
     "behavior": "measurement #4 — likewise",
     "refusal": (

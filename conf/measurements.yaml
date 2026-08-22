@@ -479,6 +479,13 @@ controls:
   # Seed for the draws above. Declared, not incidental: one printed interval
   # endpoint depends on it. Not a tunable.
   noise_null_seed: 0
+  # Draws for the ITEM-PAIRED bootstrap behind the pipeline table's contrasts.
+  # NOT a reuse of noise_null_draws: that one is tuned for a max-minus-min over
+  # k models, a different statistic with a different stability argument.
+  # Tuning path: raise until every reported endpoint is seed-invariant at 0.01.
+  bootstrap_draws: 20000
+  # Seed for the draws above. Declared, not incidental. Not a tunable.
+  bootstrap_seed: 0
 
 
 # AS-6's verdict readout — how a guard's answer token is resolved.
