@@ -2248,18 +2248,63 @@ includes zero it is not demonstrated at all: `homoglyph` on both guards and both
 `reverse_words` controls.
 
 **`B&¬D` requires a NEGATIVE decode read, so a weakened probe OVER-counts it.
-The held-out value is an UPPER BOUND, and the paper's claim was about its
-SMALLNESS, which an upper bound cannot establish.** So the cell is not refuted;
-it becomes **unmeasured**. Reading 16.2 or 25.8 as "the guard blocks what it
-never represented" would be committing the exact error this repo has fixed four
-times in other places: treating an instrument that could not read as an
-instrument that read a negative. The correct label is `(U)`.
+The held-out value is an UPPER BOUND.** Reading 16.2 or 25.8 as "the guard
+blocks what it never represented" would be the exact error this repo has fixed
+four times elsewhere: treating an instrument that could not read as one that
+read a negative.
+
+⚠️ **CORRECTED WITHIN THE HOUR, and the correction runs the other way from the
+first draft of this section.** That draft said an upper bound "cannot establish
+a claim about its own smallness". **That is wrong.** A *small* upper bound
+establishes smallness perfectly, and it is the strongest form the claim could
+take: if a probe that can only over-count still reads near zero, the cell is
+near zero. So the direction of this cell's movement does not settle anything by
+itself. What settles it is the VALUE at the paper's own operating point, and
+§28.4a is why this run does not have it.
 
 The paper anticipated the direction and chose the permissive operating point for
 precisely this reason ("the most demanding test of its emptiness is the most
 generous decode read"). The flaw was not the operating point. It was that the
 generosity came from item memory rather than from the read, so the demanding
 test was run on a probe holding privileged information.
+
+### 28.4a ⛔ THE RECOUNT RAN AT 75 AND THE PUBLISHED `B&¬D` CLAIM IS READ AT 50
+
+Found by checking the paper before editing it, which is the only reason it was
+found at all. `paper.tex` line 557 states the split in a comment: *"tuned
+operating point (75th pct) EXCEPT the format-detector cell, which is
+deliberately read at the permissive point"*. Confirmed against
+`outputs/analysis/operating_point_*_20260808.json`:
+
+| read | LG homo | LG zero | LG rev† | WG homo | WG zero | WG rev† | max over ALL families |
+|---|---|---|---|---|---|---|---|
+| unsplit @ **50** (published) | 0 | 0 | 0 | 0 | 0 | 1 | 8 (`combining_marks`) |
+| unsplit @ 75 | 0 | 1 | 4 | 2 | 0 | 4 | 31 (`combining_marks`) |
+| **held out @ 75** (this run) | **16.2** | **25.8** | **6.6** | **8.9** | **10.9** | **9.2** | not computed |
+
+The published "at most 1 per 100" and the "8 per 100 on `combining_marks`"
+exception both reproduce exactly at percentile 50, which confirms that is the
+read behind the claim.
+
+**So the `B&¬D` row of §28.2's table is a like-for-like result at 75 and is NOT
+a measurement of the published claim.** At a fixed operating point of 75,
+removing item memory raises the cell from 0-4 to 6.6-25.8, which establishes the
+MECHANISM and its size at that point. It says nothing yet about 50, where the
+threshold is far more permissive and the unsplit cell is uniformly 0.
+
+⚠️ **The first version of this section, and the report that went with it, stated
+that the abstract's near-zero claim was withdrawn. It is not withdrawn. It is
+UNTESTED at its own operating point**, and the test could go either way: a
+held-out probe at 50 reading near zero would make the claim STRONGER than it is
+now, since an over-counting instrument still finding nothing is the best
+evidence available for an empty cell. One job of the same shape closes it.
+
+**The lesson is narrower and sharper than §28.7's.** A screen re-run at one
+operating point does not re-run the cells reported at another, and an artifact
+that records `reading_percentile` faithfully still will not tell you a claim was
+stated somewhere else. The check that caught it was reading the paper's own
+comment before editing the paper, which is the same move that produced §14: run
+the screen against the TABLE it governs.
 
 ### 28.5 What this costs the paper
 
@@ -2271,11 +2316,13 @@ Three claims change, and the abstract carries two of them.
    claim survives in kind and shrinks in scope.
 2. **"Across every guard and condition pair, blocked without decoding is near
    zero, so we find little evidence for a pure encoding-format detector under
-   the conditions we test."** ⛔ **WITHDRAWN.** The probe-based half of that
-   argument no longer supports it. ⚠️ The WRAPPER screen is a separate argument
-   against a format detector and does NOT rest on the probe, so the paper still
-   has evidence on this question; what it loses is the second, independent line
-   it claimed to have.
+   the conditions we test."** ⏳ **UNTESTED, not withdrawn (see §28.4a).** It is
+   read at percentile 50 and this run measured 75, so the published number has
+   no held-out counterpart yet. The mechanism is established at 75 and points
+   against the claim; the value at 50 could equally come back near zero and make
+   the claim stronger than it is today. ⚠️ The WRAPPER screen is a separate
+   argument against a format detector and does NOT rest on the probe, so the
+   paper keeps evidence on this question either way.
 3. **Table 2's caption argues from "the decode term is 0.94 to 0.99 on the four
    surface cells, so it is not the binding term of the conjunction."** Held out,
    the decode term is **0.63 to 0.79**. It may well be the binding term, so the
@@ -2304,3 +2351,66 @@ positive reading of the complement, so a weakened instrument cannot support it
 at all. **Before applying a screen, decide per cell which of the two it is;
 running a screen and reporting all its cells the same way is how "unmeasured"
 gets published as "measured near zero".**
+
+### 28.8 The paper edit (owner go, 2026-08-22)
+
+Both kits, parity-pinned, both building clean at exit 0 with **zero** LaTeX
+errors, zero overfull boxes and no undefined references. Table 2 and
+the abstract were read out of the built PDF, not only the source.
+
+**Changed:** the abstract's "real and populated on every surviving condition, at
+7 to 23 per 100" becomes "survives an item-level holdout on two of the four
+surviving conditions, at 8 and 7 per 100 ... the same two cells read 17 and 23
+when the probe is allowed to have seen the prompt it is scoring", which turns
+the correction into an instance of the paper's own measurement thesis; Table 2's
+`D&¬B` column becomes the held-out rates with their split spreads; its caption
+states the lower-bound property and the unsplit contrast, and replaces the
+ordering argument, which had reasoned from a decode term of 0.94-0.99 that is
+0.63-0.79 held out; the Limitations paragraph is rewritten around the recount,
+the memory-versus-sample-size separation, the per-cell asymmetry, and §28.4a's
+operating-point gap stated as an open item rather than a resolved one.
+
+**Removed: the pairwise-separation subsection and `tab:paired`.** Its counts
+were 7/8, 7/17, 8/17, 23/9, 23/23, 9/23, which IS the column the recount
+replaced, so leaving it would have put the withdrawn numbers back three pages
+after Table 2 corrected them. That is dual truth inside one document, which is
+worse than the defect the parity test exists to catch, because no test compares
+a paper against itself across sections. Its conclusion ("three of the six
+separate") does not survive either: the held-out spreads overlap on every pair.
+The artifact `analysis/paired_cell_ordering_20260821.json` is kept, and
+re-framing the analysis as *what the uncontrolled read would have concluded* is
+a live option rather than a discarded one.
+
+⚠️ **`paper/` is gitignored, so none of the above is in git.** The guards are:
+`test_paper_source_parity.py` (the two kits agree), the claim ledger, and this
+section.
+
+### 28.9 The ledger caught the table's own change, and grew a guard from the day's lesson
+
+Three things fell out of the edit, and all three were the ledger working rather
+than the ledger breaking.
+
+**`_TABLE2_ROW` parsed `[0-9]+` and the column became a rate.** It matched
+nothing, the reported set came back empty, and the failure surfaced two recipes
+downstream as `max() iterable argument is empty`. **A parser is a claim about
+the table's shape**, and it goes stale exactly when the table changes, which is
+the moment nobody is looking at the parser.
+
+**`as6_table2_provenance` was pointed at the operating-point sweep**, which is
+no longer where the column comes from. Repointed to
+`analysis/as6_split_half_cells.json`, reading
+`cells_per_100.split.decoded_not_blocked.mean`. All 12 cells (6 per kit) agree.
+
+**The recipe now RAISES if the artifact's `reading_percentile` disagrees with
+the ledger's**, which makes §28.4a mechanical: a table and the artifact behind
+it read at different operating points is invisible in print and was found only
+by reading a LaTeX comment. Mutation-verified: forcing the artifact to 50 makes
+the ledger exit 1 with the diagnostic, and the artifact was restored and
+re-verified afterwards.
+
+**Two claims were RETIRED with the subsection they checked**
+(`as6_paired_separating_pairs`, `as6_paired_total_pairs`), together with their
+recipes and their now-orphaned `_paired_pairs` helper, because
+`test_paper_claim_integrity.py` enforces the vocabulary in both directions: a
+registered recipe no claim uses fails the build, which is what a bidirectional
+guard is for.

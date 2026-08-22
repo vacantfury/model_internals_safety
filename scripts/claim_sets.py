@@ -125,15 +125,21 @@ def _by_guard(paths: list[Path]) -> dict[str, dict]:
 #: Table 2 of AS-6. One row per reported guard-condition pair.
 _TABLE2_ROW = re.compile(
     r"&\s*\\texttt\{(?P<cond>[a-z\\_]+)\}(?:\$\^\\dagger\$)?\s*&"
-    r"\s*(?P<auroc>[0-9.]+)\s*&\s*(?P<dnb>[0-9]+)\s*\["
+    r"\s*(?P<auroc>[0-9.]+)\s*&\s*(?P<dnb>[0-9.]+)\s*\["
 )
 
 
-def _as6_table2(kit: Path) -> list[tuple[str, str, int]]:
+def _as6_table2(kit: Path) -> list[tuple[str, str, float]]:
     """[(guard, condition, D&notB)] parsed from the kit itself.
 
     The paper's own set, so the check compares the paper against the artefact
     rather than against a list restated here.
+
+    The cell is a FLOAT since 2026-08-22: the column moved from an integer count
+    under the unsplit probe to a rate averaged over the item-level holdout's
+    splits. An `int()` here read the new column as zero matches and emptied the
+    reported set, which surfaced as `max() iterable argument is empty` two
+    recipes downstream. A parser is a claim about the table's shape.
     """
     body = kit.read_text()
     start = body.index(r"\label{tab:map}")
@@ -144,7 +150,7 @@ def _as6_table2(kit: Path) -> list[tuple[str, str, int]]:
             guard = "llama_guard_3_8b" if "Llama Guard" in line else "wildguard"
         m = _TABLE2_ROW.search(line)
         if m and guard:
-            rows.append((guard, m.group("cond").replace("\\_", "_"), int(m.group("dnb"))))
+            rows.append((guard, m.group("cond").replace("\\_", "_"), float(m.group("dnb"))))
     return rows
 
 
@@ -226,41 +232,53 @@ def _as6_bwd_cells(claim: dict) -> list[tuple[str, str, float | None]]:
 
 
 def as6_table2_provenance(claim: dict) -> tuple[int, str]:
-    """Every Table 2 count, against the artefact the ledger says it came from.
+    """Every Table 2 rate, against the artefact the ledger says it came from.
 
     Returns the number of MISMATCHES, so 0 is the passing value. This is the
     provenance check: it fails if the named source does not contain the paper's
     numbers, which is the failure that cost a day on 2026-08-21 when a ledger
     sentence named the causal-intervention run as Table 2's source.
+
+    It also checks the OPERATING POINT, which is new on 2026-08-22 and is the
+    day's lesson made mechanical. The recount ran at percentile 75 while another
+    cell's published claim is read at 50, and nothing in the build could see
+    that a table and the artefact backing it were computed at different points.
+    Now a mismatched `reading_percentile` is a hard failure rather than a
+    footnote nobody re-reads.
     """
     percentile = claim["percentile"]
-    by_guard = _by_guard(_resolve_source(claim))
+    (source,) = _resolve_source(claim)
+    records = json.loads(source.read_text())
+    by_cell = {}
+    for row in records:
+        cells = row.get("cells_per_100")
+        if cells is None:
+            continue
+        got = cells["reading_percentile"]
+        if got != percentile:
+            raise ValueError(
+                f"{claim['id']}: {source.name} was computed at percentile {got} and the "
+                f"ledger claims {percentile} — a table and its artefact read at different "
+                "operating points cannot be compared, and the difference is invisible in print"
+            )
+        by_cell.setdefault((row["model"], row["family"]), cells)
+
     mismatches, checked = [], 0
     for kit in _kits(claim["paper"]):
         label = kit.relative_to(REPO).parts[2]
         for guard, condition, asserted in _as6_table2(kit):
-            # A wrong `source:` lands here, and it is the whole point of this
-            # recipe, so it must read as a diagnostic and never as a traceback.
-            if guard not in by_guard:
+            cells = by_cell.get((guard, condition))
+            if cells is None:
                 raise ValueError(
-                    f"source {claim['source']} holds no record for guard {guard!r} "
-                    f"(it has {sorted(by_guard)}) — the pointer names the wrong artefact"
+                    f"source {claim['source']} holds no per-prompt recount for "
+                    f"{guard}/{condition} — the pointer names the wrong artefact or one "
+                    "written before the recount"
                 )
-            families = by_guard[guard].get("families")
-            if not isinstance(families, dict) or condition not in families:
-                raise ValueError(
-                    f"source {claim['source']} has no per-condition sweep for "
-                    f"{guard}/{condition} — the pointer names an artefact of the wrong KIND"
-                )
-            entries = {e["percentile"]: e for e in families[condition]}
-            if percentile not in entries:
-                mismatches.append(f"{label}/{guard}/{condition}: no p{percentile} in source")
-                continue
-            found = entries[percentile]["decoded_not_blocked"]
+            found = round(cells["split"]["decoded_not_blocked"]["mean"], 1)
             checked += 1
             if found != asserted:
                 mismatches.append(f"{label}/{guard}/{condition}: paper {asserted} vs source {found}")
-    detail = f"{checked} Table 2 cells checked against {claim['source']} at p{percentile}"
+    detail = f"{checked} Table 2 cells checked against {claim['source']} at p{percentile:g}"
     return len(mismatches), detail + ("; " + "; ".join(mismatches) if mismatches else "; all agree")
 
 
@@ -359,38 +377,6 @@ def as6_length_bound_clearing_cells(claim: dict) -> tuple[int, str]:
     )
     return len(clearing), f"{len(reported)} reported cells, all clearing: {detail}"
 
-
-def _paired_pairs(claim: dict) -> list[dict]:
-    (source,) = _resolve_source(claim)
-    data = json.loads(source.read_text())
-    return [row for block in data["guards"].values() for row in block["pairs"]]
-
-
-def as6_paired_separating_pairs(claim: dict) -> tuple[int, str]:
-    """Pairs separating under the paired test, after the Holm adjustment.
-
-    The numerator of a "three of the six" sentence. Both halves move when the
-    reported set moves: the item-level holdout has already taken one condition
-    out, which would change six to three without touching either word in a
-    sentence that would still read fluently.
-    """
-    pairs = _paired_pairs(claim)
-    separating = [row for row in pairs if row["separates_after_adjustment"]]
-    if any(not row["wilson_intervals_overlap"] for row in pairs):
-        raise ValueError(
-            f"{claim['id']}: a pair now separates under the INDEPENDENT intervals too, "
-            "so the paper's claim that the paired test sees what they cannot is stale"
-        )
-    detail = ", ".join(
-        f"{row['left']}/{row['right']} p={row['mcnemar_p_holm']:.3f}" for row in separating
-    )
-    return len(separating), f"{len(separating)} of {len(pairs)} pairs: {detail}"
-
-
-def as6_paired_total_pairs(claim: dict) -> tuple[int, str]:
-    """The denominator, checked separately so it cannot drift out of the sentence."""
-    pairs = _paired_pairs(claim)
-    return len(pairs), f"{len(pairs)} pairwise comparisons across both guards"
 
 
 def _guard_floor(claim: dict) -> dict:
@@ -516,8 +502,6 @@ RECIPES = {
     "as6_bwd_measurable_pairs": as6_bwd_measurable_pairs,
     "as6_bwd_unlicensed_pairs": as6_bwd_unlicensed_pairs,
     "as6_length_bound_clearing_cells": as6_length_bound_clearing_cells,
-    "as6_paired_separating_pairs": as6_paired_separating_pairs,
-    "as6_paired_total_pairs": as6_paired_total_pairs,
     "as6_guard_floor_controls": as6_guard_floor_controls,
     "as6_guard_floor_value": as6_guard_floor_value,
     "as6_wrapper_intervals_including_zero": as6_wrapper_intervals_including_zero,

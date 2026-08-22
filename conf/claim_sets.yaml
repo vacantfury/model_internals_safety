@@ -57,12 +57,15 @@ claims:
     paper: as-6
     recipe: as6_table2_provenance
     check: internal
-    source: analysis/operating_point_*_20260808.json
+    source: analysis/as6_split_half_cells.json
     percentile: 75.0
     claim: >-
-      every D&notB count in Table 2 appears in the named artefact at the named
+      every D&notB rate in Table 2 appears in the named artefact at the named
       operating point. Fails if the source does not hold the paper's numbers,
-      which is the wrong-pointer defect rather than a wrong-count one.
+      which is the wrong-pointer defect rather than a wrong-count one. Repointed
+      2026-08-22 from the operating-point sweep to the item-level recount, which
+      is where the column now comes from; the recipe additionally RAISES if the
+      artefact's own reading_percentile disagrees with the one named here.
 
   - id: as6_bwd_max_reported
     paper: as-6
@@ -111,25 +114,12 @@ claims:
       different true claim.
     locate: 'All (\w+) reported cells\s+exceed their bound'
 
-  - id: as6_paired_separating_pairs
-    paper: as-6
-    recipe: as6_paired_separating_pairs
-    source: analysis/paired_cell_ordering_20260821.json
-    claim: >-
-      pairwise comparisons of the decoded-and-not-blocked count that separate
-      under the exact McNemar test with Holm adjustment. The recipe also RAISES
-      if any pair starts separating under the independent intervals, which would
-      make the paper's contrast between the two tests false.
-    locate: 'separates (\w+) of the six'
-
-  - id: as6_paired_total_pairs
-    paper: as-6
-    recipe: as6_paired_total_pairs
-    source: analysis/paired_cell_ordering_20260821.json
-    claim: >-
-      the number of pairwise comparisons, which is the denominator of that same
-      sentence and moves whenever a condition enters or leaves Table 2.
-    locate: 'independent intervals overlap on all (\w+)\s+pairs'
+  # RETIRED 2026-08-22 with the pairwise-separation subsection they checked.
+  # Their counts came from the per-prompt read of the UNSPLIT probe, which is
+  # the column the item-level recount replaced, so the table would have
+  # contradicted Table 2 three pages later. A ledger entry for a claim the
+  # paper no longer makes is dead weight, and the guard is bidirectional: the
+  # recipes went with them. Artefact kept: analysis/paired_cell_ordering_20260821.json.
 
   # The floor's COUNT and VALUE, both guards, four entries.
   #
