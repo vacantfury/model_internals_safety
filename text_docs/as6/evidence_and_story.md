@@ -2534,3 +2534,61 @@ pointer or self-citation, its supplement's title page reads "Anonymous
 submission", and every `Zhang` in the bibliography is a third-party citation. A
 clean rebuild from scratch confirms all four documents come from current
 sources: exit 0, zero errors, zero undefined references, zero overfull boxes.
+
+## 30. THE FULL PAPER REVIEW (2026-08-22, owner order: "run a paper check on it")
+
+Read end to end, both documents, against the peer-review rubric plus the house
+mechanical checks. The paper is in good shape and the read found **one real
+internal contradiction** it would have shipped with.
+
+### 30.1 The contradiction: Limitations disagreed with itself two paragraphs apart
+
+One paragraph said, correctly, that *"a small upper bound would support the
+emptiness claim more strongly than the uncontrolled read does, and a loose one
+supports nothing."* The next said *"a cell whose emptiness is the finding needs a
+positive reading of its complement, so a weakened instrument **cannot support it
+at all**."*
+
+Those cannot both be true, and §5.8 sides with the first. The second is the
+formulation §28.4 shipped before §28.4a corrected it: **a small upper bound
+establishes smallness perfectly.** The stale version reached the paper because it
+was written as a general LESSON, and a lesson gets copied outward faster than
+the correction that follows it. Now: an upper bound "is informative when it is
+small and worthless when it is loose, so the screen has to be run before its
+result can be called either way."
+
+### 30.2 The abstract asserted what three other sections now qualify
+
+Intro, §5.8 and Limitations all carry the item-memory caveat on the
+format-detector claim; the abstract did not, and it is read first and quoted
+most. One sentence added: that cell is the one read not repeated under the
+holdout, reported as such.
+
+### 30.3 ⚠️ The addition overflowed the abstract, and TEXT EXTRACTION HID IT
+
+`pdftotext` showed the abstract ending mid-phrase at "a pure encoding-format",
+with the anonymity footnote following. That reads as a truncated abstract. It was
+not: the extractor had interleaved the footnote block into the column flow, and
+the tail sat after it. **But rendering page 1 to an image showed a real problem
+the flattened text could not express:** the abstract had grown past column 1 and
+spilled two lines into the top of column 2, above the Introduction heading.
+
+Fixed by deleting a redundancy rather than by shortening the honesty clause: "and
+far narrower than the uncontrolled analysis claimed" says exactly what the "8 and
+7 ... against 17 and 23" contrast demonstrates, so the clause was carrying the
+same load twice. The abstract now closes inside column 1.
+
+**Two rules out of this.** A layout claim needs a RENDERED PAGE; `pdftotext`
+cannot represent column geometry and will invent a defect (the false truncation)
+while hiding a real one (the spill). And this repo's "read the built PDF" rule is
+weaker than it sounds if "read" means extracting its text: images are cheap and
+they are what a referee sees.
+
+### 30.4 Mechanical checks
+
+No `pp` abbreviation anywhere. ⚠️ **The abstract carries six numerals against the
+house limit of about three** (19, 8, 7, 100, 17, 23), and this is a deliberate
+keep, not an oversight: the 8/7-versus-17/23 contrast is four of the six, and it
+is the paper's own thesis applied to itself. Flagged so the next editor knows it
+was weighed. Anonymity re-verified after every edit: no author name, affiliation,
+email, repository pointer or self-citation, in either document.
