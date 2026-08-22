@@ -1,0 +1,55 @@
+# DEFECT (11) — THE BENIGN ARM'S COMPREHENSION.
+#
+# Until 2026-08-21 ability was measured on the harmful arm ONLY, so a harm gap
+# and a COMPREHENSION gap were not separable in our own records: a model can
+# refuse benign encoded content more often simply because it decoded that
+# content less often. The third external referee's con 4 asks exactly this, and
+# its confidence statement names it as the paper's unresolved core.
+#
+# The measurement is now MANDATORY in the entrypoint, so no knob here turns it
+# on. What this preset chooses is the SCOPE: the rungs the paper reports, plus
+# the run's own ability-0 anchors.
+entrypoint: phase0_regime_map
+description: >-
+  llama3_1_8b_instruct on the two reported rungs plus two can't-decode anchors, with
+  comprehension measured on BOTH arms for the first time.
+
+gates: >-
+  WHETHER THE HARM GAP IS DISCRIMINATION OR PARTLY COMPREHENSION. Every harm gap
+  this paper reports is a difference of refusal rates between two arms whose
+  decode rates have never been compared.
+
+  If the benign arm's decode rate matches the harmful arm's on homoglyph and
+  math_bold, the harm gap is what we say it is, con 4 is answered with a
+  measurement rather than a caveat, and defect (11) closes. Leg 1 stands as
+  written and phase 1 keeps the false-positive target.
+
+  If the benign arm decodes materially less, then part of every reported gap is
+  a comprehension gap, the headline becomes the comprehension-CONDITIONED gap
+  computed on items decoded in both arms, and defect (11) is promoted from an
+  instrument note to a limitation on the main result. Table 1 and Table 2 are
+  rewritten either way, because the conditioned denominator is not 100.
+
+target: llama3_1_8b_instruct
+
+# The two rungs the paper reports, plus the two ability-0 rungs that are this
+# run's own negative controls. The anchors are not filler: a comprehension
+# comparison needs a rung where BOTH arms decode at zero to show the measurement
+# can read a floor, and they are what the control floor is derived from.
+families:
+  - homoglyph
+  - math_bold
+  - base64
+  - tag_block
+
+n_prompts: 100
+
+instruments: [lexical]
+run_name: comprehension-gap-llama3_1_8b_instruct
+
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "04:00:00"

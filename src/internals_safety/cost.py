@@ -272,10 +272,12 @@ def census_phase0(
         attack_harmful = [encoder.encode(prompt.text).attack_prompt for prompt in harmful]
         attack_harmless = [encoder.encode(prompt.text).attack_prompt for prompt in harmless]
         restate = [encoder.encode(prompt.text).restate_prompt for prompt in harmful]
+        restate_harmless = [encoder.encode(prompt.text).restate_prompt for prompt in harmless]
 
         harmful_tokens = [count_tokens(text) for text in attack_harmful]
         harmless_tokens = [count_tokens(text) for text in attack_harmless]
         restate_tokens = [count_tokens(text) for text in restate]
+        restate_harmless_tokens = [count_tokens(text) for text in restate_harmless]
 
         # Capture (both classes) + the attack prefill before generation, for
         # BOTH arms. The benign arm's generation prefill was missing until
@@ -298,6 +300,15 @@ def census_phase0(
         # a cost nobody approved. It bites harder now that the control is
         # mandatory rather than opt-in.
         decode += len(harmless) * measurements.behavior.max_new_tokens
+        # ⚠️ THE BENIGN ARM'S RESTATE PASS (defect (11), mandatory 2026-08-21).
+        # Written in the SAME edit that made the control mandatory, which is the
+        # only way this file has ever stayed honest: the two lines above record
+        # that the benign arm's generation was missing from every estimate for a
+        # month because the control was added and the census was not. Ability is
+        # scored by string recovery, so this costs GPU and NOT judge calls, and
+        # `judge_calls` is deliberately untouched below.
+        prefill += sum(restate_harmless_tokens)
+        decode += len(harmless) * measurements.ability.max_new_tokens
         judge_calls += 2 * len(harmful)
         judge_calls += 2 * len(harmless)
 

@@ -77,8 +77,15 @@ class TestCensus:
         # FAMILY, because each rung's wrapper names its own encoding. It is the
         # first control that scales with the ladder, which is why it is written
         # inside the `2 * (...)` term rather than beside the plain baseline.
+        # ... PLUS the BENIGN ARM'S RESTATE pass (2026-08-21, defect (11)):
+        # 4 benign x 100, per family. Comprehension used to be a harmful-arm-only
+        # measurement, so a harm gap and a comprehension gap were not separable.
+        # It is the THIRD control to land in the entrypoint and need adding here,
+        # after the benign attack pass and the scaffold arm, and the pattern is
+        # the point: the census does not track the code, so each one is a
+        # deliberate edit or a cost nobody approved.
         assert census.decode_tokens == (
-            2 * (4 * 300 + 4 * 200 + (4 + 4) * 200) + (4 + 4) * 200
+            2 * (4 * 300 + 4 * 200 + 4 * 100 + (4 + 4) * 200) + (4 + 4) * 200
         )
 
     def test_two_judges_per_attack_response(self, prompts):
@@ -138,7 +145,11 @@ class TestCensus:
         # would be 2 * (4 + 4) = 16; with it, 32.
         assert two.judge_calls - one.judge_calls == 32
         # Same for decode: 4*300 + 4*200 encoded, plus 8*200 scaffold.
-        assert two.decode_tokens - one.decode_tokens == (4 * 300 + 4 * 200) + 8 * 200
+        # 4 * 100 is the benign restate pass, which scales with the ladder for
+        # the same reason the scaffold control does: it is per rung, not per model.
+        assert two.decode_tokens - one.decode_tokens == (
+            4 * 300 + 4 * 200 + 4 * 100
+        ) + 8 * 200
 
     def test_inflation_reaches_the_estimate(self, prompts):
         """The load-bearing property: the ciphertext drives prompt length, so a

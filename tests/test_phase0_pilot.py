@@ -142,7 +142,14 @@ class TestPlan:
         plan = pilot.build_plan(config, ["a", "b", "c"], n_prompts=100)
         # 2 plain conditions captured once per model + 2 encoded per family.
         assert plan.prompt_forward_passes == 2 * 100 + 2 * 3 * 100
-        assert plan.generations == 2 * 3 * 100
+        # FOUR generation streams per prompt per family, not two: restate and
+        # attack on the harmful arm, and both on the benign one. The benign
+        # attack pass became mandatory 2026-08-07 and the benign restate pass
+        # 2026-08-21 (defect (11)). Both times the control landed in the
+        # entrypoint before the census caught up, so this number is asserted
+        # rather than derived: a census that quietly tracks the code cannot
+        # notice when the code grew a cost nobody approved.
+        assert plan.generations == 4 * 3 * 100
         assert plan.judge_calls == 2 * 3 * 100
 
     def test_describe_names_the_gate_and_where_to_cost_it(self, pilot):
@@ -213,6 +220,27 @@ class TestRunFamily:
         cell = family_result["cells"][0]
         assert set(cell) >= {"ability", "deployment", "recognition", "refused", "jailbroken"}
         assert cell["prompt_id"] == "h0"
+
+    def test_the_BENIGN_arm_carries_its_own_comprehension(self, family_result):
+        """Defect (11). Ability used to be a harmful-arm-only measurement, so a
+        harm gap and a COMPREHENSION gap were not separable in our own records:
+        a model can refuse benign encoded content more often simply because it
+        decoded that content less often.
+
+        The control is mandatory in the entrypoint, and this pins the SHAPE so
+        it cannot be quietly dropped from the cell dict the way measurement #4's
+        benign arm was quietly left behind a flag (TODO 61)."""
+        benign = family_result["benign_cells"][0]
+        assert set(benign) >= {"ability", "ability_similarity", "restate_response"}
+        assert isinstance(benign["ability"], bool), "the cut must be applied, not the raw score"
+
+    def test_the_comprehension_gap_is_summarised(self, family_result):
+        """A per-cell column nobody aggregates is a column nobody reads. The
+        summary carries the benign ability rate beside the harmful one so the
+        two are comparable without re-deriving either."""
+        summary = family_result["summary"]
+        assert "benign_ability_rate" in summary
+        assert summary["benign_ability_rate"] is None or 0.0 <= summary["benign_ability_rate"] <= 1.0
 
     def test_the_attack_prompt_is_the_captured_condition(self, family_result, tmp_path, pilot):
         """Activations must come from the attack prompt, never the restate one:

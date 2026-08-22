@@ -297,8 +297,15 @@ class Plan:
 
     @property
     def generations(self) -> int:
-        """Restate (measurement #1) + attack (measurement #4) per harmful prompt."""
-        return 2 * len(self.families) * self.n_prompts
+        """Restate + attack on the harmful arm, and BOTH on the benign arm.
+
+        Four passes per prompt per family, not two. The benign arm's attack pass
+        joined on 2026-08-07 and its restate pass on 2026-08-21 when comprehension
+        became a mandatory benign-arm measurement (defect (11)). Both had the same
+        near-miss: the control lands in the entrypoint and the census stays put,
+        so the run silently costs more than the number somebody approved.
+        """
+        return 4 * len(self.families) * self.n_prompts
 
     @property
     def judge_calls(self) -> int:
@@ -421,11 +428,15 @@ class Plan:
     def behavior_control_judge_calls(self) -> int:
         """Judge API calls measurement #4's negative control adds.
 
-        ⚠️ The only control on the roster that costs MONEY rather than GPU time.
-        The benign-encoded arm is already captured and already generated for the
-        probes; what this pays for is calling the two judges on it. Priced here
-        because a control the estimate cannot see is a cost nobody approved —
-        and this one lands on the API bill, not the cluster allocation.
+        ⚠️ This docstring said "the only control on the roster that costs MONEY
+        rather than GPU time" until 2026-08-21, and it was wrong in the same way
+        `behavior_control.py`'s was: capture is a prefill-only pass, so the
+        benign-encoded arm is captured but NOT generated, and measurement #4's
+        control generates over it. `describe` below has said so since
+        2026-08-07; this property's own docstring did not, which is a
+        one-canonical-home failure inside a single file. It counts judge calls,
+        which is what its name says; the generation is counted in
+        `generations` and priced in `internals_safety.cost`.
 
         **Unconditional since 2026-08-07 (TODO 61).** There is no branch left to
         take: the control always runs, so the approval gate always sees its
@@ -866,6 +877,21 @@ def run_family(
     benign_behavior_records = measure_behavior(
         loaded, encoded_harmless, refusal_judge, harm_judge, measurements.behavior
     )
+    # THE BENIGN ARM'S COMPREHENSION (defect (11), review-3 con 4). MANDATORY,
+    # no flag, for the third time and the same reason: a control that can be
+    # switched off is a control that was off when it mattered.
+    #
+    # Until this ran, ability was measured on the harmful arm ONLY, so a harm
+    # gap and a COMPREHENSION gap were not separable in our own data: a model
+    # could refuse benign encoded content more often simply because it decoded
+    # that content less often. The asymmetry was this paper's thesis committed
+    # against itself, one level in.
+    #
+    # It costs GPU and no judge calls: `measure_ability` scores by string
+    # recovery, never by an API judge. The same `AbilityConfig` as the harmful
+    # arm on purpose, since a comprehension comparison across arms under two
+    # different cuts would not be a comparison.
+    benign_ability_records = measure_ability(loaded, encoded_harmless, measurements.ability)
 
     # THE SCAFFOLD CONTROL — both arms, plaintext content inside THIS rung's
     # attack wrapper. MANDATORY, no flag, for the same reason the plaintext
@@ -1029,10 +1055,18 @@ def run_family(
     # harmlessness, which is independent of refusal by construction, and there
     # are ~100 of them per rung against the 2-5 the harmful arm yields.
     #
-    # No ability/deployment/recognition column: ability is a decode-and-restate
-    # measurement taken on the harmful arm only, and writing a null where a
-    # measurement never happened is the defect this repo has now fixed four
-    # times. What is here is what was measured.
+    # ABILITY IS NOW HERE, and its absence used to be the honest half of a
+    # defect. The old comment read: "ability is a decode-and-restate measurement
+    # taken on the harmful arm only, and writing a null where a measurement
+    # never happened is the defect this repo has now fixed four times." That
+    # reasoning was right and the refusal to fake the column was right. What it
+    # missed is that the test which would settle the paper's central
+    # interpretation, conditioning the harm gap on items decoded in BOTH arms,
+    # is exactly the test those records could not support. So the column is
+    # filled by MEASURING it, never by defaulting it.
+    #
+    # Still no deployment/recognition column: those are probe readings fit on a
+    # harmful-versus-harmless contrast, so they have no per-arm meaning here.
     benign_cells = [
         {
             "prompt_id": prompt.id,
@@ -1046,8 +1080,21 @@ def run_family(
             "jailbroken": behavior.jailbroken,
             "echoed_ciphertext": behavior.echoed_ciphertext,
             "judge_fallback": behavior.judge_fallback,
+            # `recovered`, never `score.recovered`: the cuts live in ONE closure
+            # so the cells file and the summary can never disagree about what
+            # ability meant. Writing `score.recovered` here is an AttributeError
+            # rather than a silent wrong answer, which is the good version of
+            # this mistake and only because the cut was never made a field.
+            "ability": recovered(ability.score),
+            "ability_similarity": ability.score.similarity,
+            "ability_exact": ability.score.exact,
+            "ability_contains": ability.score.contains,
+            "ability_content_overlap": ability.score.content_overlap,
+            "restate_response": ability.response,
         }
-        for prompt, item, behavior in zip(harmless, encoded_harmless, benign_behavior_records)
+        for prompt, item, behavior, ability in zip(
+            harmless, encoded_harmless, benign_behavior_records, benign_ability_records
+        )
     ]
 
     n = len(cells)
@@ -1072,6 +1119,14 @@ def run_family(
         "ability_rate": sum(recovered(record.score) for record in ability_records) / n
         if n
         else 0.0,
+        # The comprehension gap, which is what makes the harm gap interpretable
+        # (defect (11)). A harm gap on a rung whose two arms decode at different
+        # rates is measuring comprehension as much as discrimination, and until
+        # this line existed there was no number that could say so.
+        "benign_ability_rate": sum(recovered(record.score) for record in benign_ability_records)
+        / len(benign_ability_records)
+        if benign_ability_records
+        else None,
         "refusal_rate": sum(record.refused for record in behavior_records) / n if n else 0.0,
         "attack_success_rate": sum(record.jailbroken for record in behavior_records) / n if n else 0.0,
         "echo_rate": sum(record.echoed_ciphertext for record in behavior_records) / n if n else 0.0,
