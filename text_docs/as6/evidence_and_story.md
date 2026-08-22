@@ -1049,3 +1049,77 @@ where the null is specified, citing the correction.
   powerful than independent intervals, and declining to order on overlapping
   independent intervals discards real information. Filed rather than fixed,
   because the per-prompt verdicts are on the cluster.
+
+## 12. THE SCREENS ARE NOW SCORED AGAINST A CRITERION THAT DOES NOT CONSULT THEM (2026-08-21)
+
+TODO 81's free half, external review con 10: *does the licensing framework
+materially improve validity, or does it only change your own results?* Offline,
+`$0`, no GPU, no new run.
+
+### 12.1 The criterion
+
+A screen that only ever rejects cannot be evaluated by its own attrition curve.
+The one criterion available here that is **independent of every screen in the
+paper** is the guard's base model's DECODING ABILITY, measured by generation:
+if the base model cannot decode a condition at all, nothing was decoded, so a
+licence granted there is a false positive, and the judgement never consults the
+probe, the null, or the floor.
+
+| | Llama Guard 3 (base Llama-3.1-8B) | WildGuard (base Mistral-7B-Instruct-v0.3) |
+|---|---|---|
+| conditions with ability 0.00 | **12 of 19** | **14 of 19** |
+| conditions that could carry a true positive | 7 | 5 |
+
+That second row is the whole argument. **A method admitting 17 of 19 conditions
+admits at least 17 − 7 = 10 on which nothing could have been decoded**, and 12 of
+19 admits at least 12 − 5 = 7. No new measurement is needed; it is arithmetic on
+the marginals.
+
+### 12.2 The result, and the row that does NOT count
+
+| screen | LG admits | LG undecodable | WG admits | WG undecodable |
+|---|---|---|---|---|
+| free permutation null | 17 | **≥ 10** | 12 | **≥ 7** |
+| length-matched null | 6 | 1 (`caesar3`) | 7 | 3 (`rot13`, `base64`, `caesar7`) |
+| + control floor | 4 | 0 \* | 4 | 0 \* |
+| + item-level holdout | **3** | 0 \* | **4** | 0 \* |
+
+⚠️ **\* The control floor's zero is NOT an independent score, and the paper says
+so in its own voice.** The floor's control set IS the ability-0.00 conditions, so
+scoring it against ability is the criterion applied to itself. Reporting "the
+floor achieves zero false positives" would be circular, and it is exactly the
+kind of self-certifying number the paper spends its Results section removing.
+What the floor genuinely adds over a plain decodability cut is **coverage of
+PARTIAL ability**, where a 0.00-vs-nonzero rule gives no answer at all
+(`combining_marks` on Llama, ability 0.82, is the live case: below floor, `(U)`,
+and a decodability cut would have admitted it).
+
+**The item-level holdout is the screen with the cleanest claim in the paper.** It
+consults neither ability nor the control set, it runs last, and it still removes
+a condition that had passed everything before it.
+
+### 12.3 The two baselines were already in the paper under other names
+
+Con 10 asked for a comparison against alternatives. Two of the four are
+present and were merely not presented as baselines:
+
+- **The uncontrolled transfer probe** — what a study with no licensing step at
+  all would report — is Table 1's FIRST ROW, and it is now scored: it buys at
+  least 10 and 7 verifiable false positives before anything else runs.
+- **A length-only classifier** is the null the second row tests against, and it
+  is a strong baseline rather than a straw one. **Recomputed locally on this
+  paper's own corpus rather than imported from AS-5's record: character length
+  alone separates JailbreakBench harmful from its topic-matched benign set at
+  AUROC 0.6544** (mean 86.0 characters against 73.8, n = 100 + 100, exact
+  Mann-Whitney). Every encoder in the ladder is monotone in length, so the
+  separation survives into every condition.
+
+The remaining two of the four are real new work and stay costed separately: a
+multi-position/multi-layer representation model (which `liu2026cognition` argues
+for, §11.3) and an external decoder-plus-guard pipeline. Neither is free, and
+the free half is what tells us whether they are worth buying.
+
+**Typesetting note kept because it recurs:** the 5-column table overflows the
+AAAI column by 17.86pt at default `tabcolsep`; 3pt fits with the headers intact.
+Found in `build.log`, not by eye, which is the standing rule after the `tab:arms`
+incident.
