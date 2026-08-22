@@ -1,0 +1,76 @@
+# BASELINE B of external-review con 10: does decoding BEFORE classification
+# repair the guard, and does the repair agree with our internal partition?
+#
+# The referee asked whether our licensing framework improves validity or only
+# moves our own numbers. An attrition curve cannot answer that about itself.
+# DecipherGuard repairs much of the encoded-prompt failure by decoding first, so
+# running that pipeline on our ladder answers by a route sharing none of our
+# machinery.
+#
+# It generates nothing. `phase0_regime_map` persists `restate_response`, the
+# base model's own restatement of every encoded prompt, so the decode already
+# happened and this reads guard verdicts over cached text.
+#
+# ⚠️ BLOCKED until a comprehension-gap run lands. Benign-arm comprehension became
+# mandatory in the entrypoint on 2026-08-21 (defect (11)), and no run has used it
+# yet, so no benign restatements exist. The script REFUSES TO RUN without them
+# rather than offering a flag, because a pipeline that repairs the harmful arm by
+# blocking everything has repaired nothing and a harmful-only measurement cannot
+# tell the two apart. Run `comprehension_gap_llama3_1_8b_instruct` first.
+entrypoint: decoder_guard_pipeline
+description: >-
+  DecipherGuard's decode-then-classify pipeline on Llama Guard 3, using
+  Llama-3.1-8B's cached restatements as the external decoder — the same base
+  model the control floor inherits its controls from.
+
+gates: >-
+  WHETHER OUR INTERNAL PARTITION SURVIVES AN EXTERNAL CHECK. Our probe says the
+  guard represented the payload on the surface conditions and says nothing on the
+  cipher band, which we report as (U) rather than as "nothing was decoded".
+
+  If repair is large exactly where we say the guard decoded, and near zero
+  exactly where we report (U), then two methods sharing no machinery draw the
+  same partition. Con 10 is answered with a corroboration instead of an argument,
+  and the (U) label is shown to be a property of the encoding rather than an
+  artefact of our instrument.
+
+  If a (U) condition IS repaired by the external decoder, that is evidence
+  against us and the more valuable result: it would mean the base model can
+  decode a condition our ability measurement scores at zero, which would put the
+  control floor's own control set in question, since that set IS the ability-zero
+  conditions. We would rebuild the floor before reporting any decode number.
+
+  If repair is large everywhere including the benign arm, the pipeline is a
+  blanket blocker rather than a repair, and DecipherGuard's result would need
+  restating on this corpus before being cited as a comparison point.
+
+target: llama_guard_3_8b
+decoder: llama3_1_8b_instruct
+
+# The rungs `comprehension_gap_llama3_1_8b_instruct` covers, and no others: the
+# benign restatements exist only for those, and mixing in a rung whose benign
+# arm is missing would trip the fail-closed check for the whole run.
+#
+# Two reported rungs and two ability-0 anchors. The anchors are the test: they
+# are where our partition says (U) and where the external decoder should also
+# come up empty, so a run without them could not distinguish agreement from a
+# pipeline that repairs everything.
+families:
+  - homoglyph
+  - math_bold
+  - base64
+  - tag_block
+
+n_prompts: 100
+run_name: decoder-pipeline-llama-guard
+
+# 2400 forward passes (3 payload kinds x 2 arms x 100 prompts x 4 rungs), no
+# generation. Nineteen completed guard runs measure 0.42-0.60 min per condition
+# per guard, so this is minutes; the hour is model load plus margin, and the
+# partition's 8 h wall is nowhere near binding.
+resources:
+  partition: gpu
+  gres: gpu:h200:1
+  cpus: 8
+  mem: 64G
+  time: "01:00:00"

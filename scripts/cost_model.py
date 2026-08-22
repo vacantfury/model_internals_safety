@@ -88,6 +88,11 @@ _COST_ELSEWHERE: dict[str, str | None] = {
     "sae_pregate": "./run python scripts/sae_pregate.py --model {target} "
     "--n-prompts {n_prompts} --sae-layer {first_layer} --dry-run",
     "as6_guard_probe": "./run python scripts/as6_guard_probe.py --guard {target} --dry-run",
+    # Reads guard verdicts over CACHED restatements, so it generates nothing and
+    # calls no judge; its dry-run prints the pass count and a $0.00 line.
+    "decoder_guard_pipeline": "./run python scripts/decoder_guard_pipeline.py "
+    "--guard {target} --base-model {decoder} --families {families} "
+    "--n-prompts {n_prompts} --dry-run",
     "relicense_probes": None,
     # I7. Generates AND judges, unlike the three above, so it is the reason
     # `_JUDGES` below exists — the "$0.00, calls no judge" line was unconditional
@@ -149,6 +154,7 @@ def report_declared_cost(name: str, preset, outputs_dir: str) -> int:
             n_prompts=preset.n_prompts or 100,
             first_layer=preset.sae_layers[0] if preset.sae_layers else 15,
             families=" ".join(preset.families) if isinstance(preset.families, list) else "all",
+            decoder=preset.decoder or "UNSET",
         )
         print("The phase-0 census does not describe this run. For the forward-pass")
         print(f"count, ask the entrypoint that owns it (PER TASK — there are {n_tasks}):")

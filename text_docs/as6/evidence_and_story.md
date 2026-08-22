@@ -2015,3 +2015,79 @@ actual question by an independent route, and requires no change to any screen. A
 requires rebuilding the two screens that give this paper its contribution, which
 is a larger decision than its 10-minute job suggests, and it is gated on a
 transfer in any case.
+
+## 27. BASELINE B IS BUILT, TESTED AND BLOCKED ON A RUN IN THE OTHER LANE (2026-08-22)
+
+Con 10's second baseline, `scripts/decoder_guard_pipeline.py`, is written and
+pinned. It cannot launch yet, and the reason is worth more than the script.
+
+### What it measures
+
+DecipherGuard repairs the encoded-prompt failure by decoding a prompt before
+classifying it. We run that pipeline on our ladder and ask whether its
+per-condition repair agrees with our internal partition. **It generates
+nothing**: `phase0_regime_map` persists `restate_response`, the base model's own
+restatement of every encoded prompt, so the decode already happened in August and
+this reads guard verdicts over cached text.
+
+Six cells per condition, three payload kinds on each of two arms:
+
+| | harmful arm | benign arm |
+|---|---|---|
+| **ciphertext** | what the guard sees today | |
+| **restatement** | the pipeline | the pipeline's false-positive cost |
+| **plaintext** | the ceiling a perfect decoder reaches | |
+
+The statistic is repair against the **headroom** the plaintext ceiling leaves, so
+a condition the guard already blocks at its plaintext rate cannot post a large
+repair merely by having nowhere to fall. It is `None`, never `0.0`, when the
+headroom is zero, and a test pins that: "the pipeline did not help here" is a
+measurement, and the truth at zero headroom is that the quantity does not exist.
+
+### ⛔ It refuses to run without the benign arm, and there is no flag
+
+**No benign restatements exist on disk.** Every `benign_cells.jsonl` in the
+estate carries `arm`, `refused` and `attack_response` and no `restate_response`.
+That is defect (11), which the peer session closed in the entrypoint on
+2026-08-21; no run has used the new code yet.
+
+A harmful-only version would be cheap and would measure a repair **that a guard
+blocking everything would also produce**. That is the same defect this repo has
+found three times on its own block rates. So the script fails closed, names the
+missing arm and the preset that would produce it, and exits. A benign arm that
+can be switched off is a benign arm that was off when it mattered.
+
+### The dependency, stated so it does not cost a queue cycle
+
+`conf/experiment/comprehension_gap_{llama3_1_8b_instruct,mistral_7b_instruct}.yaml`
+are already written, target exactly the two guards' base models, and cover
+exactly the four rungs the pipeline presets name. **Those runs must land first.**
+A test asserts each pipeline preset's rungs are a subset of ITS OWN decoder's gap
+preset, checked per decoder rather than once, because the fail-closed check trips
+for the whole run and one uncovered rung wastes the job rather than degrading it.
+
+### What the end-to-end test found before any GPU
+
+`args.seed` did not exist. `add_common_arguments` deliberately does not add
+`--seed`, since the seed is a config knob and `as6_guard_probe` reads it from
+`measurements.probes.seed`. The script would have loaded an 8B guard, run 2400
+forward passes, and died on the record write. **That is the whole argument for
+writing the end-to-end test before the run rather than after it**, and it is the
+fourth time this repo has paid or nearly paid for it.
+
+### One structural fix taken rather than deferred
+
+`PresetConfig.tasks` renders `--guard` for guard entrypoints and
+`tests/test_presets.py` skips the model-config lookup for them, and the two
+enumerated that set separately. Adding a second guard entrypoint made the test
+reject a preset `tasks()` had rendered correctly. Both now read
+`GUARD_TARGET_ENTRYPOINTS`, and a test forbids a second literal listing. Same
+pattern as the length null and the control floor: the fix is not threading the
+rule into another caller, it is leaving only one place the rule can live.
+
+### The costed ask
+
+Per guard: **2400 forward passes** (3 kinds x 2 arms x 100 prompts x 4 rungs), 0
+generations, 0 judge calls, **$0.00**. Measured rate from 19 completed guard runs
+is 0.42-0.60 min per condition per guard, so the work is minutes; the presets
+declare a 1-hour ceiling for model load plus margin against an 8-hour wall.

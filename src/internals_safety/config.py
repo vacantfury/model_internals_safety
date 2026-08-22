@@ -1151,12 +1151,20 @@ Entrypoint = Literal[
     "sae_pregate",
     "relicense_probes",
     "encoding_ablation",
+    "decoder_guard_pipeline",
 ]
 
 # Which optional preset fields each entrypoint actually consumes. A field set on
 # a preset whose entrypoint ignores it is an ERROR rather than a no-op: a
 # silently-dropped `instruments: [decode_lens]` would produce a run that looks
 # approved for I1 and did not run it.
+#: Entrypoints whose `target` names a `conf/guards/*.yaml`, not a
+#: `conf/models/*.yaml`. Declared ONCE: `PresetConfig.tasks` renders `--guard`
+#: from it and `tests/test_presets.py` skips the model-config lookup by it, and
+#: those two enumerating the same set separately is how the second one comes to
+#: be a rung behind the first.
+GUARD_TARGET_ENTRYPOINTS = frozenset({"as6_guard_probe", "decoder_guard_pipeline"})
+
 _CONSUMES: dict[str, frozenset[str]] = {
     "phase0_regime_map": frozenset({"target", "families", "n_prompts", "instruments"}),
     # NO `instruments` — the guard entrypoint has no such flag, and claiming it
@@ -1174,6 +1182,12 @@ _CONSUMES: dict[str, frozenset[str]] = {
     # NO `instruments`, for job 9010529's reason one entrypoint over: I7 has no
     # such flag, and a map that claims one renders an argv argparse rejects.
     "encoding_ablation": frozenset({"target", "families", "n_prompts"}),
+    # `decoder` is consumed ONLY here, like `sae_layers` is consumed only by the
+    # pre-gate. It names the model whose cached restatements are the external
+    # decoder, which is a scientific claim (the guard's base model) and not a
+    # convenience: a pipeline that does not say whose decode it used cannot be
+    # compared against a floor that inherits from the same model.
+    "decoder_guard_pipeline": frozenset({"target", "families", "n_prompts", "decoder"}),
 }
 
 
@@ -1204,6 +1218,11 @@ class PresetConfig(StrictModel):
     sae_layers: list[int] = Field(default_factory=list)
     # model name -> the run directory whose results.json this run re-reads.
     source_runs: dict[str, str] = Field(default_factory=dict)
+    # The model whose cached restatements act as the external decoder. Only
+    # `decoder_guard_pipeline` consumes it, and that entrypoint REQUIRES it —
+    # `argv()` raises rather than defaulting, because the guard's base model is
+    # the one choice that makes the comparison against the control floor valid.
+    decoder: str | None = None
     run_name: str | None = None
 
     # Whether prompts go through the chat template. **Only the SAE pre-gate may
@@ -1277,10 +1296,19 @@ class PresetConfig(StrictModel):
             return rows
 
         base = [f"scripts/{self.entrypoint}.py"]
-        if self.entrypoint == "as6_guard_probe":
+        if self.entrypoint in GUARD_TARGET_ENTRYPOINTS:
             base += ["--guard", str(self.target)]
         else:
             base += ["--model", str(self.target)]
+        if self.entrypoint == "decoder_guard_pipeline":
+            if not self.decoder:
+                raise ValueError(
+                    "decoder_guard_pipeline needs `decoder:` — the model whose cached "
+                    "restatements are the external decoder. It has no default: the guard's "
+                    "base model is what makes this comparable to the control floor, and a "
+                    "guessed decoder would produce a number with no provenance."
+                )
+            base += ["--base-model", self.decoder]
         if self.n_prompts is not None:
             base += ["--n-prompts", str(self.n_prompts)]
         if isinstance(self.families, list):

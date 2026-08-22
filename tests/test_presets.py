@@ -18,6 +18,7 @@ import pytest
 import yaml
 
 from internals_safety.config import (
+    GUARD_TARGET_ENTRYPOINTS,
     Entrypoint,
     PresetConfig,
     ResourceConfig,
@@ -156,7 +157,7 @@ class TestEveryShippedPresetIsValid:
         """A typo'd model name must fail here, not after the queue wait."""
         preset = load_preset(name)
         for target in filter(None, [preset.target, *preset.targets]):
-            if preset.entrypoint == "as6_guard_probe":
+            if preset.entrypoint in GUARD_TARGET_ENTRYPOINTS:
                 continue  # guards live in conf/guards/, checked by their own loader
             load_model_config(target)
 
