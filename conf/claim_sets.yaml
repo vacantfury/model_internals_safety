@@ -44,3 +44,57 @@ claims:
       four models. Homoglyph is asserted to be the only one, so this is 1.
     locate: 'Homoglyph is the (only) rung passing every screen on all four models'
     expect_word: one
+
+  # --- AS-6. These carry `source:`, the provenance half.
+  #
+  # A claim names the artefact it came from and the recomputation opens THAT
+  # artefact. Added 2026-08-21 after a ledger sentence named the
+  # causal-intervention run as Table 2's source and five items sat blocked on a
+  # down-sync for a day while the real data was already on disk. A pointer is a
+  # claim, and it recomputes.
+
+  - id: as6_table2_provenance
+    paper: as-6
+    recipe: as6_table2_provenance
+    check: internal
+    source: analysis/operating_point_*_20260808.json
+    percentile: 75.0
+    claim: >-
+      every D&notB count in Table 2 appears in the named artefact at the named
+      operating point. Fails if the source does not hold the paper's numbers,
+      which is the wrong-pointer defect rather than a wrong-count one.
+
+  - id: as6_bwd_max_reported
+    paper: as-6
+    recipe: as6_bwd_max_reported
+    source: runs/as6_phase1/*/as6p1-full-20260805/results.json
+    claim: >-
+      the largest blocked-without-decoding rate, per 100, over the pairs Table 2
+      reports. The reported set is parsed from the table, so the bound tracks it.
+    locate: 'at most (\d+) per 100 on every guard'
+
+  - id: as6_bwd_zero_pairs
+    paper: as-6
+    recipe: as6_bwd_zero_pairs
+    source: runs/as6_phase1/*/as6p1-full-20260805/results.json
+    claim: pairs whose blocked-without-decoding cell is exactly zero
+    locate: 'exactly 0 on (\d+) of the \d+ pairs'
+
+  - id: as6_bwd_measurable_pairs
+    paper: as-6
+    recipe: as6_bwd_measurable_pairs
+    source: runs/as6_phase1/*/as6p1-full-20260805/results.json
+    claim: >-
+      pairs where the cell is measurable at all, i.e. the decode read is
+      licensed. The complement is the unmeasured band and must never be folded in.
+    locate: 'exactly 0 on \d+ of the (\d+) pairs'
+
+  - id: as6_bwd_unlicensed_pairs
+    paper: as-6
+    recipe: as6_bwd_unlicensed_pairs
+    source: runs/as6_phase1/*/as6p1-full-20260805/results.json
+    claim: >-
+      pairs whose decode measurement is not licensed. The recipe additionally
+      RAISES unless every one of their block rates is 0.00, because section 5.8's
+      containment argument rests on exactly that.
+    locate: 'On the (\w+) pairs whose decode measurement is not licensed'

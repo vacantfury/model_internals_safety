@@ -1439,3 +1439,64 @@ coupling that survives precisely because nothing references it.
 Standing rule for both papers: **harmful rate minus benign rate is the HARM GAP.**
 *Discrimination* is retired estate-wide, and it was the worse word anyway, since
 it collides with the fairness sense in a safety paper.
+
+## 19. THE LEDGER NOW CHECKS THE POINTER, AND FILLING AS-6's ENTRIES FOUND ONE MORE STALE BOUND (2026-08-21)
+
+Owner delegated the call ("you decide"). Built as an extension of the peer's
+`scripts/claim_sets.py`, not as a new tool: the improvement loop executes at
+existing levels.
+
+### The provenance field
+
+A ledger entry may now carry **`source:`**, a glob under `outputs/`, and the
+recomputation opens THAT artefact. `_resolve_source` raises when the field is
+missing or matches nothing, so a provenance claim with no artefact to open is a
+hard failure rather than a skip. Two new suite invariants stop the exemption from
+becoming a hiding place: an entry with `check: internal` is excused from `locate`
+**only if** it declares a `source`, and a `source` may not be absolute or repeat
+the `outputs/` prefix.
+
+`as6_table2_provenance` is the first consumer and it is the direct fix for §17:
+it parses Table 2 **from the kit**, opens the named artefact at the named
+percentile, and compares. 12 cells across both kits, all agree. Had it existed
+yesterday, "Table 2 comes from run `9033528`" would have failed at `pytest` time
+instead of costing a day.
+
+### ⛔ Filling the AS-6 entries found §5.8's bound sourced from a withdrawn cell
+
+The ledger forced the question *which set is "clears our screens"?* and the two
+readings differ:
+
+- Under the **control floor** alone, the max includes Llama Guard `fullwidth` at
+  5 per 100, which is where the paper's "at most 5" came from.
+- Under **all screens**, `fullwidth` is `(U)`, withdrawn by the item holdout, and
+  the max over the six pairs the paper actually reports is **1 per 100**
+  (WildGuard `reverse_words`).
+
+So the bound was quoted from a condition the paper reports as unmeasured. It was
+true and loose in the safe direction, which is why nothing caught it, and a
+referee asking "which pair hits 5?" would have found the withdrawn one.
+**Corrected to 1 per 100 over the reported pairs**, and the exceedance sentence
+now names both pairs above it, `combining_marks` at 8 and `fullwidth` at 5,
+with the observation that **every exceedance sits in the unmeasured band** —
+which is the stronger statement, since that is exactly the set where the
+decoded/not-decoded split is unavailable.
+
+`as6_bwd_max_reported` parses the reported set from Table 2 rather than
+restating it, so the bound now tracks the table. That is the general defence
+against this whole family: **derive the set from the artefact the claim ranges
+over, never from a list written beside it.**
+
+### Verified by mutation, both directions
+
+Wrong percentile → 8 mismatches, exit 1. Missing `source` → hard failure naming
+the field. Wrong source artefact → initially a raw `KeyError` traceback, which is
+a defect in a checker whose entire purpose is wrong pointers, now a diagnostic
+naming the artefact kind. The two new suite invariants each fail on their own
+mutation and pass restored. A screen that only ever passes is a verdict with a
+script attached.
+
+Recomputed values, all agreeing with both kits: `D&¬B` provenance 0 mismatches ·
+max reported bound 1 · zero cells 26 · measurable pairs 29 · unlicensed pairs 9,
+the last raising unless every one of their block rates is 0.00, because §5.8's
+containment argument rests on precisely that.

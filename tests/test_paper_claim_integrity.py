@@ -172,6 +172,8 @@ class TestTheArtefactBackedLedger:
         """The captured group IS the paper's assertion. Zero groups or two means
         the comparison silently reads the wrong token."""
         for claim in self.ledger():
+            if claim.get("check") == "internal":
+                continue
             assert re.compile(claim["locate"]).groups == 1, claim["id"]
 
     def test_the_ledger_holds_no_second_copy_of_any_value(self):
@@ -187,6 +189,8 @@ class TestTheArtefactBackedLedger:
         someone reworded the sentence, and it would pass as silently as a green
         recomputation."""
         for claim in self.ledger():
+            if claim.get("check") == "internal":
+                continue
             kits = sorted((PAPER_DIR / claim["paper"]).glob("**/paper.tex"))
             if not kits:
                 pytest.skip(f"no kits under paper/{claim['paper']}/")
@@ -194,3 +198,34 @@ class TestTheArtefactBackedLedger:
                 flat = re.sub(r"\s+", " ", kit.read_text())
                 hits = re.findall(claim["locate"], flat)
                 assert len(hits) == 1, f"{claim['id']} in {kit.relative_to(REPO)}: {len(hits)} hits"
+
+    def test_an_internal_check_declares_a_source_and_a_normal_claim_declares_a_locate(self):
+        """The `check: internal` exemption above must not become a way to file a
+        claim that nothing checks.
+
+        An internal claim has no single sentence asserting a number, so it is
+        excused from `locate` -- and in exchange it MUST name the artefact it
+        recomputes against. A normal claim needs `locate` and gets no exemption.
+        Without this, `check: internal` plus no `source` is a ledger entry that
+        parses, passes, and checks nothing.
+        """
+        for claim in self.ledger():
+            if claim.get("check") == "internal":
+                assert claim.get("source"), (
+                    f"{claim['id']}: internal check with no `source:` — it is excused "
+                    "from locate, so the artefact pointer is the only thing left to check"
+                )
+            else:
+                assert claim.get("locate"), f"{claim['id']}: no `locate:` and not an internal check"
+
+    def test_every_declared_source_is_a_relative_glob_under_outputs(self):
+        """An absolute path in a ledger is a path that rots on another machine,
+        and `outputs/` is gitignored so it differs per checkout by construction."""
+        for claim in self.ledger():
+            source = claim.get("source")
+            if source is None:
+                continue
+            assert not source.startswith("/"), f"{claim['id']}: absolute source {source}"
+            assert not source.startswith("outputs/"), (
+                f"{claim['id']}: source is resolved UNDER outputs/, so it must not repeat the prefix"
+            )
