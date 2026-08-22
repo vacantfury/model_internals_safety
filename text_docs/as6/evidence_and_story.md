@@ -932,3 +932,120 @@ there would assert provenance the paper does not have.
 local; the local `scores-b10` records are at the retired `reading_percentile`
 50 and would reproduce the superseded map (§8.1). Still gated on the owner's
 down-sync, same gate as the rest of TODO 79.
+
+## 11. THE REFEREE'S NINE REFERENCES ARE ADJUDICATED — seven real, one absent, one a fabricated title over a real paper we already owned (2026-08-21)
+
+TODO 82. Offline, `$0`, no GPU. The rule this pass exists to obey: **a generated
+citation is not evidence of existence**, which is the mirror of the error this
+repo already made in the other direction, where a coverage sweep reported three
+papers as missed that were cited in three places each. Both halves cost a check.
+
+### 11.1 The verdicts
+
+Every one resolved at PRIMARY SOURCE (ACL Anthology, the USENIX program, the
+DBLP journal record, the arXiv listing), never at an aggregator alone.
+
+| # | as the referee wrote it | resolves? | source of record | tier |
+|---|---|---|---|---|
+| 1 | Xin 2025, safety arms race | yes | **Findings of ACL 2026**, `2026.findings-acl.20`, pp. 421–445 | **A** |
+| 2 | Zhao 2026, in-decoding probing | yes | arXiv 2601.10543, no venue | C |
+| 3 | Liu 2026, model cognition | yes | **USENIX Security 2026**, SJTU + Microsoft | **A** |
+| 4 | Mu 2025, benign data mirroring | yes | **NAACL 2025 long**, pp. 1784–1799 | **A** |
+| 5 | Sun 2026, unified framework | **NO** | absent from arXiv full text, from S2 title match, from our corpus | — |
+| 6 | Jalan 2026, survey | yes | **Machine Learning 115(6)**, Springer | **A** |
+| 7 | Wong 2025, responsible AI | yes | arXiv 2511.18933, self-described technical report | C |
+| 8 | Constitutional Classifiers 2025 | yes | arXiv 2501.18837, no venue confirmed, heavy uptake | B |
+| 9 | Fairoze 2026, security/privacy/provenance | **title NO** | the described work is **USENIX Security 2026**, arXiv 2510.01529 | **A** |
+
+⚠️ **#1 is the Tülu-3 lesson running backwards.** Semantic Scholar asserted
+"Annual Meeting of the ACL" while the paper's own arXiv comments field named no
+venue at all. The aggregator was right in substance and unsupported by the
+primary source; the Anthology is what settled it. Neither direction of an
+aggregator claim is evidence.
+
+⚠️ **#5 does not exist under that title.** Three independent lookups fail. The
+nearest real papers are EasyJailbreak (2403.12171, a tooling framework by
+different authors) and `xu2026sok` (IEEE S&P 2026), and the second already fills
+the taxonomy-anchor role the referee wanted #5 for. Recorded as not resolving.
+
+### 11.2 ⛔ #9 IS THE ONE THAT MATTERED, AND THE CORPUS ALREADY HELD IT
+
+"Fairoze et al., *Security, Privacy, and Provenance for Generative AI*, 2026" is
+not a paper. The author is real, and the work the referee described is
+**Fairoze, Garg, Lee and Wang, *Bypassing Prompt Guards in Production with
+Controlled-Release Prompting*, USENIX Security 2026** (arXiv 2510.01529). It
+starts from an impossibility result, that no filter running materially faster
+than the model it protects can universally separate adversarial from benign
+prompts, and turns it into a working attack on four production systems and
+fourteen open-weight guards.
+
+**That is AS-6's *blocked without decoding* cell constructed on purpose, with a
+lower bound behind it, and the paper was not citing it.** The gap was ours, not
+the corpus's: the entry has sat in science `literature/llm-security/` under
+`fairoze2026bypassingpromptguardsproduction` since before this paper had a
+related-work section. Grep the corpus before believing a paper is missing.
+
+Its venue was also under-recorded, as `@misc` arXiv. Confirmed on the official
+USENIX Security 2026 program and in the paper's own v4 comments, and upgraded in
+the master with the key unchanged.
+
+**What the paper now says, and what it must not say.** We claim no novelty for
+the mechanism. The complementary question is the one we can still claim: under
+ordinary surface encodings that nobody designed to be undecodable, how often
+does a guard fail because it never recovered the payload, and how often does it
+recover the payload and let it through? Their construction guarantees the first
+case by design; ours has to measure which case occurred.
+
+### 11.3 What landed in the paper, and what did not
+
+Cited: #1 (end-to-end verdict, motivating decomposition), #3 (closest instrument
+prior, and a direct answer to the referee's single-layer question), #4 (in
+Limitations, as the adversarial corpus that would test the decode read from the
+side our floor cannot), #8 and #6 (guard-evaluation context), #9 (above).
+Recorded in the master and NOT cited: #2 and #7, both tier C, both weak enough
+that a citation would be decoration. #5 recorded as not resolving.
+
+⚠️ **#3 cuts both ways and the paper says so.** \citet{liu2026cognition} report
+safety features separable in intermediate states at up to 99 per cent,
+persisting where behaviour complies, which is the claim AS-5 WITHDREW under an
+item-level holdout. Theirs is a fitted probe rather than a transferred one, so
+our holdout does not directly indict it, and the paper states that we make no
+claim about which side of that control their number falls on. Asserting leakage
+in a published result we have not read the split protocol of would be the
+generated-citation error wearing the opposite hat.
+
+### 11.4 ✅ #24 FROM THE AS-5 METHODS REVIEW WAS LIVE HERE, AND IS FIXED
+
+Handed over by the peer session. `permutation_p_value` applies the $+1$
+correction of Phipson & Smyth (2010), so with `n_permutations = 200` the
+smallest attainable value is $1/201 = 0.004975$. The paper reported the
+Caesar-shift artefact as licensing "at $p = 0.005$", **which is that floor**, not
+an estimate. It means no null draw reached the observed value.
+
+**The shape of the error is worth keeping.** The correction was added precisely
+so a finite permutation set could not report $p = 0$ and overstate the evidence
+in a paper table; the docstring says so. The prose then quoted the corrected
+floor as a measurement, putting the overstatement back one level up. A guard
+that fixes a number does not fix the sentence that reports it. Both kits now say
+"the smallest p-value 200 draws can produce", and the appendix states the floor
+where the null is specified, citing the correction.
+
+### 11.5 Two checks that did NOT find a defect, recorded so they are not re-run
+
+- **Rate nulled against an AUROC (the peer's P3 finding).** Does not reach AS-6.
+  `as6_guard_probe.py` calls `measure_length_null` once, on
+  `observed_max_transfer_auroc`, which is AUROC-valued, so the comparison is
+  like with like. AS-6 builds no `Reading` objects and its block rates never
+  touch `LengthNull`. ⚠️ The residue is the opposite one and is filed: the block
+  rates have **no length control at all**, and length is exactly what an
+  encoding inflates, so `blocked_without_decoding` could in principle be a guard
+  reacting to length. The benign and wrapper arms hold content and template
+  fixed but not length.
+- **Unpaired null across conditions measured on the same items (the peer's #3).**
+  AS-6 does not make AS-5's error. It uses overlapping Wilson intervals to
+  REFUSE an ordering, never to assert equality, and says so. ⚠️ But the
+  mis-specification is still there in the conservative direction: the conditions
+  share the same 100 harmful prompts, so a paired test would be strictly more
+  powerful than independent intervals, and declining to order on overlapping
+  independent intervals discards real information. Filed rather than fixed,
+  because the per-prompt verdicts are on the cluster.
