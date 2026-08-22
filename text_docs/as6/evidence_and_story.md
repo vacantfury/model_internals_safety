@@ -1500,3 +1500,53 @@ Recomputed values, all agreeing with both kits: `D&¬B` provenance 0 mismatches 
 max reported bound 1 · zero cells 26 · measurable pairs 29 · unlicensed pairs 9,
 the last raising unless every one of their block rates is 0.00, because §5.8's
 containment argument rests on precisely that.
+
+## 20. THE WRAPPER SCREEN'S RECORDS ARE ON SCRATCH, WHICH NO SYNC PATH REACHES (2026-08-21)
+
+§17 asked for the wrapper/benign job id to be found by opening records rather
+than trusting a sentence. Done, and the answer is worse than "not synced yet".
+
+**The jobs are `9049076` / `9049077`** (2026-08-10, 12 and 11 conditions x 100 x
+3 arms, one H200 each, $0), and `phase1_map.md` §0.6.2 records in its own second
+line: *"Records on `/scratch`; this section is the result."*
+
+**The standard down-sync covers `~/projects/model_internals_safety/outputs/`.
+`/scratch` is not under it.** So these records were never going to arrive from
+any sync anyone ran, and TODO 79's "needs the wrapper/benign records
+down-synced" was unachievable as written, for a second and different reason than
+§17's misidentified id. Scratch filesystems are periodically purged; the run is
+eleven days old.
+
+### What in the paper depends on them, enumerated rather than estimated
+
+Verified by checking each against local artefacts:
+
+| claim | local? |
+|---|---|
+| Table 2 `D&notB` + AUROC | ✅ `operating_point_*` + `as6_split_half_transfer` |
+| Table 3 block rates | ✅ `as6p1-full-*/results.json` |
+| §5.8's bound, 26/29/9 pairs | ✅ `as6p1-full-*/results.json` |
+| WildGuard benign ENCODED arm (0.05–0.29) | ✅ `guard-benign-wildguard_…9010639` |
+| **the whole wrapper subsection** (0.44 vs 0.25; the 8–16% and 7–33% wrapper terms; "every other surviving condition clears") | ⛔ scratch |
+| **plaintext BENIGN ceilings** (Llama Guard 0.23, WildGuard 0.45) and the harm gaps 0.75 / 0.54 built on them | ⛔ scratch |
+| **Llama Guard benign encoded arm** (0.29–0.53) | ⛔ scratch |
+| Table 2 caption's "excluded by the wrapper screen below" | ⛔ scratch |
+
+`plain_block_rate` in the local records is the HARMFUL arm only (0.98 / 0.99,
+both matching the paper), so the ceilings look locally backed and their benign
+halves are not.
+
+### Why this is the sharper version of §17's lesson
+
+§17 was a pointer naming the wrong artefact. This is a pointer naming a REAL
+artefact **in a location nothing collects**, recorded honestly at the time by a
+session that wrote "records on /scratch" and moved on. A provenance field that
+only checks *does the named artefact reproduce the number* would pass here by
+raising "not found", which is correct behaviour and still leaves the paper
+carrying a subsection whose evidence is one purge away from unreproducible.
+
+**The rule this earns:** a run whose records are written outside the collected
+path is not a completed run, it is a result with an expiry date. Either the
+records move to the collected path in the same session, or the fact that they
+did not is filed as a task with the job ids, never as a clause inside a results
+section. `ops/` should place records under the synced tree by default.
