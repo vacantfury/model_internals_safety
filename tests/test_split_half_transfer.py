@@ -64,12 +64,12 @@ def _genuine_pair(seed: int = 1):
 
 class TestTheScreenFiresOnItemMemory:
     def test_item_identity_alone_reads_near_ceiling_without_a_split(self):
-        out = sht.analyse(*_leaky_pair(), n_splits=N_SPLITS, seed=0)
+        out = sht.analyse(*_leaky_pair(), n_splits=N_SPLITS, seed=0, blocked=None, reading_percentile=75.0)
         # This is the number a run would have recorded and a paper would have quoted.
         assert out["A_reproduce_no_split"] > 0.95
 
     def test_and_collapses_to_chance_once_the_items_are_held_out(self):
-        out = sht.analyse(*_leaky_pair(), n_splits=N_SPLITS, seed=0)
+        out = sht.analyse(*_leaky_pair(), n_splits=N_SPLITS, seed=0, blocked=None, reading_percentile=75.0)
         assert out["B_split_logistic"]["mean"] < 0.65
         assert out["B_split_logistic"]["p97_5"] < 0.80
 
@@ -77,11 +77,11 @@ class TestTheScreenFiresOnItemMemory:
         # B halves the training set as well as holding out items, so A - B alone
         # cannot attribute the drop. F - B scores the SAME probe at the SAME size
         # on items it saw, so what remains is memory.
-        out = sht.analyse(*_leaky_pair(), n_splits=N_SPLITS, seed=0)
+        out = sht.analyse(*_leaky_pair(), n_splits=N_SPLITS, seed=0, blocked=None, reading_percentile=75.0)
         assert out["leakage_at_fixed_n_logistic"] > 0.20
 
     def test_difference_in_means_leaks_too_so_it_is_not_a_capacity_artefact(self):
-        out = sht.analyse(*_leaky_pair(), n_splits=N_SPLITS, seed=0)
+        out = sht.analyse(*_leaky_pair(), n_splits=N_SPLITS, seed=0, blocked=None, reading_percentile=75.0)
         assert out["leakage_at_fixed_n_dim"] > 0.20
 
 
@@ -90,18 +90,18 @@ class TestTheScreenIsQuietOnASurvivingDirection:
     `return {"B_split_logistic": {"mean": 0.5}}`."""
 
     def test_a_transferable_direction_survives_the_item_split(self):
-        out = sht.analyse(*_genuine_pair(), n_splits=N_SPLITS, seed=0)
+        out = sht.analyse(*_genuine_pair(), n_splits=N_SPLITS, seed=0, blocked=None, reading_percentile=75.0)
         assert out["B_split_logistic"]["mean"] > 0.80
 
     def test_and_reports_essentially_no_leakage(self):
-        out = sht.analyse(*_genuine_pair(), n_splits=N_SPLITS, seed=0)
+        out = sht.analyse(*_genuine_pair(), n_splits=N_SPLITS, seed=0, blocked=None, reading_percentile=75.0)
         assert out["leakage_at_fixed_n_logistic"] < 0.10
 
     def test_the_two_cases_are_distinguished_by_the_split_not_by_the_raw_reading(self):
         # Both read high WITHOUT the split; only the split tells them apart. This
         # is the whole argument for why the recorded numbers could not self-report.
-        leaky = sht.analyse(*_leaky_pair(), n_splits=N_SPLITS, seed=0)
-        genuine = sht.analyse(*_genuine_pair(), n_splits=N_SPLITS, seed=0)
+        leaky = sht.analyse(*_leaky_pair(), n_splits=N_SPLITS, seed=0, blocked=None, reading_percentile=75.0)
+        genuine = sht.analyse(*_genuine_pair(), n_splits=N_SPLITS, seed=0, blocked=None, reading_percentile=75.0)
         assert leaky["A_reproduce_no_split"] > 0.90
         assert genuine["A_reproduce_no_split"] > 0.90
         assert genuine["B_split_logistic"]["mean"] - leaky["B_split_logistic"]["mean"] > 0.25
@@ -111,7 +111,10 @@ class TestTheItemSplitRequiresAlignedConditions:
     def test_condition_sets_of_different_length_are_refused(self):
         plain_h, plain_b, enc_h, enc_b = _leaky_pair()
         with pytest.raises(ValueError, match="would not be aligned"):
-            sht.analyse(plain_h, plain_b, enc_h[:-1], enc_b, n_splits=2, seed=0)
+            sht.analyse(
+                plain_h, plain_b, enc_h[:-1], enc_b,
+                n_splits=2, seed=0, blocked=None, reading_percentile=75.0,
+            )
 
 
 # --- schema dispatch --------------------------------------------------------
@@ -271,3 +274,130 @@ class TestTheModelNameSurvivesBothRecordShapes:
 
     def test_a_bare_string_is_passed_through(self):
         assert sht._model_name("llama_guard_3_8b") == "llama_guard_3_8b"
+
+
+# ---------------------------------------------------------------------------
+# TODO 96 — the per-prompt recount, and the join it rests on
+# ---------------------------------------------------------------------------
+
+
+class TestTheCellRecount:
+    """Table 2's two cells, recomputed inside the fold.
+
+    The AUROC half of this screen was already held out; the COUNTS were not, and
+    they are what the paper reports. Both terms of the per-prompt rule are
+    contaminated the same way and in the same direction — item memory raises the
+    seen harmful score and lowers the benign threshold — so the fix has to
+    re-derive the threshold inside the fold too, which is the assertion below
+    that a partial fix would fail.
+    """
+
+    def test_no_verdicts_is_UNMEASURED_never_a_zero_cell(self):
+        out = sht.analyse(
+            *_genuine_pair(), n_splits=8, seed=0, blocked=None, reading_percentile=75.0
+        )
+        assert out["cells_per_100"] is None
+
+    def test_the_cells_are_reported_when_verdicts_are_present(self):
+        plain_h, plain_b, enc_h, enc_b = _genuine_pair()
+        blocked = np.zeros(len(enc_h), dtype=bool)
+        blocked[: len(enc_h) // 2] = True
+        out = sht.analyse(
+            plain_h, plain_b, enc_h, enc_b,
+            n_splits=32, seed=0, blocked=blocked, reading_percentile=75.0,
+        )
+        cells = out["cells_per_100"]
+        assert cells["n_blocked"] == int(blocked.sum())
+        for name in ("decoded_not_blocked", "blocked_without_decoding"):
+            assert 0.0 <= cells["unsplit"][name] <= 100.0
+            assert 0.0 <= cells["split"][name]["mean"] <= 100.0
+            assert cells["split"][name]["n_splits"] == 32
+
+    def test_a_guard_that_blocks_EVERYTHING_has_an_empty_D_and_not_B_cell(self):
+        # The conjunction's other term taken to its limit. If this ever reads
+        # non-zero the boolean logic is inverted somewhere, which is the one
+        # failure a range assertion cannot see.
+        plain_h, plain_b, enc_h, enc_b = _genuine_pair()
+        out = sht.analyse(
+            plain_h, plain_b, enc_h, enc_b,
+            n_splits=8, seed=0, blocked=np.ones(len(enc_h), dtype=bool),
+            reading_percentile=75.0,
+        )
+        assert out["cells_per_100"]["split"]["decoded_not_blocked"]["mean"] == 0.0
+        assert out["cells_per_100"]["unsplit"]["decoded_not_blocked"] == 0.0
+
+    def test_a_guard_that_blocks_NOTHING_has_an_empty_blocked_without_decoding_cell(self):
+        plain_h, plain_b, enc_h, enc_b = _genuine_pair()
+        out = sht.analyse(
+            plain_h, plain_b, enc_h, enc_b,
+            n_splits=8, seed=0, blocked=np.zeros(len(enc_h), dtype=bool),
+            reading_percentile=75.0,
+        )
+        assert out["cells_per_100"]["split"]["blocked_without_decoding"]["mean"] == 0.0
+
+    def test_the_recount_MOVES_on_a_leaky_probe_and_holds_on_a_genuine_one(self):
+        """The screen's whole claim, at the level of the counts.
+
+        On a probe reading item identity the held-out decode rate collapses, so
+        `decoded_not_blocked` must fall away from its unsplit value. On a probe
+        reading a transferable direction it must not. A recount that moved on
+        both would be measuring the smaller training set, not the memory.
+        """
+        def cells(pair):
+            plain_h, plain_b, enc_h, enc_b = pair
+            blocked = np.zeros(len(enc_h), dtype=bool)
+            out = sht.analyse(
+                plain_h, plain_b, enc_h, enc_b,
+                n_splits=64, seed=0, blocked=blocked, reading_percentile=75.0,
+            )
+            c = out["cells_per_100"]
+            return c["unsplit"]["decoded_not_blocked"], c["split"]["decoded_not_blocked"]["mean"]
+
+        leaky_unsplit, leaky_split = cells(_leaky_pair())
+        genuine_unsplit, genuine_split = cells(_genuine_pair())
+        assert leaky_unsplit - leaky_split > genuine_unsplit - genuine_split
+
+
+class TestTheJoinIsCheckedNotAssumed:
+    """`cells.jsonl` and the `.pt` are joined by row order and nothing else.
+
+    `ActivationBatch` carries no ids and the cells file carries no row index, so
+    a misjoin cannot be noticed downstream: every prompt gets a verdict and the
+    table comes out complete and plausible. These pin that the join is verified
+    against content and refuses rather than guessing.
+    """
+
+    @staticmethod
+    def _cells_file(tmp_path, ciphertexts, family="homoglyph"):
+        path = tmp_path / "cells.jsonl"
+        with path.open("w") as handle:
+            for index, text in enumerate(ciphertexts):
+                handle.write(json.dumps({
+                    "family": family, "ciphertext": text, "blocked": index % 2 == 0,
+                }) + "\n")
+        return path
+
+    def test_an_aligned_join_returns_the_verdicts_in_order(self, tmp_path):
+        texts = [f"cipher-{i}" for i in range(6)]
+        path = self._cells_file(tmp_path, texts)
+        got = sht.blocked_for_family(str(path), "homoglyph", [f"prompt {t} end" for t in texts])
+        assert list(got) == [True, False, True, False, True, False]
+
+    def test_a_SHUFFLED_cells_file_raises_rather_than_mis_assigning(self, tmp_path):
+        texts = [f"cipher-{i}" for i in range(6)]
+        path = self._cells_file(tmp_path, list(reversed(texts)))
+        with pytest.raises(SystemExit, match="not in the same order"):
+            sht.blocked_for_family(str(path), "homoglyph", [f"prompt {t} end" for t in texts])
+
+    def test_a_LENGTH_mismatch_raises(self, tmp_path):
+        path = self._cells_file(tmp_path, [f"cipher-{i}" for i in range(6)])
+        with pytest.raises(SystemExit, match="disagree about the arm's size"):
+            sht.blocked_for_family(str(path), "homoglyph", ["prompt cipher-0 end"])
+
+    def test_a_missing_or_absent_file_is_None_not_an_empty_verdict_set(self, tmp_path):
+        assert sht.blocked_for_family(None, "homoglyph", []) is None
+        assert sht.blocked_for_family(str(tmp_path / "nope.jsonl"), "homoglyph", []) is None
+
+    def test_a_family_absent_from_the_file_is_None(self, tmp_path):
+        path = self._cells_file(tmp_path, ["cipher-0"], family="zero_width")
+        assert sht.blocked_for_family(str(path), "homoglyph", ["prompt cipher-0 end"]) is None
