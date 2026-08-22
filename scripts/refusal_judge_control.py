@@ -128,6 +128,11 @@ def main(argv: list[str] | None = None) -> int:
     results = json.loads(out.read_text(encoding="utf-8")) if out.exists() else {}
     for family, cells in selected.items():
         triples = [conditions(cell) for cell in cells]
+        # Failed judge CALLS across all three arms (TODO 95). This control's
+        # PASS is "the judge flipped nothing", and a dead call reads
+        # `flag=False` — did not flip — so an outage scores perfectly. Counted
+        # here because `judged` keeps only the flags.
+        mechanism_errors = 0
 
         def judged(index: int, subset: list[int]) -> dict[int, bool]:
             items = [
@@ -138,8 +143,10 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 for position in subset
             ]
-            flags = [verdict.flag for verdict in judge.judge(items)]
-            return dict(zip(subset, flags))
+            nonlocal mechanism_errors
+            verdicts = judge.judge(items)
+            mechanism_errors += sum(1 for verdict in verdicts if verdict.mechanism_error)
+            return dict(zip(subset, [verdict.flag for verdict in verdicts]))
 
         every = list(range(len(cells)))
         # ⚠️ HOIST THE CALL OUT OF THE COMPREHENSION. This read
@@ -168,7 +175,9 @@ def main(argv: list[str] | None = None) -> int:
             sum(a != r for a, r in zip(anchor, recorded)) / len(anchor) if anchor else 0.0
         )
 
-        control = summarize_control(family, anchor, parrot, appended)
+        control = summarize_control(
+            family, anchor, parrot, appended, mechanism_errors=mechanism_errors
+        )
         results[family] = {
             "n": control.n,
             "n_appended": control.n_appended,

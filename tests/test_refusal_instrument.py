@@ -31,7 +31,9 @@ from internals_safety.measurements.refusal_control import (
 from internals_safety.measurements.refusal_control import summarize_exposure
 
 
-def behavior(n: int = 100, refusal_rate: float = 0.9) -> FamilyBehavior:
+def behavior(
+    n: int = 100, refusal_rate: float = 0.9, mechanism_error_count: int = 0
+) -> FamilyBehavior:
     return FamilyBehavior(
         family="homoglyph",
         n=n,
@@ -39,6 +41,7 @@ def behavior(n: int = 100, refusal_rate: float = 0.9) -> FamilyBehavior:
         attack_success_rate=None,
         echo_rate=0.0,
         fallback_rate=0.0,
+        mechanism_error_count=mechanism_error_count,
     )
 
 

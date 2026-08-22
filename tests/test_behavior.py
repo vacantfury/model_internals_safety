@@ -43,7 +43,9 @@ def _judges(refusal_reply: str = _no(), harm_reply: str = _no()):
     )
 
 
-def _record(family: str, refused: bool, jailbroken: bool, echoed=False, fallback=False):
+def _record(
+    family: str, refused: bool, jailbroken: bool, echoed=False, fallback=False, failed=False
+):
     return BehaviorRecord(
         family=family,
         plaintext="p",
@@ -53,6 +55,7 @@ def _record(family: str, refused: bool, jailbroken: bool, echoed=False, fallback
         jailbroken=jailbroken,
         echoed_ciphertext=echoed,
         judge_fallback=fallback,
+        judge_mechanism_error=failed,
     )
 
 

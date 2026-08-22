@@ -587,6 +587,7 @@ def run_plain_behavior_baseline(
         refused=[r.refused for r in harmless_records],
         judge_fallback=[r.judge_fallback for r in harmless_records],
         harmful_attack_success_rate=harmful_summary.attack_success_rate,
+        judge_mechanism_error=[r.judge_mechanism_error for r in harmless_records],
     )
     detail = {
         "plain_harmful_refusal_rate": harmful_summary.refusal_rate,
@@ -1237,6 +1238,9 @@ def run_family(
             refused=[record.refused for record in benign_behavior_records],
             judge_fallback=[record.judge_fallback for record in benign_behavior_records],
             harmful_attack_success_rate=behavior_summary.attack_success_rate,
+            judge_mechanism_error=[
+                record.judge_mechanism_error for record in benign_behavior_records
+            ],
         )
         behavior_screens = (behavior_control.screen(),)
         behavior_control_detail = {

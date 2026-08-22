@@ -72,6 +72,7 @@ class StubRefusalJudge:
                     reasoning="stub",
                     used_fallback=False,
                     raw="{}",
+                    mechanism_error=False,
                 )
             )
         return verdicts

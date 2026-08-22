@@ -3103,3 +3103,193 @@ before the guard, which has cost this repo two queue cycles.
 Its numbered-list surface is thinner, so the mechanical half currently finds
 nothing there; the artefact-backed ledger is where its `across all N` sentences
 belong, one entry each.
+
+## 8. A failed judge CALL is not a verdict, and coverage cannot see the difference (settled 2026-08-22)
+
+**Canonical for both papers.** The judge layer is shared, so this is a property
+of the measurement, not of either object of study.
+
+### 8.1 The defect
+
+`Judge.judge()` read the batch result as `raw_by_id.get(item.id, "")` and handed
+whatever came back to `parse_judge_response`. That parser fails SAFE, which is
+the right direction for a judge that answered in an unexpected format and the
+wrong one for a judge that never answered: the API's *failure text* went through
+the same word-boundary search as an answer, and resolved to the safe word.
+
+The consequence is that a total judge outage produces a **complete, clean column
+of verdicts**. Every row is populated, no exception is raised, and every number
+downstream is computed over fabricated data.
+
+**Coverage guards are structurally blind to it.** That is the reason it survived
+six weeks in `llm_guardrail_security`, where `max_tokens=16384` against a
+2048-context Llama-2 made every call return HTTP 400 and 12 of 18 cells for that
+judge were silently invalid: coverage was *perfect*. All rows got a verdict; all
+verdicts were fabricated from error strings. A guard that asks "did every item
+get an answer" returns green precisely when the failure is total.
+
+### 8.2 Two things this repo's instance adds to the upstream report
+
+**(a) The fabrication is not one-directional.** Upstream framed it as "the ASR
+reads 0.0", i.e. as the fail-safe direction taken to its limit. Measured against
+this repo's own parser on 2026-08-22, that is only the common case. The parser's
+last resort searches the *entire* raw response for either token, so an error
+string mentioning `yes` parses to the UNSAFE word:
+
+    make_mechanism_error("APIError: yes-service temporarily unavailable")
+      -> parse_judge_response(..., "yes", "no") == ("yes", "", True)
+
+So an outage can invent a jailbreak, and which way a given cell breaks depends on
+the provider's error prose. "It fails safe" was not a sufficient answer.
+
+**(b) The direction that matters here is toward the PAPER, not toward safety.**
+`instrument_layer` §3.5.2 and `as5/evidence_and_story.md` §4e record the standing
+asymmetry that every behaviour-axis defect inflates apparent safety. This one is
+the second storey of `validity_screens_hold`'s argument instead: the refusal
+judge's safe word is *not refused*, `regimes.assign_regime` splits on exactly
+that field, so a dead judge pushes decoded cells into **(B)** — AS-5's own
+headline regime. On the harm-gap quantity it is worse and directional: a failure
+confined to the harmful arm drives that arm's refusal rate toward zero and
+shrinks the gap, which is leg 1's headline (`+0.82 -> 0.00`) arriving for free.
+
+### 8.3 The fix, and the two places it is NOT the obvious one
+
+`is_unusable_judge_response` (beside the parser, importing the `llm_utils`
+sentinel rather than re-declaring it) intercepts the sentinel and the empty
+body; `Verdict.mechanism_error` marks the row; the count rides through
+`BehaviorRecord` -> `FamilyBehavior` -> `Reading.mechanism_errors`, where
+`reportable` refuses the condition.
+
+- **The denominator is NOT adjusted.** Dropping the failed rows is the tempting
+  repair and the wrong one: a smaller, cleaner-looking sample is how a broken run
+  manufactures a null. `n` stays whole and the whole condition is withheld.
+- **`used_fallback` does NOT absorb it.** That rate means "the judge answered
+  oddly", which is ordinary model drift and a number to watch. Folding an outage
+  into it is what let a dead judge look like drift; separating them makes the
+  fallback rate mean what it says for the first time.
+- **The gate binds on BOTH claim directions.** A dead judge manufactures a null
+  as readily as a positive, so `mechanism_errors` is checked ahead of the
+  positive/null split — the same argument §`validity_screens_hold` makes for
+  declared screens, one layer down.
+- **It is separate from `licensed`.** `licensed` answers "is there signal above
+  this instrument's own null", a statement about the world; this answers "did the
+  instrument run", a statement about the apparatus. Collapsing them would tell a
+  reader a condition was unmeasurable when the truth is that the pipe broke.
+
+### 8.4 It reaches the CONTROLS, and there it certifies itself
+
+The part that is not in the upstream report at all. Two screens in this repo
+pass on a LOW reading, and a dead judge produces the lowest reading there is:
+
+- **`behavior_control`** (the benign-arm judge control) passes when benign-arm
+  ASR sits below the harmful ASR by the rule-of-three bound. A judge whose calls
+  all fail reads benign ASR **0.00** — the cleanest possible pass, for the worst
+  possible reason, certifying "this judge does not score the encoding" from a
+  judge that never answered.
+- **`refusal_control`** (the echo screen) is sharper still: it passes when the
+  judge flips *nothing*, and a failed call reads `flag=False`, i.e. *did not
+  flip*. Its passing condition and its failure mode are the same observation.
+
+Both now carry the count, `Screen.mechanism_errors` fails `clears` closed, and
+`summarize_control` on each takes it keyword-only with **no default** — so a
+caller that has not counted cannot call. An empty arm is deliberately NOT
+reported as an outage: it is already withheld by its NaN margin, and a second,
+wrong reason would send a reader after a failure that did not happen.
+
+### 8.5 The graded judge had the same hole one level in
+
+`StrongRejectJudge` looked safe — an unparsed rubric already reads
+`quality=None` and drops out of `scored`. But `mean_quality` and
+`substantive_rate` are taken **over the parsed rows**, so the denominator was
+already being adjusted. That is defensible when the excluded rows are
+judged-and-unreadable and indefensible when they are calls that never happened:
+the survivors are then a sample selected by whether the API was up, and nothing
+in the data says whether that selection is random. Both aggregates now return
+`None` when any call failed, and `parse_failure_rate` is computed over the rows
+the judge actually answered, so it too means what it says.
+
+### 8.6 What generalises
+
+**The reusable rule: a guard that asks whether every row has an answer cannot
+ask whether any answer is real.** Completeness and validity are different
+questions, and the first one returns green most confidently exactly when the
+second one has failed totally. Wherever a pipeline fills a field from a fallible
+external call, the fallback value and the failure value must be distinguishable
+at the point of the call — never reconstructed downstream from a rate.
+
+Second, and this is the seventh application of the repo's own trigger: every
+field added here is REQUIRED and keyword-only, so omitting it is a `TypeError`.
+The reassuring value (`False`, `0`) is also the majority value, which is the
+exact shape that has now failed here five times (`strata`, `device`,
+`inherited`, the control floor, `Screen.direction`). `WATCHED` in
+`tests/test_entrypoint_call_sites.py` gained both `summarize_control`
+signatures, so a stale caller fails at `pytest` time rather than inside a
+running job with a live judge.
+
+### 8.7 ✅ Every number already reported is CLEAR — checked, not assumed
+
+No run record on disk carries `mechanism_errors`, so the first instinct is to
+say that every judge-derived number this repo has published came from an
+instrument that could not tell an outage from a verdict. That is true about the
+instrument and it is not the end of the question, because the old code left a
+usable trace.
+
+**The retired code scored a mechanism error as `used_fallback=True`.** Verified
+on the parser directly across the sentinel, a blank body, an error string
+containing `no` and one containing `yes`: all four return `used_fallback=True`,
+by two different routes. The only escape would be an error message that
+`json_repair` resolves to a dict with an `answer` key whose first token is
+`yes`/`no`, which no provider's error prose is. So for any recorded condition,
+
+    judge_fallback_rate == 0.0  =>  no unparseable verdict  =>  no failed call.
+
+**Measured over every run record on disk (offline, keyless, $0):** 82 records,
+of which **39 carry a judge-derived number, and all 39 also record a fallback
+rate** — coverage is complete, with no judge-bearing record silent on the
+question. Across them, **486 recorded fallback readings** (`judge_fallback_rate`
+346, `benign_arm_judge_fallback_rate` 140), and **every one is exactly 0.0000**.
+
+**So the defect is real, the exposure is nil, and no published number moves.**
+That is a different outcome from the upstream incident, where the same defect
+had already invalidated 12 of 18 cells before it was found, and the difference
+is not luck about our judges: `used_fallback` was carried on every verdict and
+reported on every summary here from the start, which is the instrumentation the
+sibling lacked. It did not *prevent* the defect — it could not, since nothing
+gated on it — but it is what makes the retrospective answerable at all, and that
+is the case for reporting a rate nobody currently gates on.
+
+⚠️ **The clearance is retrospective only and does not travel forward.** It holds
+for the runs on disk; the code fix is what makes it hold for the next run, and
+re-checking a future run by this route is no longer possible, because the two
+signals are now deliberately separate. **This is deliberately NOT shipped as a
+script**, for that reason: a checker that reads `judge_fallback_rate` as an
+outage proxy is correct on every record written before 2026-08-22 and wrong on
+every record written after, and a guard that goes quietly wrong on new data is
+worse than no guard. Reproduce it on the older records with:
+
+```python
+import json, pathlib
+
+def values(node):
+    """Every (key, value) pair, at any depth."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if isinstance(v, (dict, list)):
+                yield from values(v)
+            else:
+                yield k, v
+    elif isinstance(node, list):
+        for v in node:
+            yield from values(v)
+
+readings = [
+    (key, value, str(path))
+    for path in pathlib.Path("outputs/runs").rglob("results.json")
+    for key, value in values(json.loads(path.read_text()))
+    if "fallback" in key.lower() and isinstance(value, (int, float))
+]
+assert readings, "no fallback readings found — the walk is wrong, not the data"
+print(len(readings), "readings;", [r for r in readings if r[1] > 0.0] or "all zero")
+```
+
+Run against the tree on 2026-08-22: **486 readings, all zero.**

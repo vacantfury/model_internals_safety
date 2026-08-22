@@ -78,6 +78,7 @@ class StubJudge:
                     specificity=4 if high else 2,
                     their_refusal=0.0 if high else 1.0,
                     raw="stub",
+                    mechanism_error=False,
                 )
             )
         return RubricScoring(scores=tuple(scores))
@@ -162,7 +163,7 @@ class TestTheDiscriminationControl:
             def score(self, items):
                 return RubricScoring(
                     scores=tuple(
-                        RubricScore(i.id, 0.5, 3, 3, 0.0, "stub") for i in items
+                        RubricScore(i.id, 0.5, 3, 3, 0.0, "stub", mechanism_error=False) for i in items
                     )
                 )
 
@@ -181,7 +182,7 @@ class TestTheDiscriminationControl:
             def score(self, items):
                 return RubricScoring(
                     scores=tuple(
-                        RubricScore(i.id, None, None, None, None, "junk") for i in items
+                        RubricScore(i.id, None, None, None, None, "junk", mechanism_error=False) for i in items
                     )
                 )
 
@@ -338,7 +339,7 @@ class TestAnImpossibleFloorIsUnmeasuredNotAFailure:
                     is_object = item.id.split("::")[1].startswith("b")
                     quality = 0.9 if is_object else (0.5 if i % 2 else 1.0)
                     scores.append(
-                        RubricScore(item.id, quality, 5, 5, 0.0, "stub")
+                        RubricScore(item.id, quality, 5, 5, 0.0, "stub", mechanism_error=False)
                     )
                 return RubricScoring(scores=tuple(scores))
 

@@ -25,7 +25,10 @@ verbatim; its refusal item is deliberately NOT used — see that module's docs.
 
 from internals_safety.judges.base import Judge, JudgeItem, JudgeService, Verdict
 from internals_safety.judges.harmbench import HarmBenchJudge
-from internals_safety.judges.parsing import parse_judge_response
+from internals_safety.judges.parsing import (
+    is_unusable_judge_response,
+    parse_judge_response,
+)
 from internals_safety.judges.refusal import RefusalJudge
 from internals_safety.judges.strongreject import (
     RubricScore,
@@ -46,6 +49,7 @@ __all__ = [
     "RubricScoring",
     "StrongRejectJudge",
     "Verdict",
+    "is_unusable_judge_response",
     "parse_judge_response",
     "parse_rubric",
     "quality_from",

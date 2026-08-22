@@ -29,7 +29,13 @@ from internals_safety.measurements.refusal_control import (
 
 
 def control(**overrides) -> RefusalControl:
-    base = dict(family="zero_width", n=100, parrot_flip_rate=0.0, appended_flip_rate=0.0)
+    base = dict(
+        family="zero_width",
+        n=100,
+        parrot_flip_rate=0.0,
+        appended_flip_rate=0.0,
+        mechanism_errors=0,
+    )
     return RefusalControl(**{**base, **overrides})
 
 
@@ -96,6 +102,7 @@ class TestSummarize:
             anchor_refused=[True, True, False, False],
             parrot_refused=[True, True, True, False],
             appended_refused=[True, True, True, True],
+            mechanism_errors=0,
         )
         assert result.n == 4                    # arm C: everything
         assert result.parrot_flip_rate == 0.75  # 3 of 4
@@ -114,6 +121,7 @@ class TestSummarize:
             anchor_refused=[True] * 100,
             parrot_refused=[True] * 74 + [False] * 26,
             appended_refused=[True] * 100,
+            mechanism_errors=0,
         )
         assert result.n == 100
         assert result.parrot_flip_rate == 0.74
@@ -125,10 +133,10 @@ class TestSummarize:
 
     def test_pairing_is_positional_and_mismatched_lengths_raise(self):
         with pytest.raises(ValueError):
-            summarize_control("x", [True], [True, False], [True])
+            summarize_control("x", [True], [True, False], [True], mechanism_errors=0)
 
     def test_an_empty_corpus_is_unmeasurable_not_clean(self):
-        result = summarize_control("x", [], [], [])
+        result = summarize_control("x", [], [], [], mechanism_errors=0)
         assert result.n == 0
         assert math.isnan(result.parrot_flip_rate)
         assert result.clears() is None

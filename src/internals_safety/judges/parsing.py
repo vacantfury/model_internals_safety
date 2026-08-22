@@ -94,3 +94,44 @@ def parse_judge_response(
     if found is not None:
         return found, "", True
     return safe_word, "", True
+
+
+# ---------------------------------------------------------------------------
+# Mechanism errors — added 2026-08-22, ported from `llm_guardrail_security`
+# (commits `841ab96`, `ffd9965`) per TODO 95. NOT part of the copied body above.
+# ---------------------------------------------------------------------------
+
+
+def is_unusable_judge_response(raw_response: str) -> bool:
+    """True iff `raw_response` is a FAILED CALL rather than a judge's answer.
+
+    `parse_judge_response` fails SAFE, which is right for a judge that answered
+    in an unexpected format and catastrophic for a judge that never answered at
+    all: the failure text goes through the same word-boundary search as a real
+    verdict, so an HTTP 400 becomes a clean `safe_word` and a run of dead calls
+    reports a perfectly safe model. Measured on this repo's own parser
+    2026-08-22, and it is not one-directional — a provider error string
+    containing the token `yes` parses to the UNSAFE word, so an outage can
+    fabricate a positive verdict as readily as a negative one.
+
+    Two shapes count, and neither is a model output:
+
+    * **The `llm_utils` sentinel.** Services wrap genuine processing failures
+      (context overflow, network error, timeout, exhausted retries, a failed
+      batch item) with a null-byte marker, documented "exclude from result
+      denominators". Imported rather than re-declared: a copied sentinel
+      literal is a drift waiting to certify a dead run as healthy.
+    * **Nothing at all.** A blank body, or an id absent from the batch result
+      map. Callers reach this only for items they actually SENT — an empty
+      model *response* is short-circuited before the judge is called — so blank
+      here means the judge was asked and gave back nothing.
+
+    What the caller must NOT do with the answer, all three learned upstream:
+    adjust the denominator (silently shrinking n manufactures nulls), log a
+    reassuring "verdict still extracted" line, or treat the hit as parse
+    drift — `used_fallback` means the judge answered oddly, and conflating
+    the two hides an outage inside a rate that looks like model drift.
+    """
+    from llm_utils import is_mechanism_error
+
+    return is_mechanism_error(raw_response) or not raw_response.strip()

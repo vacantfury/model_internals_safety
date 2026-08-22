@@ -330,7 +330,7 @@ class TestScreenDirection:
         def control(flip: float) -> RefusalControl:
             return RefusalControl(
                 family="x", n=100, parrot_flip_rate=flip,
-                appended_flip_rate=0.0, n_appended=50,
+                appended_flip_rate=0.0, n_appended=50, mechanism_errors=0,
             )
 
         clean, broken = control(0.0), control(1.0)

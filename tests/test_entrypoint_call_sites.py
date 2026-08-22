@@ -35,10 +35,12 @@ import pytest
 
 from internals_safety import pipeline, provenance
 from internals_safety.measurements import (
+    behavior_control,
     causal,
     control_floor,
     deployment,
     length_null,
+    refusal_control,
     sae_reconstruction,
 )
 
@@ -89,6 +91,20 @@ WATCHED = {
     "run_causal_gate": causal.run_causal_gate,
     "guard_verdict_probe": causal.guard_verdict_probe,
     "refusal_probe": causal.refusal_probe,
+    # Added 2026-08-22, seventh application of the trigger (TODO 95). Both
+    # judge-side controls gained a REQUIRED keyword-only failed-call count, so a
+    # stale call is a TypeError — and both are scored from a live judge's
+    # verdicts inside a running job, which is the worst place to learn it.
+    #
+    # Keyed by the LOCAL alias, as `derive_control_floor` is. There is no
+    # collision today: `phase0_regime_map` aliases the behaviour one and
+    # `as6_guard_probe` aliases both GUARD-side ones, leaving the bare name to
+    # `refusal_judge_control` alone. If a later script imports a different
+    # `summarize_control` bare, this binds it to the wrong signature — which
+    # fails LOUD at pytest time rather than certifying anything, so the failure
+    # direction is the safe one.
+    "summarize_behavior_control": behavior_control.summarize_control,
+    "summarize_control": refusal_control.summarize_control,
 }
 
 

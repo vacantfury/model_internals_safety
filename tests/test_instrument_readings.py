@@ -290,7 +290,7 @@ class TestTheFourOriginalMeasurements:
         assert not got.reportable
         assert any("no negative control" in why for why in got.why_not_reportable())
 
-        got = behavior_reading(FamilyBehavior("hex", 100, 0.3, 0.4, 0.02, 0.0), length_null_margin=0.2)
+        got = behavior_reading(FamilyBehavior("hex", 100, 0.3, 0.4, 0.02, 0.0, mechanism_error_count=0), length_null_margin=0.2)
         assert not got.reportable
         assert any("no negative control" in why for why in got.why_not_reportable())
 
@@ -299,7 +299,7 @@ class TestTheFourOriginalMeasurements:
         does."""
         from internals_safety.measurements.behavior import FamilyBehavior, reading as behavior_reading
 
-        got = behavior_reading(FamilyBehavior("hex", 100, 0.3, 0.4, 0.02, 0.0))
+        got = behavior_reading(FamilyBehavior("hex", 100, 0.3, 0.4, 0.02, 0.0, mechanism_error_count=0))
         assert "BINARY" in got.operating_point and "StrongREJECT" in got.operating_point
         assert got.detail["binary_judge_caveat"] == "strongreject_2402.10260"
 

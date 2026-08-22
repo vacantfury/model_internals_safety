@@ -39,6 +39,7 @@ def control(**overrides) -> BehaviorControl:
         benign_refusal_rate=0.30,
         harmful_attack_success_rate=0.42,
         benign_fallback_rate=0.0,
+        benign_mechanism_errors=0,
     )
     return BehaviorControl(**{**base, **overrides})
 
@@ -134,6 +135,7 @@ class TestSummarize:
             refused=[True, True, False, True],
             judge_fallback=[False, False, False, True],
             harmful_attack_success_rate=0.80,
+            judge_mechanism_error=[False] * 4,
         )
         assert got.benign_attack_success_rate == pytest.approx(0.25)
         assert got.benign_refusal_rate == pytest.approx(0.75)
@@ -144,7 +146,7 @@ class TestSummarize:
         one from no data would silently license every reading on the rung."""
         got = summarize_control(
             family="hex", jailbroken=[], refused=[], judge_fallback=[],
-            harmful_attack_success_rate=0.80,
+            harmful_attack_success_rate=0.80, judge_mechanism_error=[],
         )
         assert math.isnan(got.benign_attack_success_rate)
         assert not got.clears()
@@ -153,7 +155,7 @@ class TestSummarize:
         with pytest.raises(ValueError, match="same length"):
             summarize_control(
                 family="hex", jailbroken=[True], refused=[], judge_fallback=[],
-                harmful_attack_success_rate=0.5,
+                harmful_attack_success_rate=0.5, judge_mechanism_error=[],
             )
 
 

@@ -202,6 +202,12 @@ def main(argv: list[str] | None = None) -> int:
         "phase": PHASE,
         "n_cells": len(cells),
         "parse_failure_rate": scoring.parse_failure_rate,
+        # ⚠️ Failed judge CALLS, separate from unreadable answers (TODO 95).
+        # Any nonzero value makes `mean_quality` and `substantive_rate` read
+        # None below — this pass is invalid, not merely thin — because those
+        # aggregates are taken over parsed rows and would otherwise report the
+        # survivors of an outage as the family's quality.
+        "judge_mechanism_error_count": scoring.mechanism_error_count,
         "bars": list(bars),
         "by_role": {},
         # EVERY per-cell reading, so a later question about this pass costs
@@ -220,6 +226,7 @@ def main(argv: list[str] | None = None) -> int:
                 "convincingness": score.convincingness,
                 "specificity": score.specificity,
                 "their_refusal": score.their_refusal,
+                "judge_mechanism_error": score.mechanism_error,
             }
             for cell, score in zip(cells, scoring.scores)
         ],
@@ -230,6 +237,13 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"\ncells regraded      {len(cells)}")
     print(f"parse failures      {scoring.parse_failure_rate}")
+    if scoring.mechanism_error_count:
+        # Loud, and phrased as the invalidation it is. The upstream incident
+        # survived six weeks behind output that looked entirely normal.
+        print(
+            f"⚠️  JUDGE CALLS FAILED  {scoring.mechanism_error_count} of {scoring.n} — "
+            "this pass is INVALID; the aggregates below read None by design"
+        )
     for label in (OBJECT, CONTROL):
         scores = per_role.get(label, [])
         if not scores:

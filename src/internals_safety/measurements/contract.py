@@ -23,6 +23,16 @@ appear in a paper", and it fails CLOSED on every axis: unmeasured, unlicensed,
 loud on controls, or inside the length null all return False. A number that
 cannot say why it is trustworthy is not trustworthy.
 
+**One axis is about the APPARATUS rather than the world: `mechanism_errors`**
+(added 2026-08-22, TODO 95). Every other axis asks whether an observed number
+means what it claims; this one asks whether the instrument ran at all. A judge
+whose API calls failed still returns a verdict per row — the failure text goes
+through the same parser as an answer and fails safe — so coverage stays PERFECT
+while every verdict is fabricated. It is checked ahead of the direction split
+and it binds on both, because a dead judge manufactures a null as readily as a
+positive, and it is separate from `licensed` so a reader is never told a
+condition was unmeasurable when the truth is that the apparatus broke.
+
 **The claim's DIRECTION is part of the contract (added 2026-08-06, TODO 42).**
 The first version asked one question — *does the instrument read loudly where the
 answer is known to be nothing?* — which is **specificity**, and it is the right
@@ -139,15 +149,34 @@ class Screen:
     margin: float = 0.0
     # What this screen rules out, in a reviewer's words.
     defeats: str = ""
+    # Failed judge calls behind this screen's own statistic (TODO 95).
+    #
+    # derived: summed from the arm's per-cell verdicts by the control module that
+    # builds the screen (`behavior_control.benign_mechanism_errors`,
+    # `refusal_control.mechanism_errors`). The literal is the value for a screen
+    # with no judge behind it — computed from probe scores, tokenizer output or
+    # cached text — where zero failed calls is a fact, not a guess at the
+    # majority. That is the distinction `judges.base.Verdict`'s required field
+    # turns on: there, every construction claims a judge answered; here, most
+    # constructions never ask one.
+    #
+    # It exists because the alternative is a screen certifying itself off a
+    # dead judge. `behavior_control`'s benign-arm ASR reads ~0 when the judge
+    # is healthy AND when every call 400s, and the screen clears on the low
+    # reading either way — "the judge does not score the encoding", asserted
+    # from a judge that never answered.
+    mechanism_errors: int = 0
 
     @property
     def clears(self) -> bool:
-        """Fails CLOSED on NaN — an uncomputed screen never passes.
+        """Fails CLOSED on NaN and on any failed judge call.
 
         Routes on `direction`, which is why that field is required: the two
         cases are not variants of one comparison, they are opposite ones, and
         a screen that guesses is a screen that can certify its own failure.
         """
+        if self.mechanism_errors > 0:
+            return False
         if self.observed != self.observed or self.floor != self.floor:  # NaN
             return False
         if self.direction == "above":
@@ -215,6 +244,31 @@ class Reading:
     # computed — again disqualifying, not passing. Character length separates
     # the harmful corpus from the benign one at AUROC 0.654 and every encoder
     # preserves it, so an uncontrolled number is uninterpretable.
+    # Failed judge calls behind this reading (TODO 95, 2026-08-22). ANY hit
+    # withholds the condition, on BOTH claim directions and regardless of
+    # `licensed`.
+    #
+    # **Why it is not folded into `licensed`.** `licensed` answers "is there
+    # signal above this instrument's own null" — a statement about the world.
+    # This answers "did the instrument run" — a statement about the apparatus,
+    # and the two withhold for reasons a reader must not have to disentangle.
+    # A judge outage is the apparatus, so `why_not_reportable` names it in its
+    # own words instead of saying the condition was unmeasurable.
+    #
+    # **Why zero tolerance rather than a rate with a knob.** The global rule
+    # puts tunables in YAML, and the *comparison* below is deliberately not one:
+    # the knob would govern how much fabricated data may enter a published
+    # rate. `n` is never adjusted to compensate — dropping the failed rows
+    # shrinks the denominator silently, which is how a broken run manufactures a
+    # null (upstream `ffd9965`).
+    #
+    # derived: summed from the condition's per-cell verdicts by the instrument
+    # that builds the reading (`behavior.reading` reads
+    # `FamilyBehavior.mechanism_error_count`, `refusal.reading` reads
+    # `HarmGap.mechanism_errors`), so no caller can pass a reassuring value it
+    # did not measure. The literal is the value for an instrument that calls no
+    # judge at all — every probe-side reading in the roster.
+    mechanism_errors: int = 0
     length_null_margin: float | None = None
 
     # P7. Whether layer/position selection was inside the null rather than an
@@ -354,6 +408,12 @@ class Reading:
         above the instrument's own null — is SUPPORTING evidence rather than a
         disqualification. Unmeasured stays disqualifying on both paths.
         """
+        # The apparatus gate, ahead of the direction split. A judge that never
+        # answered manufactures a null exactly as readily as a positive — the
+        # same argument `validity_screens_hold` makes for declared screens —
+        # so this cannot live on one branch.
+        if self.mechanism_errors > 0:
+            return False
         if self.claim == "null":
             return (
                 self.licensed is not None
@@ -403,6 +463,12 @@ class Reading:
         specificity margin would send a reader after evidence that cannot exist.
         """
         reasons = []
+        if self.mechanism_errors > 0:
+            reasons.append(
+                f"{self.mechanism_errors} judge call(s) FAILED on this condition — "
+                "those verdicts were fabricated from error text, so every rate here "
+                "is computed over data the instrument never produced"
+            )
         if self.licensed is None:
             reasons.append("unmeasured: this instrument could not read this condition")
         if self.claim == "null":
