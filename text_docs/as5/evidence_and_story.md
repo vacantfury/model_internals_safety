@@ -1446,6 +1446,32 @@ uncited (it entered the bib for the deleted section) and is still the closest
 prior on the harmfulness/refusal split, so Related Work is the place it should
 return. Neither blocks anything.
 
+### The survey is IN the kits now (2026-08-21, TODO 84 closed)
+
+Related Work carried the premise as a bare assertion for as long as it existed:
+*"that literature and the jailbreak literature have largely stayed separate."*
+That sentence is gone, replaced by two paragraphs that measure it — the counts,
+the frame's two stated limits, and the two near misses. **The corrected form is
+what shipped**: not an empty cell, but a control the founding paper ran once at
+n=1, scored as capability, in an appendix column, that no successor carried.
+Closing sentence of the block: *"We are restoring a control the founding paper
+ran once, and turning it into a rate across models and encodings."*
+
+⚠️ **`handa2025when` is a NeurIPS 2025 WORKSHOP paper**, not main-conference —
+checked in the master bib before citing, and the bib renders the workshop
+booktitle. It is the sharpest exhibit in the survey and it is a workshop tier;
+both are true and neither is hidden.
+
+⚠️ **`build_venue_bib.py as-5` still FAILS, and correctly.** Seven of AS-5's
+cited keys (`rottger2024xstest`, `yuan2024cipherchat`, `souly2024strongreject`,
+`chao2024jailbreakbench`, `lambert2025tulu3`, `qwen2024qwen25`,
+`jiang2023mistral`) exist in the science masters under DIFFERENT key names, so
+the kit bib cannot yet be generated — that is TODO 74 and it is a key-drift
+problem, not a missing-paper problem. The two new entries were copied
+**verbatim from the master under the master's own keys**, so they add no drift;
+neither carries a `note` field, so nothing curation-shaped can be typeset.
+Build: clean, no undefined citations, both new keys resolved in the `.bbl`.
+
 ## 4b. ⚠️ THE FALSIFICATION TEST RAN AND §4a's AXIS IS REFUTED (2026-08-08) *(verdict stands; its REASON is withdrawn — see §4c)*
 
 Jobs `9010897` (Mistral-7B-Instruct-v0.3, 1:15:12) and `9011034` (Tulu-3-8B,
