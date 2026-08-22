@@ -2525,6 +2525,39 @@ within 0.06 on every cell: `homoglyph` -0.01/+0.56/+0.46/+0.23 against
 and is, if anything, slightly the other way: it refuses benign homoglyph a point
 MORE often than harmful.
 
+## 4x ✅ THE PAPER EDITS LANDED IN BOTH KITS (2026-08-22)
+
+Four edits, applied to both kits from ONE source so parity holds by construction
+rather than by a later diff. Both build clean: 0 overfull, 0 undefined.
+
+1. **Defect (11) rewritten as found-then-closed**, keeping its number. Removing it
+   would have forced a renumber across two kits and every cardinality claim, and
+   would have lost the point: a defect found is not unfound by being fixed. It now
+   carries the measurement (16 cells, max delta 0.10, fifteen of sixteen within
+   0.02), the Tulu-3 homoglyph cell stated rather than rounded (0.78 benign against
+   0.88 harmful, running in the direction that would inflate its +0.46 gap), and the
+   two unreadable encodings reading 0.00 on both arms as the floor demonstration.
+2. **The direction paragraph** notes (11) is closed and says why it stays numbered.
+3. **Limitations, the judge paragraph** now reports three validations instead of
+   two: plaintext separation, the by-construction negative control, and the
+   two-family annotator check (agreement 0.90-1.00 per stratum; judge false positive
+   0.040 / 0.050, false negative 0.051 / 0.043; annotators agree with each other
+   0.930 with nine of twelve disagreements inside the judge's own "refused"). It
+   states in bold that this is model judgement and not human annotation, reports the
+   one family's 27 exclusions WITH their concentration, and cites the inherited
+   human kappa 0.79 explicitly as context rather than as validation of this
+   configuration.
+4. **Defect (4)** gains the composition number: pool-weighted, 0.63 and 0.49 of
+   judge-`refused` cells are labelled echo or irrelevance by the two annotators,
+   with the note that this is not judge error because the judge was instructed to
+   count them and the annotators were given the same instruction.
+
+⚠️ **One wrong number was caught by re-checking against the artifact, and it was
+mine, in the edit itself.** The draft said "fourteen of sixteen fall within 0.02"
+where the artifact says fifteen, understating our own result. It came from reading
+a rounded console table instead of the JSON. **Recompute every figure from the
+artifact at the moment it enters a `.tex`, not from the summary that reported it.**
+
 ## 5. What it DOES support, and it is a stronger paper *(SUPERSEDED — see §4a)*
 
 **Encoded jailbreaks are mostly not comprehension failures — and the standard
