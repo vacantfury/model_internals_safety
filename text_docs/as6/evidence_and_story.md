@@ -2429,18 +2429,31 @@ rather than number it. So neither document needs `xr`, there is no circular
 build order, and each compiles standalone, which is what a venue taking the two
 files separately needs.
 
-**Two deliberate deviations from the AS-5 sibling, both stated rather than
-drifted into.** AS-5 numbers its supplement sections 1, 2, ... with no
-`\appendix`, and titles it `Supplementary Document: <title>`: **matched.** But
-AS-5 carries a `supplement.bib` that is BYTE-IDENTICAL to its `paper.bib`, and
-AS-6 points both documents at `paper.bib` instead. A duplicated bibliography is
-a second copy that can drift, which is the defect the kit-parity test exists to
-catch, one file over.
+**One deviation from the AS-5 sibling, and it was WRONG. Reverted the same
+sitting.** AS-5 numbers its supplement sections 1, 2, ... with no `\appendix`,
+and titles it `Supplementary Document: <title>`: matched. It also carries a
+`supplement.bib`, which at the moment I looked was byte-identical to its
+`paper.bib`, so I pointed both AS-6 documents at `paper.bib` and wrote the
+reasoning down as *a duplicated bibliography is a second copy that can drift*.
+
+⛔ **That argument does not apply, because both files are GENERATED.**
+`scripts/build_venue_bib.py` renders every kit's bibliography from the science
+corpus, so the two cannot drift. What the separate file buys is the opposite
+thing: **a per-document KEY SET.** The supplement cites a small subset, and its
+own bib is 60 lines against the paper's 240, so pointing it at `paper.bib`
+would have shipped 180 lines of works the supplement never mentions.
+
+**The identical state I read as evidence was a coincidence of the corpus, not a
+design.** The generator's own comment says so in terms, and it was written the
+same day by the session that split AS-5. Reading a byte-identical pair as
+duplication rather than as two renders of one source is the error, and the way
+to have avoided it was to look for the thing that WRITES the file before
+theorising about why two files agree.
 
 ### 29.1 The split created an unguarded surface, and the guards had to grow
 
-Two of them, and both are the same shape: **a discovery rule written when a kit
-was one file.**
+Three of them, and all three are the same shape: **a discovery rule written
+when a kit was one file.**
 
 `test_paper_source_parity.py` globbed `**/paper.tex`, so `supplement.tex` would
 have shipped **unguarded across kits** while the test stayed green. It now
@@ -2457,3 +2470,38 @@ DIRECTORY whose prose is all its document roots, and a claim must be found once
 per kit rather than once per file. The guard crying wolf during a restructure is
 the worst possible time for it to be wrong, because that is when its output is
 least likely to be believed.
+
+### 29.2 The third one caught itself, and it was the one I had argued with
+
+`scripts/build_venue_bib.py` was ALREADY correct: the peer session generalised
+it to every document root the same day, for the AS-5 split. So the suite's one
+remaining failure was not the generator being stale, it was AS-6's `paper.bib`
+being stale against a key set my own split had changed, and the test said so in
+its message: *re-run `scripts/build_venue_bib.py <paper-id>`*.
+
+**A guard I had reasoned past in prose stopped me in code an hour later.** The
+`supplement.bib` I called duplication is what that script exists to produce, and
+running it is what showed the 60-versus-240 line difference that settles it. The
+generator regenerates all four bibliographies from one corpus; all four
+documents rebuild at exit 0 with zero errors, zero undefined references and zero
+overfull boxes.
+
+
+### 29.3 §5.8 now says what the Limitations say about it
+
+The rewritten Limitations paragraph asserts that the format-detector claim "is
+stated on the uncontrolled read", and §5.8 itself did not say so. A paper whose
+Limitations disclose a caveat its results section never mentions makes the
+reader do the joining, and a referee who reads the sections in order meets the
+claim before the caveat.
+
+§5.8 now states it in place: this cell alone is read from a probe fitted on all
+items; the holdout is applied at the tuned operating point and the two cells are
+read at different ones; the direction is known and does not favour us (at the
+tuned point removing item memory raises it from at most 4 per 100 to between 7
+and 26); what that does at the permissive point is unmeasured; and a held-out
+bound near zero would support the claim MORE strongly than the number we print.
+It cross-references the holdout section, which needed a `\label` added, the
+second dangling label this restructure produced. Both were caught by refusing to
+write a `\ref` without checking its target exists, which cost seconds each time
+and would have cost a build failure or, worse, a rendered `??`.
