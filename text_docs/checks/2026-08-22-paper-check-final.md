@@ -1,10 +1,11 @@
 # AS-6 paper check — FINAL mode (2026-08-22)
 
 - **Mode:** final. **Verdict: pass-with-advisories.** Blocking: 0.
-- **Venue:** AAAI-27 AI Alignment special track. Limits from the science venue
-  record (`venues/aaai27_venue_info.md`, live-verified 2026-08-08 and 2026-08-21),
-  not from memory: 7 pages main content, pages 8-9 references only, 9 max;
-  double-blind; appendix has no in-PDF home; anonymous-repo links banned.
+- **Venue:** the target venue, named only in the private science venue record
+  (`venues/`, live-verified 2026-08-08 and 2026-08-21) and never here. Limits
+  taken from that record rather than from memory: 7 pages main content, later
+  pages references only, 9 max; double-blind; appendix has no in-PDF home;
+  external repository links banned.
 - **State keyed:** `paper.pdf` 8 pages, references alone on page 8; `supplement.pdf`
   separate. Any later edit stales this.
 
