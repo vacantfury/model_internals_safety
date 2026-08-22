@@ -1545,8 +1545,78 @@ only checks *does the named artefact reproduce the number* would pass here by
 raising "not found", which is correct behaviour and still leaves the paper
 carrying a subsection whose evidence is one purge away from unreproducible.
 
-**The rule this earns:** a run whose records are written outside the collected
-path is not a completed run, it is a result with an expiry date. Either the
-records move to the collected path in the same session, or the fact that they
-did not is filed as a task with the job ids, never as a clause inside a results
-section. `ops/` should place records under the synced tree by default.
+**⛔ THE RULE FIRST WRITTEN HERE WAS WRONG AND IS CORRECTED BELOW (§21).** It
+read: *a run whose records are written outside the collected path is not a
+completed run*. The records were not in a wrong place. **The collector was
+pointed at the wrong place**, and the true rule is the opposite in direction:
+when a record is missing, check what the collector actually covers before
+concluding the record is not there.
+
+
+## 21. THE COLLECTOR WAS POINTED AT THE WRONG TREE, AND THE WRAPPER SUBSECTION IS NOW FULLY BACKED (2026-08-21)
+
+The owner ran the scratch listing. **Everything survived**, and the cause is one
+fact that explains all three provenance defects of the evening.
+
+### The cause
+
+The cluster's outputs live at `/scratch/<user>/internals_safety_outputs/`. The
+configured down-sync site points at `~/projects/model_internals_safety/outputs/`.
+**Both trees exist and both hold content**, so the sync kept succeeding and kept
+delivering a partial mirror. Every GPU run wrote to the scratch tree and was
+invisible to it; the CPU jobs that wrote to the project tree arrived fine, which
+is why nothing ever looked broken.
+
+Two sync sites added (scratch `runs/` and `analysis/`, excluding `activations/`),
+so future GPU runs land automatically.
+
+### What arrived, including two records nobody knew were missing
+
+`guard-scaffold-{llama-guard,wildguard}_…{9049076,9049077}` (the wrapper runs),
+`guard-benign-llama-guard_…9012160` (Llama Guard's benign arm), a SECOND
+WildGuard benign run `…9012159`, and `guard-causal-llama-guard_…9033528` —
+whose directory name confirms §17 against the cluster rather than against two
+docs disagreeing.
+
+### Every wrapper claim reproduces
+
+Verified against the arrived records, not against `phase1_map.md`:
+Llama Guard plaintext 0.98 harmful / **0.23** benign, harm gap **0.75**;
+WildGuard 0.99 / **0.45**, gap **0.54**; WildGuard `combining_marks`
+scaffold-benign **0.44** against an encoded-harmful block of **0.25**. The two
+missing fields were `plain_benign_block_rate` and `scaffold_arm`, absent from
+every record we had held.
+
+### ⛔ And the fourth set-membership defect, which is also a circularity
+
+> The two guards also differ systematically on benign encoded content (one
+> blocks 0.29--0.53 of it, the other 0.05--0.29)
+
+**The two ranges are over different sets.** Llama Guard's `0.29–0.53` includes
+`fullwidth` (0.53, its maximum); WildGuard's `0.05–0.29` excludes `fullwidth`
+(0.00, which would be its minimum). Recomputed over identical membership:
+
+| set | Llama Guard | WildGuard |
+|---|---|---|
+| all five surface conditions | 0.29–0.53 | **0.00**–0.29 |
+| excluding `fullwidth` | **0.29–0.42** | 0.05–0.29 |
+| the three reported conditions | 0.29–0.39 | 0.23–0.29 |
+
+WildGuard's published number matches the fullwidth-excluded row and Llama
+Guard's matches the all-five row, so one guard's figure was never recomputed
+under the other's exclusion. **Excluding `fullwidth` is the correct set for a
+second reason the paper had not stated: `fullwidth` is the condition the
+sentence exists to explain, so including it makes the argument rest on its own
+conclusion.** Corrected to 0.29–0.42 against 0.05–0.29, with the exclusion and
+its reason stated in the text. The contrast survives.
+
+### Where this leaves the evening
+
+Four defects of one class, all in claims whose individual numbers were correct:
+a bound over a partly unmeasured set (§15), a warrant that did not follow from
+its counts (§16), a bound sourced from a withdrawn condition (§19), and now two
+ranges over different sets (§21). The mechanical ledger catches the first and
+third. It cannot catch the second, and it would not have caught this one either,
+because both endpoints are real numbers from the real artefact and only the
+MEMBERSHIP differs. **The check that finds this family is not a test, it is the
+habit of asking which set a number ranges over, every time one is written.**
