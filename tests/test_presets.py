@@ -77,7 +77,7 @@ class TestTheSchemaIsClosed:
                 description="d",
                 gates="g",
                 target="m",
-                resources={"partition": "gpu", "time": "01:00:00"},
+                resources={"cluster": "nurc", "partition": "gpu", "time": "01:00:00"},
                 reading_percentile=99.0,  # a knob, smuggled in
             )
 
@@ -90,7 +90,7 @@ class TestTheSchemaIsClosed:
                 gates="g",
                 target="m",
                 instruments=["decode_lens"],  # sae_pregate has no --instruments
-                resources={"partition": "gpu", "time": "01:00:00"},
+                resources={"cluster": "nurc", "partition": "gpu", "time": "01:00:00"},
             )
 
 
@@ -108,7 +108,7 @@ class TestTheGateFieldIsRequired:
                 entrypoint="phase0_regime_map",
                 description="d",
                 target="m",
-                resources={"partition": "gpu", "time": "01:00:00"},
+                resources={"cluster": "nurc", "partition": "gpu", "time": "01:00:00"},
             )
 
     def test_whitespace_does_not_satisfy_it(self):
@@ -118,7 +118,7 @@ class TestTheGateFieldIsRequired:
                 description="d",
                 gates="   ",
                 target="m",
-                resources={"partition": "gpu", "time": "01:00:00"},
+                resources={"cluster": "nurc", "partition": "gpu", "time": "01:00:00"},
             )
 
     @pytest.mark.parametrize("name", PRESETS)
@@ -136,15 +136,29 @@ class TestTheWallClockCeiling:
     def test_over_eight_hours_is_refused(self):
         """The pilot was KILLED at the 8h wall having written nothing recoverable."""
         with pytest.raises(ValueError, match="8h wall"):
-            ResourceConfig(partition="gpu", time="12:00:00")
+            ResourceConfig(cluster="nurc", partition="gpu", time="12:00:00")
 
     def test_a_malformed_time_is_refused(self):
         with pytest.raises(ValueError, match="HH:MM:SS"):
-            ResourceConfig(partition="gpu", time="2h")
+            ResourceConfig(cluster="nurc", partition="gpu", time="2h")
 
     @pytest.mark.parametrize("name", PRESETS)
-    def test_every_shipped_preset_fits_the_queue(self, name):
-        assert load_preset(name).resources.time <= "08:00:00"
+    def test_every_shipped_preset_fits_its_own_clusters_queue(self, name):
+        """⚠️ Its OWN cluster's, not a literal `08:00:00` (2026-08-22).
+
+        This read `<= "08:00:00"` for every preset, which was right while every
+        preset ran on NURC and silently wrong the moment one did not: xc has no
+        wall at all, and a lexicographic string comparison against a NURC
+        constant would have refused a legitimate 09:00:00 xc job in a test whose
+        name claims to be about the queue.
+        """
+        from internals_safety.config import load_cluster_config
+
+        preset = load_preset(name)
+        cap = load_cluster_config(preset.resources.cluster).max_walltime_hours
+        if cap is None:
+            return  # no wall to fit
+        assert int(preset.resources.time.split(":")[0]) <= cap
 
 
 class TestEveryShippedPresetIsValid:
@@ -200,7 +214,7 @@ class TestCommandConstruction:
             targets=["a", "b"],
             families=["hex"],
             source_runs={"a": "run1"},
-            resources={"partition": "short", "time": "01:00:00"},
+            resources={"cluster": "nurc", "partition": "short", "time": "01:00:00"},
         )
         with pytest.raises(ValueError, match="no source_runs"):
             preset.tasks("/s/out")
@@ -229,7 +243,7 @@ class TestCommandConstruction:
             description="d",
             gates="w " * 20,
             target="wildguard",
-            resources={"partition": "gpu", "time": "02:00:00"},
+            resources={"cluster": "nurc", "partition": "gpu", "time": "02:00:00"},
         )
         assert "--guard" in preset.tasks("/s")[0]
         assert "--model" not in preset.tasks("/s")[0]

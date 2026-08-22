@@ -87,6 +87,9 @@ run_name: guard-scaffold-llama-guard
 # a cache miss (a changed guard config invalidates the key by design) would put
 # the captures back on the clock.
 resources:
+  # Stamped 2026-08-22 when xc became a second target; every preset
+  # that predates the registry ran here.
+  cluster: nurc
   partition: gpu
   gres: gpu:h200:1
   cpus: 8

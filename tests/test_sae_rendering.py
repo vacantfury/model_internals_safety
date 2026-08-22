@@ -65,7 +65,7 @@ class TestThePresetCarriesItIntoTheArgv:
             gates="g",
             target="llama3_1_8b_base",
             sae_layers=[17],
-            resources={"partition": "gpu", "cpus": 8, "mem": "64G", "time": "01:00:00"},
+            resources={"cluster": "nurc", "partition": "gpu", "cpus": 8, "mem": "64G", "time": "01:00:00"},
         )
         return PresetConfig(**{**base, **overrides})
 
@@ -100,7 +100,7 @@ class TestAPresetCannotDeclareItWhereItWouldBeDROPPED:
                 target="llama3_1_8b_instruct",
                 families="all",
                 render_chat=False,
-                resources={"partition": "gpu", "cpus": 8, "mem": "64G", "time": "01:00:00"},
+                resources={"cluster": "nurc", "partition": "gpu", "cpus": 8, "mem": "64G", "time": "01:00:00"},
             )
 
     def test_the_default_true_is_accepted_everywhere(self):
@@ -111,7 +111,7 @@ class TestAPresetCannotDeclareItWhereItWouldBeDROPPED:
             gates="g",
             target="llama3_1_8b_instruct",
             families="all",
-            resources={"partition": "gpu", "cpus": 8, "mem": "64G", "time": "01:00:00"},
+            resources={"cluster": "nurc", "partition": "gpu", "cpus": 8, "mem": "64G", "time": "01:00:00"},
         )
         assert preset.render_chat is True
 

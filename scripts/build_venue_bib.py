@@ -244,6 +244,33 @@ def render(available: dict[str, str], keys: set[str], sources: list[Path]) -> st
     return header + "\n" + body + "\n"
 
 
+#: Every document root a kit may carry. Shared with the parity guard's own
+#: `DOC_NAMES`; a kit that grows a third root adds it in both places.
+DOCUMENT_ROOTS = ("paper.tex", "supplement.tex")
+
+
+def document_roots(paper_dir: Path) -> list[Path]:
+    """Every `.tex` document root under a paper directory, across all kits."""
+    return sorted(path for root in DOCUMENT_ROOTS for path in paper_dir.rglob(root))
+
+
+def keys_by_root(tex_files: list[Path]) -> dict[str, set[str]]:
+    """Cited keys, unioned across kits and keyed by document root name.
+
+    **Exposed so the staleness test can CALL it rather than re-derive it.** The
+    test used to recompute per-kit keys from `paper.tex` alone, which silently
+    disagreed with the generator the moment the generator unioned across kits —
+    and the test's own docstring already said a staleness check must follow the
+    generator, never re-derive it. It was violating its own rule.
+    """
+    by_root: dict[str, set[str]] = {}
+    for tex in tex_files:
+        by_root.setdefault(tex.name, set()).update(
+            cited_keys(tex.read_text(encoding="utf-8"))
+        )
+    return by_root
+
+
 def build(paper_id: str, *, corpus: Path) -> tuple[int, list[Path]]:
     """Write every kit's ``paper.bib`` for *paper_id*. Returns (n_keys, kits)."""
     paper_dir = PAPER_ROOT / paper_id
@@ -270,15 +297,30 @@ def build(paper_id: str, *, corpus: Path) -> tuple[int, list[Path]]:
             "merge or rename it there before generating:\n  " + "\n  ".join(lines)
         )
 
-    tex_files = sorted(paper_dir.rglob("paper.tex"))
-    if not tex_files:
+    # ⚠️ EVERY document root, not just `paper.tex` (2026-08-22). When the
+    # appendix split out into `supplement.tex`, its bibliography was made by
+    # COPYING `paper.bib` — which is precisely the dual-truth this file exists
+    # to prevent, one document over. A supplement renders its OWN key set: it
+    # cites a small subset, and shipping the main paper's whole bibliography
+    # inside it would list twenty works the supplement never mentions.
+    tex_files = document_roots(paper_dir)
+    if not any(path.name == "paper.tex" for path in tex_files):
         raise SystemExit(f"no paper.tex under {paper_dir}")
 
-    keys: set[str] = set()
-    for tex in tex_files:
-        keys |= cited_keys(tex.read_text(encoding="utf-8"))
+    # ⚠️ UNION PER ROOT NAME, ACROSS KITS -- not per file (restored 2026-08-22,
+    # having briefly been per file). Every kit's `paper.tex` is body-identical by
+    # construction and pinned by `test_paper_source_parity.py`, so their
+    # bibliographies are ONE artifact and the union is what keeps them so; a
+    # per-file render lets a preamble-only citation in one kit silently produce
+    # two different bibliographies for the same paper. `supplement.tex` gets its
+    # own union for the same reason and a separate one, because it cites a small
+    # subset and shipping the paper's whole bibliography inside it would list
+    # twenty works the supplement never mentions.
+    by_root = keys_by_root(tex_files)
 
-    missing = sorted(key for key in keys if key not in available)
+    missing = sorted(
+        key for keys in by_root.values() for key in keys if key not in available
+    )
     if missing:
         raise SystemExit(
             "cited keys absent from the shared corpus -- add them to the right\n"
@@ -286,14 +328,12 @@ def build(paper_id: str, *, corpus: Path) -> tuple[int, list[Path]]:
             + "\n  ".join(missing)
         )
 
-    text = render(available, keys, bibs)
-
     written = []
     for tex in tex_files:
-        out = tex.with_name("paper.bib")
-        out.write_text(text, encoding="utf-8")
+        out = tex.with_name(tex.name.replace(".tex", ".bib"))
+        out.write_text(render(available, by_root[tex.name], bibs), encoding="utf-8")
         written.append(out)
-    return len(keys), written
+    return len(set().union(*by_root.values())), written
 
 
 def main(argv: list[str] | None = None) -> int:

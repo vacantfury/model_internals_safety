@@ -81,6 +81,9 @@ run_name: guard-causal-llama-guard
 # 4 h is therefore ~8x the midpoint rather than a tight fit, and the run doubles
 # as the prefill measurement the knob has never had.
 resources:
+  # Stamped 2026-08-22 when xc became a second target; every preset
+  # that predates the registry ran here.
+  cluster: nurc
   partition: gpu
   gres: gpu:h200:1
   cpus: 8

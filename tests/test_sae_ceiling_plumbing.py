@@ -20,7 +20,7 @@ from internals_safety.config import PresetConfig, load_preset
 
 from internals_safety.measurements.sae_reconstruction import ceiling_from
 
-RESOURCES = {"partition": "gpu", "cpus": 8, "mem": "64G", "time": "01:00:00"}
+RESOURCES = {"cluster": "nurc", "partition": "gpu", "cpus": 8, "mem": "64G", "time": "01:00:00"}
 
 
 def record(tmp_path, *, arm="ceiling", layer=18, variance=0.6979, kl=0.9189, n=1):

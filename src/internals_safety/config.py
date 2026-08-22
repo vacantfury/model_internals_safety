@@ -1180,6 +1180,77 @@ def load_corpus_config(conf_dir: Path = CONF_DIR) -> CorpusConfig:
 # is exactly the door this repo spent 2026-08-06 closing.
 
 
+class ClusterEnv(StrictModel):
+    """The four job-environment paths, as shell-expandable strings.
+
+    Strings rather than `Path`s because they are exported into an sbatch before
+    any Python runs, and `$USER` / `$HOME` are expanded by the shell there. They
+    may use nothing else: a line that needs more than those two has stopped
+    being portable across accounts on the same cluster.
+    """
+
+    uv_cache: str
+    project_environment: str
+    hf_home: str
+    outputs: str
+
+
+class ClusterConfig(StrictModel):
+    """`conf/clusters/<name>.yaml` — one cluster's run-relevant facts.
+
+    **Founded 2026-08-22, when xc became a second target.** Until then every
+    constant here was spelled inline as a fact about "the cluster", and three
+    were load-bearing: the 8h wall as a literal in `ResourceConfig`'s validator,
+    the `/scratch/$USER` paths in BOTH `ops/run.sbatch` and `submit.py`, and the
+    partition name in all 53 presets. None of them are true on xc, which has no
+    `/scratch` at all and no time limit.
+
+    ⚠️ **This repo is public.** A cluster's host, address, key, account name and
+    owner are NOT recorded here or anywhere in this tree; canonical facts live
+    in the devices repo `knowledge/clusters/`. What lives here is what a RUN
+    needs in order to be constructed correctly.
+    """
+
+    name: str
+    #: `None` means the cluster imposes no wall, which is a DIFFERENT statement
+    #: from "we do not know". A validator that treated the two alike would
+    #: either refuse a legitimate 20h xc job or wave through a 20h NURC one.
+    max_walltime_hours: int | None = None
+    default_partition: str
+    #: Every partition a preset may name, as a CLOSED vocabulary. Membership is
+    #: an error rather than a warning: `main` does not exist on NURC and `gpu`
+    #: does not exist on xc, and sbatch reports that only after a queue wait.
+    partitions: list[str]
+    max_running_jobs: int | None = None
+    max_submitted_jobs: int | None = None
+    #: Which `conf/cost.yaml` hardware profile a `--gres=gpu:<token>:N` names on
+    #: THIS cluster. The cluster is the thing that knows: `a100` is an 80GB card
+    #: on xc and could be a 40GB one elsewhere, and a cost estimate computed
+    #: against the wrong card is an approval-gate number for a different run.
+    gres_hardware: dict[str, str] = Field(default_factory=dict)
+    env: ClusterEnv
+
+    def hardware_for(self, gres: str | None) -> str | None:
+        """The cost profile for a `--gres` string, or `None` for a CPU job.
+
+        Raises on a GPU token this cluster has not mapped, rather than falling
+        back to a default profile. ⚠️ The fallback is what this method exists to
+        remove: `cost_model.py --preset` costed EVERY preset against the H200
+        default, so the first xc preset was priced on a card it does not have
+        and the unmeasured-rate banner never fired.
+        """
+        if not gres:
+            return None
+        parts = gres.split(":")
+        token = parts[1] if len(parts) >= 3 else parts[-1]
+        if token not in self.gres_hardware:
+            raise ValueError(
+                f"cluster {self.name!r} does not map gres token {token!r} to a "
+                f"cost profile; it knows {sorted(self.gres_hardware)}"
+            )
+        return self.gres_hardware[token]
+
+
 class ResourceConfig(StrictModel):
     """The SLURM ask. Part of the preset because the resources ARE the cost.
 
@@ -1188,6 +1259,15 @@ class ResourceConfig(StrictModel):
     would mean the reviewable artifact does not state what is being approved.
     """
 
+    #: Which cluster this run is declared against. **Required with no default,
+    #: and all 53 pre-existing presets were stamped `nurc` in the same change
+    #: rather than left to inherit one.** A default would be the cheapest
+    #: possible way to send an xc-shaped job (no wall, partition `main`) to a
+    #: cluster that caps it at 8h and has no such partition, and it would fail
+    #: at submit time with an error about the partition rather than about the
+    #: real mistake. This repo has spent a week learning that an omission which
+    #: still produces a run is worse than one that raises.
+    cluster: str
     partition: str
     # None = a CPU job. Not a default: a run that holds no GPU and a run that
     # holds an H200 differ by the most expensive resource on the cluster, so the
@@ -1204,13 +1284,22 @@ class ResourceConfig(StrictModel):
         if len(parts) != 3 or not all(part.isdigit() for part in parts):
             raise ValueError(f"time must be HH:MM:SS, got {self.time!r}")
         hours = int(parts[0])
-        # NURC's `normal` QOS caps a job at 8h and the pilot was KILLED at that
-        # wall having written nothing recoverable. Refusing here is cheaper than
-        # discovering it at submit time, and far cheaper than at hour eight.
-        if hours > 8:
+        # The wall comes from the named cluster, not from a literal. It was `8`
+        # here until 2026-08-22, which was correct for the only cluster this
+        # repo had ever used and silently wrong for the one with no wall at all.
+        cluster = load_cluster_config(self.cluster)
+        cap = cluster.max_walltime_hours
+        if cap is not None and hours > cap:
             raise ValueError(
-                f"{self.time} exceeds the 8h wall of the `normal` QOS; split the run "
-                "across jobs by --families instead (see CLAUDE.md, compute options)"
+                f"{self.time} exceeds the {cap}h wall of cluster {self.cluster!r}; "
+                "split the run across jobs by --families, or declare it against a "
+                "cluster without one (see CLAUDE.md, compute options)"
+            )
+        if self.partition not in cluster.partitions:
+            raise ValueError(
+                f"cluster {self.cluster!r} has no partition {self.partition!r}; "
+                f"it runs {cluster.partitions}. A partition that does not exist "
+                "is reported by sbatch only after the queue wait."
             )
         return self
 
@@ -1438,6 +1527,25 @@ class PresetConfig(StrictModel):
         if self.run_name:
             argv += ["--run-name", self.run_name]
         return [argv + ["--outputs-dir", str(outputs)]]
+
+
+def load_cluster_config(name: str, conf_dir: Path = CONF_DIR) -> ClusterConfig:
+    """Load `conf/clusters/<name>.yaml`.
+
+    Raises rather than defaulting on an unknown name, and lists what exists:
+    a cluster this repo has no facts about is one whose wall, partition and
+    paths would all have to be guessed.
+    """
+    path = conf_dir / "clusters" / f"{name}.yaml"
+    if not path.exists():
+        available = sorted(p.stem for p in (conf_dir / "clusters").glob("*.yaml"))
+        raise ValueError(f"no cluster {name!r}; conf/clusters registers {available}")
+    return ClusterConfig(**load_yaml(path))
+
+
+def list_clusters(conf_dir: Path = CONF_DIR) -> list[str]:
+    directory = conf_dir / "clusters"
+    return sorted(p.stem for p in directory.glob("*.yaml")) if directory.exists() else []
 
 
 def load_preset(name: str, conf_dir: Path = CONF_DIR) -> PresetConfig:

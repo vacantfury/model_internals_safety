@@ -64,6 +64,17 @@ class HardwareProfile(StrictModel):
     prefill_tokens_per_s: Range
     decode_tokens_per_s: Range
     load_seconds: float
+    #: Whether `decode_tokens_per_s` was FITTED from completed runs on this card
+    #: or is still an original assumption. Required with no default, because the
+    #: default anyone would pick is the flattering one.
+    #:
+    #: **This exists because the assumption was wrong by 7.5-17x once already.**
+    #: The h200 range was assumed `[300, 1200]` and measured `[216, 306]`, which
+    #: is why the pilot was costed at a quarter of its true time and killed at
+    #: the 8h wall. An unmeasured profile still produces an estimate here, since
+    #: the first run on new hardware has to be costed somehow, but the report
+    #: says so in the loudest line it prints.
+    measured: bool
 
 
 class SchedulerLimits(StrictModel):
@@ -141,6 +152,10 @@ class Estimate:
     """What the approval gate is owed, as ranges."""
 
     hardware: str
+    #: False when this card's decode rate is still an original assumption. The
+    #: estimate is still produced (the first run on new hardware has to be
+    #: costed somehow) but every renderer must SAY SO.
+    hardware_measured: bool
     gpus: int
     gpu_hours: Range
     prefill_hours: Range
@@ -220,6 +235,7 @@ def estimate(
 
     return Estimate(
         hardware=hardware.label,
+        hardware_measured=hardware.measured,
         gpus=gpus,
         gpu_hours=gpu_hours,
         prefill_hours=prefill_hours,
@@ -387,10 +403,26 @@ def format_range(value: Range, unit: str = "", places: int = 1) -> str:
     return f"{low:.{places}f}-{high:.{places}f}{suffix}"
 
 
+#: Printed under any estimate whose card has never been measured. Loud on
+#: purpose: the retired h200 assumption was 7.5-17x too fast and the run it
+#: costed was killed at the wall, so a clean-looking range from an unfitted
+#: profile is the exact artifact that failure produced.
+UNMEASURED_HARDWARE_BANNER = (
+    "  ⚠️  THIS CARD'S DECODE RATE IS AN ASSUMPTION, NOT A MEASUREMENT.\n"
+    "      conf/cost.yaml marks it PLACEHOLDER. The last unfitted range in this\n"
+    "      file was 7.5-17x too fast and the run it costed was killed at the\n"
+    "      wall. Treat the hours above as a shape, not a number, and re-run\n"
+    "      `scripts/tune_cost_model.py --all` once a real run on this card\n"
+    "      exists."
+)
+
+
 def format_estimate(estimate_: Estimate, name: str) -> str:
     lines = [
         f"{name}",
-        f"  hardware            {estimate_.gpus} x {estimate_.hardware}",
+        f"  hardware            {estimate_.gpus} x {estimate_.hardware}"
+        + ("" if estimate_.hardware_measured else
+           "   <-- RATE UNMEASURED ON THIS CARD"),
         f"  GPU-hours           {format_range(estimate_.gpu_hours)}"
         f"   (prefill {format_range(estimate_.prefill_hours, places=2)}"
         f" + decode {format_range(estimate_.decode_hours, places=2)})",
@@ -402,4 +434,6 @@ def format_estimate(estimate_: Estimate, name: str) -> str:
     lines.append(
         f"  wall-clock wall     {verdict} the {estimate_.max_wall_clock_hours:g}h partition limit"
     )
+    if not estimate_.hardware_measured:
+        lines.append(UNMEASURED_HARDWARE_BANNER)
     return "\n".join(lines)

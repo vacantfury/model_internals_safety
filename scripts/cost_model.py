@@ -32,6 +32,7 @@ import argparse
 from typing import Sequence
 
 from internals_safety.config import (
+    load_cluster_config,
     load_judge_config,
     load_measurements_config,
     load_model_config,
@@ -174,6 +175,34 @@ def judge_prices(model: str) -> tuple[float, float]:
     return spec.input_price, spec.output_price
 
 
+def _scheduler_for(cost_config, cluster, preset):
+    """`cost_config` with its scheduler block swapped for the preset's cluster.
+
+    The block in `conf/cost.yaml` describes NURC's `gpu` partition, which was
+    the only place a run had ever gone. `SchedulerLimits.max_wall_clock_hours`
+    has no "unlimited" value, so a cluster without a wall is represented by the
+    preset's OWN declared ceiling: the report then says the run fits the ceiling
+    its author set, which is true, rather than a limit that does not exist.
+    """
+    limits = cost_config.scheduler
+    declared_hours = int(preset.resources.time.split(":")[0])
+    return cost_config.model_copy(
+        update={
+            "scheduler": limits.model_copy(
+                update={
+                    "partition": preset.resources.partition,
+                    "max_wall_clock_hours": (
+                        cluster.max_walltime_hours
+                        if cluster.max_walltime_hours is not None
+                        else declared_hours
+                    ),
+                    "max_concurrent_jobs": cluster.max_running_jobs or 0,
+                }
+            )
+        }
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     corpus = load_corpus_config()
     cost_config = load_cost_config()
@@ -231,6 +260,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         # different estimate — and this script IS the approval-gate artifact, so
         # costing the wrong corpus would be costing a run nobody is proposing.
         args.corpus = preset.corpus
+        # ⚠️ And the preset's HARDWARE. `--hardware` defaulted to the H200 and
+        # the preset branch never touched it, so every preset was costed against
+        # that card whatever its `--gres` said. It was invisible while every
+        # preset really did ask for an H200, and it surfaced the moment one did
+        # not: the first xc preset asks for `gpu:a100:1` and was priced on a card
+        # the box does not have, which also meant the unmeasured-rate banner for
+        # the A100 never fired. Same shape as the corpus line above.
+        cluster = load_cluster_config(preset.resources.cluster)
+        resolved_hardware = cluster.hardware_for(preset.resources.gres)
+        if resolved_hardware is not None:
+            args.hardware = resolved_hardware
+        # ⚠️ And the SCHEDULER limits. `conf/cost.yaml`'s `scheduler:` block is
+        # NURC's `gpu` partition, and without this an xc estimate ended its
+        # report with "fits the 8h partition limit" about a cluster that has no
+        # wall at all. A false statement inside the approval-gate artifact is
+        # worse than a missing one, because it reads as a check that passed.
+        cost_config = _scheduler_for(cost_config, cluster, preset)
         print(f"costing preset {args.preset!r}\n")
     if not args.model:
         raise SystemExit("--model or --preset is required")
@@ -320,7 +366,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"  GPU-hours           {format_range((phase0.gpu_hours[0] * n_models, phase0.gpu_hours[1] * n_models))}\n"
         f"  judge API spend     ${format_range((phase0.judge_usd[0] * n_models, phase0.judge_usd[1] * n_models), places=2)}\n"
         f"  jobs                {n_models} x 1 GPU on partition "
-        f"'{cost_config.scheduler.partition}' (limit {cost_config.scheduler.max_concurrent_jobs} concurrent)"
+        f"'{cost_config.scheduler.partition}' ("
+        + (
+            f"limit {cost_config.scheduler.max_concurrent_jobs} concurrent"
+            if cost_config.scheduler.max_concurrent_jobs
+            # 0 means the cluster declares no per-user cap, which is a different
+            # statement from a cap of zero and must not render as one.
+            else "no per-user job cap"
+        )
+        + ")"
     )
 
     if args.all_phases:

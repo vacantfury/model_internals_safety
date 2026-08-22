@@ -35,6 +35,11 @@ HARDWARE = HardwareProfile(
     prefill_tokens_per_s=(1000, 2000),
     decode_tokens_per_s=(100, 200),
     load_seconds=0,
+    # A fixture models the STRICTEST real implementation: `measured` is required
+    # with no default precisely so nobody can forget to say whether a card's
+    # rate was fitted, and a fixture that omitted it would be testing a laxer
+    # type than the one that ships.
+    measured=True,
 )
 SCHEDULER = SchedulerLimits(
     partition="gpu", max_wall_clock_hours=8, gpus_per_job=1, max_concurrent_jobs=4

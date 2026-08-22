@@ -7,6 +7,11 @@ knowledge/
 
 # Reviewer/ARR text — never committed (owner policy)
 text_docs/reviews/
+# Submission packaging: manifests and upload sets. Gitignored because a
+# committed directory named for a venue, holding submission machinery, is
+# the exact pairing `tests/test_public_repo_hygiene.py` forbids in prose —
+# and the rule is about the pairing, not about where it is written.
+text_docs/submission/
 
 # Third-party reference implementations, cloned for reading (family standard —
 # same as the guardrail sibling). Never vendored into src/: the oikos rule is

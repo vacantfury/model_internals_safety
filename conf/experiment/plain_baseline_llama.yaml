@@ -64,6 +64,9 @@ run_name: plain-baseline-llama
 # 1.0-1.7 GPU-h, judge spend $0.44-1.32, inside the 8 h wall with wide margin.
 # The plain baseline is MODEL-level, so its cost does not scale with the ladder.
 resources:
+  # Stamped 2026-08-22 when xc became a second target; every preset
+  # that predates the registry ran here.
+  cluster: nurc
   partition: gpu
   gres: gpu:h200:1
   cpus: 8

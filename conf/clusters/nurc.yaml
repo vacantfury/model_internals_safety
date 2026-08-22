@@ -1,0 +1,54 @@
+# NURC / Explorer — the cluster every run in this repo has used.
+#
+# Registered 2026-08-22, when xc became a second target and the constants that
+# had been spelled inline stopped being facts about "the cluster" and became
+# facts about THIS one. Three of them were load-bearing and none of them were
+# named: the 8h wall lived as a literal in `ResourceConfig`'s validator, the
+# `/scratch/$USER` paths lived in `ops/run.sbatch` AND in `submit.py`, and the
+# partition name lived in every preset.
+#
+# ⚠️ Canonical cluster facts (queue policy, hardware, sync convention) live in
+# the devices repo `knowledge/clusters/nurc_cluster_properties.md`. This file
+# holds only what a RUN needs, and it deliberately holds no host, no address,
+# no key and no account name: this repo is public.
+name: nurc
+
+# The `normal` QOS caps a job at 8h and the pilot was KILLED at exactly that
+# wall with 13 of 15 rungs done. Enforced at preset load, which is cheaper than
+# discovering it at submit time and far cheaper than at hour eight.
+max_walltime_hours: 8
+
+default_partition: gpu
+# The real list, read from `sinfo` 2026-08-22. A CLOSED vocabulary: a preset
+# naming something outside it is refused at load, because that mistake is
+# otherwise discovered by sbatch after a queue wait. `short` is the CPU
+# partition the offline re-scoring jobs use and is deliberately in scope; it
+# sits outside the `gpu` PartitionQOS, so its jobs do not consume the 8-slot
+# submit pool.
+partitions: [gpu, gpu-interactive, gpu-short, sharing, short]
+
+# Per-user queue policy, read from `sacctmgr` 2026-08-07. Informational here:
+# the caps bind on the SLURM side whatever this file says, and they are written
+# down so a session planning a batch does not have to re-derive them. ⚠️ "per
+# user" means every session AND every sibling project sharing this login, and
+# an array job consumes one SUBMIT slot per task.
+max_running_jobs: 4
+max_submitted_jobs: 8
+
+# The job environment. Written as shell-expandable strings because they are
+# exported into an sbatch before any Python runs; `$USER` is the only variable
+# they may use, so the same line works for any account on the cluster.
+env:
+  uv_cache: "/scratch/$USER/uv_cache"
+  project_environment: "/scratch/$USER/venvs/internals_safety"
+  hf_home: "/scratch/$USER/huggingface_cache"
+  outputs: "/scratch/$USER/internals_safety_outputs"
+
+gres_hardware:
+  # NURC's `gpu` partition holds several card types; these are the ones our
+  # presets have ever asked for. An unmapped token raises rather than falling
+  # back, because a cost estimate against the wrong card is an approval-gate
+  # number for a run nobody proposed.
+  h200: h200_144gb
+  a100: a100_80gb
+  v100: v100_32gb

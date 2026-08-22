@@ -59,6 +59,9 @@ source_runs:
 # hide the fact that one rung is unmeasurable.
 
 resources:
+  # Stamped 2026-08-22 when xc became a second target; every preset
+  # that predates the registry ran here.
+  cluster: nurc
   partition: short
   cpus: 1
   mem: 32G

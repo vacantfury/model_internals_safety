@@ -1,0 +1,44 @@
+# The xc cluster — a single-node SLURM box, partition `main`, 8 x A100-80GB.
+#
+# Registered 2026-08-22. What it changes for this repo, and the reason it is
+# worth a second entry rather than a flag: NURC's `normal` QOS gives 1 GPU per
+# job, an 8h wall, and a per-USER submit pool that the guardrail sibling shares
+# under the same Unix account. xc has no time limit and no such pool. It is
+# also the only box in the estate where multi-GPU work schedules at all, which
+# NURC's QOS never does.
+#
+# ⚠️ Canonical cluster facts live in the devices repo
+# `knowledge/clusters/xc_cluster_properties.md`. **This repo is public: never
+# write a host, address, key, account name, or the box owner's name here.** The
+# sanctioned reference is the token "xc cluster" plus that pointer.
+name: xc
+
+# NO time limit. `null` is not "unknown" and not "8 by default": it means the
+# wall-clock validator has nothing to enforce, and a preset may ask for a run
+# longer than any NURC job could ever be. That is the whole point of the box.
+max_walltime_hours: null
+
+default_partition: main
+# ONE partition, which is the box. Read from `sinfo` 2026-08-22.
+partitions: [main]
+
+# A single node with all 8 cards, so there is no per-user job cap to model. Left
+# explicit rather than absent, because an absent field would read as unknown.
+max_running_jobs: null
+max_submitted_jobs: null
+
+# ⚠️ THERE IS NO `/scratch` ON THIS BOX. Everything lives under the home
+# directory, which is on a 5.7T volume. Copying NURC's paths here would have
+# produced a job that fails at `mkdir` in the best case and writes to a
+# path nobody looks at in the worst.
+env:
+  uv_cache: "$HOME/.cache/uv"
+  project_environment: "$HOME/venvs/internals_safety"
+  # Already populated (837G): Llama-3.1-8B-Instruct and Qwen2.5-7B-Instruct are
+  # cached, Tulu-3-8B and Mistral-7B-Instruct-v0.3 would download on first use.
+  hf_home: "$HOME/huggingface_cache"
+  outputs: "$HOME/internals_safety_outputs"
+
+gres_hardware:
+  # The box is 8 x A100-SXM4-80GB and nothing else, so this map has one entry.
+  a100: a100_80gb

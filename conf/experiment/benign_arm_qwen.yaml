@@ -60,6 +60,9 @@ run_name: benign-arm-qwen
 # at the 8 h wall there, so three rungs is also what fits with margin once the
 # mandatory benign arm's +67% decode budget is counted.
 resources:
+  # Stamped 2026-08-22 when xc became a second target; every preset
+  # that predates the registry ran here.
+  cluster: nurc
   partition: gpu
   gres: gpu:h200:1
   cpus: 8

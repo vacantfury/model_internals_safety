@@ -533,3 +533,100 @@ file per concern) exactly as both siblings do. `measurements/` needed no split �
 that was settled and struck in §3.2 on measured evidence. The instrument
 contract, the spine, and the write-side plug-in point are all where §3.1, §3.3
 and §3.5 put them.
+
+## 6. The cluster registry — one target became two (2026-08-22)
+
+**What triggered it.** The owner asked whether other clusters were idle. They
+were: the xc cluster's eight A100-80GB cards were at 0% with an empty queue and
+no time limit, while our four held-out jobs sat PENDING on NURC behind a submit
+pool shared with the guardrail sibling under the same Unix account.
+
+⚠️ **A correction belongs at the top of this section, because it was made in the
+reply that proposed the work.** The first answer said xc was unwired and that
+wiring it was a substantial build. That was false. `llm_utils` ships
+`ClusterModelServerManager` (auto-generated sbatch, endpoint discovery via
+`scontrol`, a server pool with acquire/release, health-check hysteresis and
+zombie teardown) plus `SlurmClusterService` on top, and the guardrail sibling's
+`conf/llm/wildguard.yaml` already carries xc-specific partition handling. The
+route exists and is validated.
+
+**What is true, and it is narrower.** That seam is text in, text out over
+vLLM's OpenAI-compatible HTTP endpoint. It cannot return residual-stream
+activations, and this repo loads target models in-process through
+`models/loader.py` with HF hooks because capture is what both papers measure.
+In this repo `llm_utils` is used for the judge and its price table and nothing
+else, which is why its cluster route being present did not make our runs
+portable. The useful path turned out to be neither the serving seam nor a
+greenfield build: `ops/run.sbatch` was already generic, carrying no `#SBATCH`
+resource directives because the submitter passes resources as flags.
+
+**What was actually cluster-specific, found by looking rather than assumed.**
+Three constants, each spelled as a fact about "the cluster" because there had
+only ever been one, and all three false on xc:
+
+1. **The 8h wall**, a literal in `ResourceConfig._check_walltime`. xc has no
+   wall at all, so the validator would have refused a legitimate 20h job.
+2. **The `/scratch/$USER` paths** for the uv cache, the venv, the HF cache and
+   the outputs directory. ⚠️ They were spelled in BOTH `ops/run.sbatch` and
+   `submit.py`, each carrying a comment claiming they were kept in one place so
+   the two could not disagree. **There is no `/scratch` on the xc box**, so a
+   job inheriting them would build its venv in a directory that does not exist
+   and re-download 16GB of weights past a populated cache. That reads as a slow
+   run, not a wrong one.
+3. **The partition name**, in all 53 presets.
+
+**The shape.** `conf/clusters/<name>.yaml` plus `ClusterConfig`, holding what a
+RUN needs: the wall (`null` on xc, and `null` means *no wall* rather than
+*unknown*, which a validator has to tell apart), the partition list as a CLOSED
+vocabulary, the per-user queue caps, and the four environment paths as
+shell-expandable strings. ⚠️ **This repo is public, so a cluster entry carries
+no host, address, key, account name or owner**; canonical cluster facts stay in
+the devices repo, and `test_clusters.py` checks the omission crudely and
+deliberately rather than trusting anyone to remember it.
+
+**Three decisions worth not re-deriving.**
+
+- **`resources.cluster` is REQUIRED with no default, and all 53 pre-existing
+  presets were stamped `nurc` in the same change.** A default is the cheapest
+  possible way to send an xc-shaped job to a cluster that caps it at 8h and has
+  no partition `main`, and it would then fail with an error about the partition
+  rather than about the real mistake.
+- **The launcher has NO fallback.** It requires the exported `IS_*` variables
+  and exits 78 naming how it should have been invoked. A fallback to NURC's
+  paths is exactly how a job submitted for another cluster comes to write into a
+  directory nobody reads.
+- **The one dual-truth risk left is pinned.** `submit.py` exports `IS_*` from
+  the config and `ops/run.sbatch` requires them by name: the same fact in two
+  languages, and nothing in Python can see the shell. `test_clusters.py` parses
+  the launcher's required-variable loop and asserts set equality against
+  `ClusterEnv`'s fields. A key added to one and not the other would otherwise
+  never reach the job, or make every job exit 78.
+
+**What is deliberately NOT fixed: the A100 decode rate.** `conf/cost.yaml` had
+an `a100_80gb` profile all along, carrying `[150, 600]` tokens per second, which
+is an original assumption of exactly the shape already refuted once: the retired
+h200 assumption was `[300, 1200]` against a measured `[216, 306]`, 7.5 to 17
+times too fast, and it is why the pilot was costed at a quarter of its true time
+and killed at the wall. A 4x span is not an estimate. It is now marked
+`PLACEHOLDER`, so `build_status.py` reports it, and **no approval-gate number
+for xc is quotable until it is measured**.
+
+⚠️ **It was deliberately not replaced with a bandwidth-ratio derivation.**
+Scaling the measured h200 range by the memory-bandwidth ratio is a first-order
+model for the decode term only, while the measured range already absorbs
+python, import and cache setup that does not scale with bandwidth at all. The
+derived number would look principled and be wrong in an unknown direction. This
+repo's rule is that a measurement is only as current as the code it timed; a
+derived one is worse. The tuning path is a real run, and
+`xc_calibration_llama3_1_8b_instruct` is written to be exactly the shape
+`tune_cost_model.py` can fit (three rungs at n>=50, because the estimator has no
+per-run fixed-cost term and a one-rung baseline implies a wildly different rate).
+
+**That first run gates a second thing we have never checked**, which is why it
+is not a bare smoke test: every refusal rate in AS-5 was generated on one GPU
+architecture. Different architectures use different kernels and different
+reduction orders, so greedy decoding is not bit-identical across them. Same
+model, same corpus, same rungs, different card. If the rates match within
+sampling noise, hardware stops being an open variable; if they do not, a rate is
+a property of the machine as well as of the model, and that belongs in the
+paper's defect list before any of these numbers are defended.

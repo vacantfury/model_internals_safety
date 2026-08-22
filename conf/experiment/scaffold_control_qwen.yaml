@@ -54,6 +54,9 @@ instruments: [lexical]
 run_name: scaffold-control-qwen
 
 resources:
+  # Stamped 2026-08-22 when xc became a second target; every preset
+  # that predates the registry ran here.
+  cluster: nurc
   partition: gpu
   gres: gpu:h200:1
   cpus: 8

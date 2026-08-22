@@ -86,6 +86,9 @@ run_name: lens-floor
 # ~1.8 h, so the 8 h wall is not close — but the wall is what killed the first
 # comprehension band, so the margin is deliberate rather than lucky.
 resources:
+  # Stamped 2026-08-22 when xc became a second target; every preset
+  # that predates the registry ran here.
+  cluster: nurc
   partition: gpu
   gres: gpu:h200:1
   cpus: 8

@@ -249,6 +249,39 @@ class TestAgainstTheRealCorpus:
             pytest.skip("no generated kit, or the shared corpus is not present here")
         sources = bvb.master_bibs(corpus)
         available, _ = bvb.resolve_corpus(sources)
+        # ⚠️ The generator's OWN key computation, called rather than re-derived
+        # (2026-08-22). This block used to recompute per-kit keys from
+        # `paper.tex` alone; the generator unions across kits, so the two
+        # disagreed the moment a preamble-only citation differed, and the test
+        # went red against a correctly-generated file. The docstring below
+        # already stated the rule this violated.
+        # ⚠️ PER PAPER ID, because that is the generator's scope
+        # (`PAPER_ROOT / paper_id`). Unioning over the whole `paper/` tree mixes
+        # AS-5's citations into AS-6's bibliography and back — a test that
+        # "follows the generator" has to follow its SCOPE too, not only its
+        # formula.
+        by_paper: dict[Path, dict[str, set[str]]] = {}
+        for kit in kits:
+            paper_dir = next(
+                parent for parent in kit.parents if parent.parent == bvb.PAPER_ROOT
+            )
+            if paper_dir not in by_paper:
+                by_paper[paper_dir] = bvb.keys_by_root(bvb.document_roots(paper_dir))
+        for kit in kits:
+            paper_dir = next(
+                parent for parent in kit.parents if parent.parent == bvb.PAPER_ROOT
+            )
+            by_root = by_paper[paper_dir]
+            for root, bib_name in (("paper.tex", "paper.bib"),
+                                   ("supplement.tex", "supplement.bib")):
+                if not (kit / root).exists():
+                    continue
+                on_disk = (kit / bib_name).read_text(encoding="utf-8")
+                assert on_disk == bvb.render(available, by_root[root], sources), (
+                    f"{kit.name}: {bib_name} differs from what the corpus renders -- "
+                    "re-run scripts/build_venue_bib.py <paper-id>"
+                )
+        return
         for kit in kits:
             keys = bvb.cited_keys((kit / "paper.tex").read_text(encoding="utf-8"))
             on_disk = (kit / "paper.bib").read_text(encoding="utf-8")

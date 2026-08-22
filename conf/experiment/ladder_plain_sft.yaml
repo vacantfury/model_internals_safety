@@ -71,6 +71,9 @@ run_name: ladder-plain-sft
 # calls; the margin is for the wall kill that cost a Qwen run at 8:00:26, not for
 # an expected increase.
 resources:
+  # Stamped 2026-08-22 when xc became a second target; every preset
+  # that predates the registry ran here.
+  cluster: nurc
   partition: gpu
   gres: gpu:h200:1
   cpus: 8

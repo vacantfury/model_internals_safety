@@ -62,6 +62,9 @@ run_name: encoding-ablation-llama
 # increase — and this entrypoint checkpoints per family, so a kill loses at most
 # the rung in flight.
 resources:
+  # Stamped 2026-08-22 when xc became a second target; every preset
+  # that predates the registry ran here.
+  cluster: nurc
   partition: gpu
   gres: gpu:h200:1
   cpus: 8

@@ -242,7 +242,7 @@ class TestThePresetCarriesThePair:
                 gates="g",
                 targets=["llama3_1_8b_instruct"],
                 corpus="jbb",
-                resources={"partition": "short", "time": "00:30:00"},
+                resources={"cluster": "nurc", "partition": "short", "time": "00:30:00"},
             )
         assert "corpus" in str(excinfo.value)
 

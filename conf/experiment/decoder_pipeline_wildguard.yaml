@@ -69,6 +69,9 @@ run_name: decoder-pipeline-wildguard
 # per guard, so this is minutes; the hour is model load plus margin, and the
 # partition's 8 h wall is nowhere near binding.
 resources:
+  # Stamped 2026-08-22 when xc became a second target; every preset
+  # that predates the registry ran here.
+  cluster: nurc
   partition: gpu
   gres: gpu:h200:1
   cpus: 8

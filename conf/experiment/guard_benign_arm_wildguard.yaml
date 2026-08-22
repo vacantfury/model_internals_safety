@@ -81,6 +81,9 @@ run_name: guard-benign-wildguard
 # adds ONE more forward pass per rung over text already encoded for the capture,
 # so the marginal cost over the runs that produced the current map is small.
 resources:
+  # Stamped 2026-08-22 when xc became a second target; every preset
+  # that predates the registry ran here.
+  cluster: nurc
   partition: gpu
   gres: gpu:h200:1
   cpus: 8

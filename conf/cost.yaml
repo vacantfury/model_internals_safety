@@ -48,14 +48,41 @@ hardware:
     label: "A100 40GB (SXM)"
     vram_gb: 40
     prefill_tokens_per_s: [2000, 8000]
+    # PLACEHOLDER, for the same reason as a100_80gb below and with the same
+    # tuning path. No run has ever used this card.
     decode_tokens_per_s: [150, 600]
     load_seconds: 300
+    measured: false   # no run has ever used this card
   a100_80gb:
     label: "A100 80GB"
     vram_gb: 80
     prefill_tokens_per_s: [2000, 8000]
+    # ⚠️ PLACEHOLDER — the ONLY measured hardware in this file is h200_144gb,
+    # and this range is an original assumption of exactly the shape that was
+    # already refuted once. The retired h200 assumption was [300, 1200] and
+    # measurement put it at [216, 306]: 7.5-17x too fast at the top, which is
+    # why the pilot was costed at a quarter of its true time and killed at the
+    # wall. A [150, 600] range is a 4x span, and a 4x span is not an estimate,
+    # so no approval-gate number for this hardware may be quoted from it.
+    #
+    # ⚠️ It is deliberately NOT replaced by a bandwidth-ratio guess. Scaling the
+    # h200 measurement by a memory-bandwidth ratio would be a first-order model
+    # for the DECODE term only, while the measured range already absorbs
+    # python/import/cache setup that does not scale with bandwidth at all — so
+    # the derived number would look principled and be wrong in an unknown
+    # direction. This repo's own rule is that a measurement is only as current
+    # as the code it timed; a derived one is worse.
+    #
+    # Tuning path, and it is cheap enough that guessing is not worth it: the
+    # xc cluster's 8 A100-80GB cards are the reason this profile now matters,
+    # the box is free, and the FIRST run there measures this knob the same way
+    # the pilot measured the h200 one. `scripts/tune_cost_model.py --all` reads
+    # completed run records and divides each preset's census by its measured
+    # wall clock. Down-sync the records first: the tuner can only fit what is
+    # local, and it does not know what it cannot see.
     decode_tokens_per_s: [150, 600]
     load_seconds: 300
+    measured: false   # the xc cluster's card; the first run there measures it
   v100_32gb:
     label: "V100 32GB (SXM2/PCIe) — UNUSABLE with the current torch"
     vram_gb: 32
@@ -74,6 +101,7 @@ hardware:
     prefill_tokens_per_s: [600, 2500]
     decode_tokens_per_s: [50, 200]
     load_seconds: 300
+    measured: false   # unusable with the current torch
   h200_144gb:
     label: "H200 144GB"
     vram_gb: 144
@@ -131,6 +159,7 @@ hardware:
     # and it does not know what it cannot see.
     decode_tokens_per_s: [216, 306]
     load_seconds: 300
+    measured: true   # fitted from 13 completed runs, 2026-08-08
 
 # The scheduler's hard walls. A per-model estimate that exceeds
 # `max_wall_clock_hours` is not a slow run, it is a job that gets killed

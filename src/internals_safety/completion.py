@@ -345,18 +345,42 @@ def status_of(item: Item, present: set[str], reachable: set[str]) -> ItemStatus:
     )
 
 
-def _knob_key_below(lines: list[str], start: int) -> str | None:
+def _knob_key_below(lines: list[str], start: int) -> tuple[str, str] | None:
     """The config key a PLACEHOLDER marker at `start` is talking about.
 
     A marker sits in the comment block above its key, so the key is the next
     assignment line. Both surfaces are scanned with one rule because both are
     `name: value` at the point that matters — YAML mappings and annotated
     dataclass fields alike.
+
+    Returns `(leaf, qualified)`. The caller decides which to use, and it must:
+    **the leaf alone is not always an identity, and the qualified form is not
+    always mergeable (2026-08-22).** `conf/cost.yaml` holds one
+    `decode_tokens_per_s` PER GPU PROFILE, so marking a second card collapsed
+    two different knobs into one name and tripped the marked-twice-in-one-file
+    guard on a correct pair of markers. But qualifying everything is worse: a
+    YAML knob nests under its section while its `config.py` fail-safe nests
+    under a class, so the two surfaces would stop merging and the headline would
+    double again, which is the exact over-report this function's history is
+    about. Qualify only what collides inside one file.
     """
-    for line in lines[start : start + _KEY_SEARCH_LINES]:
+    for offset, line in enumerate(lines[start : start + _KEY_SEARCH_LINES]):
         match = _KEY.match(line)
-        if match:
-            return match.group(1)
+        if not match:
+            continue
+        key = match.group(1)
+        indent = len(line) - len(line.lstrip())
+        if indent == 0:
+            return key, key
+        # Walk back for the nearest shallower mapping key. Comments are skipped,
+        # so the parent of a key buried under a comment block is still found.
+        for above in reversed(lines[: start + offset]):
+            if not above.strip() or above.lstrip().startswith("#"):
+                continue
+            parent = _KEY.match(above)
+            if parent and (len(above) - len(above.lstrip())) < indent:
+                return key, f"{parent.group(1)}.{key}"
+        return key, key
     return None
 
 
@@ -387,6 +411,7 @@ def placeholder_knobs() -> dict[str, list[str]]:
     tuning-path law at the point a knob is introduced, not this function.
     """
     found: dict[str, list[str]] = {}
+    per_file: list[tuple[Path, int, tuple[str | None, str | None]]] = []
     marker = re.compile(r"\bPLACEHOLDER\b")
     sources = sorted(CONF_DIR.glob("*.yaml")) + [PACKAGE_ROOT / "config.py"]
     for path in sources:
@@ -400,10 +425,29 @@ def placeholder_knobs() -> dict[str, list[str]]:
             # which is `lines[number]` 0-based — the marker's own line included
             # only when it IS the assignment (`trained_on: "PLACEHOLDER ..."`).
             key = _KEY.match(line)
-            name = key.group(1) if key else _knob_key_below(lines, number)
-            found.setdefault(name or f"{path.name}:{number}", []).append(
-                f"{path.relative_to(PROJECT_ROOT)}:{number}"
-            )
+            if key:
+                names = (key.group(1), key.group(1))
+            else:
+                names = _knob_key_below(lines, number) or (None, None)
+            per_file.append((path, number, names))
+
+    # Qualify ONLY the leaf names that collide inside one file. Everything else
+    # keeps its bare leaf so a YAML knob and its `config.py` fail-safe still
+    # merge into one entry — see `_knob_key_below` for why both halves matter.
+    colliding: set[tuple[Path, str]] = set()
+    seen: dict[tuple[Path, str], int] = {}
+    for path, _, (leaf, _qualified) in per_file:
+        if leaf is None:
+            continue
+        seen[(path, leaf)] = seen.get((path, leaf), 0) + 1
+        if seen[(path, leaf)] > 1:
+            colliding.add((path, leaf))
+
+    for path, number, (leaf, qualified) in per_file:
+        name = qualified if (path, leaf) in colliding else leaf
+        found.setdefault(name or f"{path.name}:{number}", []).append(
+            f"{path.relative_to(PROJECT_ROOT)}:{number}"
+        )
     return found
 
 

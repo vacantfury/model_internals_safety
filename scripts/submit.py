@@ -34,12 +34,22 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from internals_safety.config import PresetConfig, list_presets, load_preset  # noqa: E402
+from internals_safety.config import (  # noqa: E402
+    PresetConfig,
+    list_presets,
+    load_cluster_config,
+    load_preset,
+)
 
-# Where a cluster job writes. Activation caches are GB-scale and every sbatch in
-# ops/ already exports this shape; kept as one string so the submitter and the
-# launcher cannot disagree about it.
-DEFAULT_OUTPUTS = "/scratch/$USER/internals_safety_outputs"
+# ⚠️ A `DEFAULT_OUTPUTS = "/scratch/$USER/internals_safety_outputs"` lived here
+# AND in `ops/run.sbatch`, each with a comment claiming it was kept in one place
+# so the two could not disagree. It was in two places, and it was a fact about
+# ONE cluster: xc has no `/scratch` at all. Both now read the preset's cluster
+# entry, and the launcher is HANDED the value rather than spelling its own.
+
+#: Environment the launcher needs, exported per submission. Prefixed so nothing
+#: already in the job's environment can collide with them by accident.
+ENV_PREFIX = "IS_"
 
 # How the preset name is written into the job's SLURM comment, and read back out.
 COMMENT_PREFIX = "preset="
@@ -116,6 +126,7 @@ def sbatch_flags(preset: PresetConfig, name: str, n_tasks: int) -> list[str]:
     precedence rule is that command-line options override in-file directives.
     """
     resources = preset.resources
+    cluster = load_cluster_config(resources.cluster)
     flags = [
         f"--job-name=is_{name}",
         f"--partition={resources.partition}",
@@ -133,6 +144,14 @@ def sbatch_flags(preset: PresetConfig, name: str, n_tasks: int) -> list[str]:
     # this stamp the only thing left to match on is the derived job name, which
     # a hand-typed `--job-name` could contradict. See `active_jobs_for`.
     flags.append(f"--comment={COMMENT_PREFIX}{name}")
+    # The cluster's paths, HANDED to the launcher rather than hardcoded there.
+    # `ALL` first so the submitting environment still propagates; SLURM applies
+    # the explicit assignments on top of it.
+    exported = ",".join(
+        f"{ENV_PREFIX}{key.upper()}={value}"
+        for key, value in cluster.env.model_dump().items()
+    )
+    flags.append(f"--export=ALL,{ENV_PREFIX}CLUSTER={cluster.name},{exported}")
     if n_tasks > 1:
         # %10 throttles concurrency. The account's `normal` QOS allows 4
         # concurrent GPU jobs; CPU array tasks on `short` are not bound by that,
@@ -175,7 +194,11 @@ def describe(preset: PresetConfig, name: str, tasks: list[list[str]], show_all: 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("preset", nargs="?", help=f"conf/experiment/<name>.yaml; available: {list_presets()}")
-    parser.add_argument("--outputs-dir", default=None, help=f"default: {DEFAULT_OUTPUTS} expanded")
+    parser.add_argument(
+        "--outputs-dir",
+        default=None,
+        help="default: the preset's cluster entry, shell-expanded",
+    )
     parser.add_argument(
         "--submit",
         action="store_true",
@@ -204,7 +227,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     preset = load_preset(args.preset)
-    outputs = args.outputs_dir or os.path.expandvars(DEFAULT_OUTPUTS)
+    outputs = args.outputs_dir or os.path.expandvars(
+        load_cluster_config(preset.resources.cluster).env.outputs
+    )
     tasks = preset.tasks(outputs)
 
     if args.resolve is not None:

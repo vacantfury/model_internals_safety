@@ -1,0 +1,84 @@
+# THE FIRST xc RUN — it calibrates the cluster and checks a thing we have never
+# checked, and it is deliberately both rather than a bare smoke test.
+#
+# Model choice is not arbitrary: Llama-3.1-8B-Instruct is ALREADY in the xc HF
+# cache (checked 2026-08-22), so this run downloads no weights. Tulu-3-8B and
+# Mistral-7B-Instruct-v0.3 are not cached there and would each pull ~16GB.
+#
+# Shape is not arbitrary either. `conf/cost.yaml` records that its rate range is
+# fitted to ONE shape — a ladder sweep of at least 3 rungs at n >= 50 — because
+# the estimator has no per-run fixed-cost term, so 1-rung baselines imply a
+# wildly different rate and averaging the two gives a useless span. This preset
+# IS that shape, so the run it produces is usable by `tune_cost_model.py`.
+entrypoint: phase0_regime_map
+description: >-
+  llama3_1_8b_instruct on the JBB pair, three rungs, as the xc cluster's first
+  run: it measures the A100-80GB decode rate and tests whether reported refusal
+  rates survive a change of GPU architecture.
+
+gates: >-
+  TWO THINGS, AND BOTH CHANGE WHAT GETS BUILT.
+
+  (1) THE A100-80GB DECODE RATE, which is a PLACEHOLDER in conf/cost.yaml and
+  is now load-bearing because xc is 8 A100-80GB cards. The retired h200
+  assumption was [300, 1200] against a measured [216, 306], 7.5-17x too fast,
+  and it is why the pilot was costed at a quarter of its true time and killed at
+  the wall. Until this runs, NO approval-gate number for xc is quotable, so
+  every later xc run is blocked on it. After it, `tune_cost_model.py --all`
+  fits the range from the run record and xc is costable like NURC.
+
+  (2) WHETHER OUR REPORTED RATES ARE HARDWARE-INDEPENDENT. Every refusal rate in
+  AS-5 was generated on one GPU architecture. Different architectures use
+  different kernels and different reduction orders, so greedy decoding is not
+  bit-identical across them, and we have never checked whether that moves a
+  refusal rate. Same model, same corpus, same rungs, different card.
+
+  If the rates match the NURC figures within sampling noise, the paper is
+  unaffected and hardware stops being an open variable. If they do not, that is
+  a reportable instrument property and it belongs in the paper's defect list
+  before any of these numbers are defended, because it would mean a rate is a
+  property of the machine as well as of the model.
+
+target: llama3_1_8b_instruct
+
+# The two reported rungs plus one ability-0 anchor, which is also the minimum
+# rung count the rate fit needs.
+families:
+  - homoglyph
+  - math_bold
+  - base64
+
+# n=50 rather than 100: the rate fit needs n >= 50 and the reproducibility
+# check is a comparison of rates, not a new measurement, so paying for the full
+# 100 buys nothing here. ⚠️ Consequence stated rather than discovered: at n=50
+# the comparison against the n=100 NURC figures is against a WIDER interval, so
+# this run can show a gross shift and cannot certify a small one.
+n_prompts: 50
+
+# The default JBB pair, named explicitly. Comparing against the NURC numbers is
+# the whole point, and those are all JBB.
+corpus: jbb
+
+# The lexical control, INCLUDED, which is not the choice a bare smoke test would
+# make. Two reasons and the second is the load-bearing one. A calibration run
+# must have the SAME SHAPE as the runs it will cost, and every phase-0 preset on
+# the reported rungs carries it, so leaving it out would fit a rate to a lighter
+# run than the one being estimated. And `TestAPresetCannotApproveAnUNREPORTABLERun`
+# is right to demand it here: this run pairs on JBB, so the control screens the
+# probe on a corpus it was not fitted on and every deployment reading it produces
+# stays reportable. (The held-out presets are the ONE exempt case, because there
+# the pair IS the control's corpus.)
+instruments: [lexical]
+
+run_name: xc-calibration-llama3_1_8b_instruct
+
+resources:
+  cluster: xc
+  partition: main
+  gres: gpu:a100:1
+  cpus: 8
+  mem: 64G
+  # xc has NO wall, so this is our own ceiling rather than the scheduler's. Set
+  # generously on purpose: the first run on a new box pays for a cold uv cache
+  # and a venv build that no later run repeats.
+  time: "06:00:00"
