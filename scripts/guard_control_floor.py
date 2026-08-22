@@ -74,6 +74,27 @@ def guard_rows(run_dir: Path) -> list[dict]:
     return rows
 
 
+def split_half_auroc(
+    split_rows: list[dict], guard: str, auroc: dict[str, float]
+) -> tuple[dict[str, float], list[str]]:
+    """The item-split AUROC map for one guard, plus the rungs it cannot cover.
+
+    Returns `B_split_logistic.mean` keyed by family, and the families present in
+    the run's own AUROC map that the split artifact does not carry. Those are
+    DROPPED by the caller rather than left at their unsplit value: a floor is a
+    statistic over its control set, so one family measured under the other
+    procedure silently moves either the bar or a candidate. Mixing the two
+    procedures in one comparison is precisely the apples-to-oranges the AS-5
+    refutation record warns about, one level down.
+    """
+    split = {
+        r["family"]: r["B_split_logistic"]["mean"]
+        for r in split_rows
+        if r.get("model") == guard and isinstance(r.get("B_split_logistic"), dict)
+    }
+    return split, sorted(set(auroc) - set(split))
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--guard-run", type=Path, required=True)
@@ -83,6 +104,15 @@ def main(argv: list[str] | None = None) -> int:
                         help="the model whose ability SELECTS the controls")
     parser.add_argument("--ability-cells", type=Path, action="append", required=True,
                         help="cells.jsonl to recompute ability from; later files win")
+    parser.add_argument(
+        "--auroc-from",
+        type=Path,
+        default=None,
+        help=(
+            "split_half_transfer.py artifact; re-derive the floor from the ITEM-SPLIT "
+            "AUROC (its B statistic) instead of the run's recorded transfer AUROC"
+        ),
+    )
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args(argv)
 
@@ -99,6 +129,28 @@ def main(argv: list[str] | None = None) -> int:
 
     rows = guard_rows(args.guard_run)
     auroc = {r["family"]: r["transfer_auroc"] for r in rows if r["transfer_auroc"] is not None}
+
+    # The floor was itself derived from readings taken under the procedure whose
+    # item non-holdout withdrew AS-5's internals leg, so "clears the floor" is
+    # only meaningful when BOTH sides are re-derived. `--auroc-from` swaps the
+    # whole AUROC map for the item-split statistic -- controls included. Swapping
+    # only the screened rungs would compare a split reading against an unsplit
+    # floor, which is the apples-to-oranges the refutation record warns against.
+    split_source = None
+    if args.auroc_from is not None:
+        split_rows = json.loads(args.auroc_from.read_text())
+        split, unsplit = split_half_auroc(split_rows, guard, auroc)
+        if not split:
+            print(f"!! {args.auroc_from} carries no rows for guard {guard!r}")
+            return 1
+        if unsplit:
+            print(f"!! dropping {len(unsplit)} rung(s) with no item-split reading: {unsplit}")
+        auroc = split
+        rows = [r for r in rows if r["family"] in split]
+        for row in rows:
+            row["transfer_auroc"] = split[row["family"]]
+        split_source = str(args.auroc_from)
+
     if not auroc:
         print(f"!! no decode AUROCs in {args.guard_run}")
         return 1
@@ -190,6 +242,7 @@ def main(argv: list[str] | None = None) -> int:
     report = {
         "guard": guard,
         "guard_run": str(args.guard_run),
+        "auroc_source": split_source or "run record (transfer, items NOT held out)",
         "base_model": args.base_model,
         "inherited": source.is_inherited,
         "control_ability_max": controls_config.control_ability_max,
