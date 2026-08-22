@@ -401,3 +401,123 @@ class TestTheJoinIsCheckedNotAssumed:
     def test_a_family_absent_from_the_file_is_None(self, tmp_path):
         path = self._cells_file(tmp_path, ["cipher-0"], family="zero_width")
         assert sht.blocked_for_family(str(path), "homoglyph", ["prompt cipher-0 end"]) is None
+
+
+# ---------------------------------------------------------------------------
+# main(), end to end on real activation files
+# ---------------------------------------------------------------------------
+
+
+class TestTheEntrypointRuns:
+    """`main()` on genuine `.pt` captures, not path stubs.
+
+    The fixtures above write EMPTY `.pt` files, which is correct for
+    `targets_from_record` (it only reads paths) and useless here: this class
+    exists because `main()` is the path that has twice been discovered broken by
+    a cluster job dying after a queue wait, and because the recount added work
+    to it. An empty capture would exercise argument parsing and nothing else,
+    which is the `--dry-run` returning before the guard, one file over.
+    """
+
+    @staticmethod
+    def _capture(path: Path, rows: list[str], vectors: np.ndarray) -> str:
+        import torch
+
+        from internals_safety.models.capture import ActivationBatch
+
+        tensor = torch.tensor(vectors, dtype=torch.float32)[:, None, None, :]
+        ActivationBatch(
+            tensor=tensor,
+            layers=[13],
+            positions=["instruction_final"],
+            site="resid_pre",
+            model_name="llama_guard_3_8b",
+            user_messages=rows,
+        ).save(path)
+        return str(path)
+
+    def _run(self, tmp_path, *, n=24, blocked_every=2):
+        rng = np.random.default_rng(7)
+        d = 8
+        direction = rng.normal(size=d)
+        # A genuinely transferable direction, so the recount has something to
+        # count rather than pure noise.
+        plain_h = rng.normal(size=(n, d)) + direction
+        plain_b = rng.normal(size=(n, d)) - direction
+        enc_h = rng.normal(size=(n, d)) + 0.8 * direction
+        enc_b = rng.normal(size=(n, d)) - 0.8 * direction
+
+        acts = tmp_path / "activations"
+        acts.mkdir(parents=True, exist_ok=True)
+        ciphers = [f"CIPHER{i:03d}" for i in range(n)]
+        paths = {
+            "plain-harmful": self._capture(
+                acts / "plain-harmful-aaaa.pt", [f"p{i}" for i in range(n)], plain_h),
+            "plain-harmless": self._capture(
+                acts / "plain-harmless-bbbb.pt", [f"q{i}" for i in range(n)], plain_b),
+            "enc_h": self._capture(
+                acts / "encoded-harmful-homoglyph-cccc.pt",
+                [f"classify: {c} now" for c in ciphers], enc_h),
+            "enc_b": self._capture(
+                acts / "encoded-harmless-homoglyph-dddd.pt",
+                [f"classify: BENIGN{i:03d} now" for i in range(n)], enc_b),
+        }
+
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        with (run_dir / "cells.jsonl").open("w") as handle:
+            for index, cipher in enumerate(ciphers):
+                handle.write(json.dumps({
+                    "family": "homoglyph",
+                    "ciphertext": cipher,
+                    "blocked": index % blocked_every == 0,
+                }) + "\n")
+        (run_dir / "results.json").write_text(json.dumps({
+            "config": {"guard": {"name": "llama_guard_3_8b"}},
+            "summaries": [{
+                "family": "homoglyph",
+                "decode": {"layer": 13, "position": "instruction_final"},
+                "activations": {
+                    "encoded_harmful": paths["enc_h"],
+                    "encoded_harmless": paths["enc_b"],
+                },
+            }],
+        }))
+        return run_dir, tmp_path / "out.json"
+
+    def test_main_completes_and_the_artifact_carries_the_recount(self, tmp_path, monkeypatch):
+        run_dir, out = self._run(tmp_path)
+        monkeypatch.setattr(sys, "argv", [
+            "split_half_transfer.py", str(run_dir / "results.json"),
+            "--splits", "8", "--out", str(out),
+        ])
+        assert sht.main() == 0
+        rows = json.loads(out.read_text())
+        assert len(rows) == 1
+        cells = rows[0]["cells_per_100"]
+        assert cells is not None, "main() produced no recount on a run that has verdicts"
+        assert cells["reading_percentile"] == 75.0
+        assert cells["split"]["decoded_not_blocked"]["n_splits"] == 8
+        # The AUROC half must still be there — the recount is an addition.
+        assert "A_reproduce_no_split" in rows[0]
+
+    def test_main_still_runs_when_the_run_persists_NO_verdicts(self, tmp_path, monkeypatch):
+        run_dir, out = self._run(tmp_path)
+        (run_dir / "cells.jsonl").unlink()
+        monkeypatch.setattr(sys, "argv", [
+            "split_half_transfer.py", str(run_dir / "results.json"),
+            "--splits", "4", "--out", str(out),
+        ])
+        assert sht.main() == 0
+        assert json.loads(out.read_text())[0]["cells_per_100"] is None
+
+    def test_a_misaligned_cells_file_stops_main_rather_than_reporting(self, tmp_path, monkeypatch):
+        run_dir, out = self._run(tmp_path)
+        lines = (run_dir / "cells.jsonl").read_text().splitlines()
+        (run_dir / "cells.jsonl").write_text("\n".join(reversed(lines)) + "\n")
+        monkeypatch.setattr(sys, "argv", [
+            "split_half_transfer.py", str(run_dir / "results.json"),
+            "--splits", "4", "--out", str(out),
+        ])
+        with pytest.raises(SystemExit):
+            sht.main()
